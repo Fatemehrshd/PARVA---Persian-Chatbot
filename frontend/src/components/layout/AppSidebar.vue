@@ -29,6 +29,13 @@ const userInitial = computed(() => {
 </script>
 
 <template>
+  <!-- Mobile Backdrop -->
+  <div 
+    v-if="uiStore.sidebarOpen"
+    class="sidebar-backdrop md:hidden"
+    @click="uiStore.sidebarOpen = false"
+  ></div>
+
   <aside :class="['app-sidebar', { collapsed: !uiStore.sidebarOpen }]">
     <div class="sidebar-inner">
       <!-- Logo & Brand Header -->
@@ -117,6 +124,20 @@ const userInitial = computed(() => {
 </template>
 
 <style scoped>
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  z-index: 30; /* Below sidebar (40) but above content */
+}
+
+@media (min-width: 768px) {
+  .sidebar-backdrop {
+    display: none;
+  }
+}
+
 .app-sidebar {
   width: var(--sidebar-width);
   height: 100%;
@@ -125,8 +146,18 @@ const userInitial = computed(() => {
   transition: width 300ms ease-in-out, transform 300ms ease-in-out;
   flex-shrink: 0;
   overflow: hidden;
-  position: relative;
-  z-index: 20;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  inset-inline-start: 0;
+  z-index: 40;
+}
+
+@media (min-width: 768px) {
+  .app-sidebar {
+    position: relative;
+    z-index: 20;
+  }
 }
 
 .app-sidebar.collapsed {

@@ -21,10 +21,8 @@ function selectModel(id: string) {
 </script>
 
 <template>
-  <header class="app-header">
   <header class="app-header px-2 sm:px-4">
     <!-- Left Section: Sidebar Toggle & Model Selector -->
-    <div class="header-left">
     <div class="header-left flex gap-1 sm:gap-3">
       <button
         class="icon-button"

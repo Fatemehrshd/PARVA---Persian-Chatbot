@@ -1,63 +1,15 @@
 <script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router'
+import { RouterView } from 'vue-router'
 </script>
 
 <template>
-  <div id="layout">
-    <header>
-      <nav>
-        <RouterLink to="/">Home</RouterLink>
-        <span class="divider">|</span>
-        <RouterLink to="/about">About</RouterLink>
-      </nav>
-    </header>
-
-    <main>
+  <div class="min-h-screen bg-background font-sans text-foreground" dir="rtl">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
       <RouterView />
-    </main>
+    </div>
   </div>
 </template>
 
 <style>
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell,
-    'Open Sans', 'Helvetica Neue', sans-serif;
-  color: #1e293b;
-  background-color: #ffffff;
-}
-
-header {
-  padding: 1rem;
-  border-bottom: 1px solid #e2e8f0;
-  display: flex;
-  justify-content: center;
-}
-
-nav {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  font-size: 1.1rem;
-}
-
-nav a {
-  text-decoration: none;
-  color: #3b82f6;
-  font-weight: 500;
-}
-
-nav a.router-link-exact-active {
-  color: #1d4ed8;
-  font-weight: 700;
-}
-
-.divider {
-  color: #94a3b8;
-}
+@import './assets/main.css';
 </style>

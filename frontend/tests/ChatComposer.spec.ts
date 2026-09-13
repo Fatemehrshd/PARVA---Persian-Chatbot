@@ -41,4 +41,25 @@ describe('ChatComposer.vue', () => {
     await sendBtn.trigger('click')
     expect(chatStore.messages.length).toBe(initialMessageCount)
   })
+
+  it('allows changing AI model directly from composer form', async () => {
+    const wrapper = mount(ChatComposer)
+    const modelBtn = wrapper.find('.model-badge-btn')
+    expect(modelBtn.exists()).toBe(true)
+
+    // Initially dropdown is closed
+    expect(wrapper.find('.composer-model-dropdown').exists()).toBe(false)
+
+    // Click to open dropdown
+    await modelBtn.trigger('click')
+    expect(wrapper.find('.composer-model-dropdown').exists()).toBe(true)
+
+    // Select a different model option
+    const options = wrapper.findAll('.model-option-btn')
+    expect(options.length).toBeGreaterThan(1)
+    await options[1].trigger('click')
+
+    // Dropdown closes after selection
+    expect(wrapper.find('.composer-model-dropdown').exists()).toBe(false)
+  })
 })

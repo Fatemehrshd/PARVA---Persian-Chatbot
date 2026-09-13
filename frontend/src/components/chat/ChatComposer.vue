@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useChatStore } from '../../stores/chat'
 import { useModelsStore } from '../../stores/models'
 import { useUiStore } from '../../stores/ui'
@@ -11,6 +11,8 @@ const uiStore = useUiStore()
 const inputContent = ref('')
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isFocused = ref(false)
+const modelMenuOpen = ref(false)
+const modelPickerRef = ref<HTMLElement | null>(null)
 
 const canSend = computed(() => {
   return inputContent.value.trim().length > 0 && !chatStore.isStreaming
@@ -50,6 +52,29 @@ function handleSubmit() {
 function handleStop() {
   chatStore.stopStreaming()
 }
+
+function toggleModelMenu() {
+  modelMenuOpen.value = !modelMenuOpen.value
+}
+
+function selectModel(id: string) {
+  modelsStore.selectModel(id)
+  modelMenuOpen.value = false
+}
+
+function handleClickOutside(event: MouseEvent) {
+  if (modelPickerRef.value && !modelPickerRef.value.contains(event.target as Node)) {
+    modelMenuOpen.value = false
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('click', handleClickOutside)
+})
 </script>
 
 <template>
@@ -69,10 +94,42 @@ function handleStop() {
         ></textarea>
 
         <div class="composer-footer">
-          <!-- Model Chip selector -->
-          <div class="model-badge">
-            <span class="model-dot"></span>
-            <span class="model-name">{{ modelsStore.selectedModel.name }}</span>
+          <!-- Model Picker Dropdown inside Chat Form -->
+          <div class="model-picker-container" ref="modelPickerRef" @click.stop>
+            <button
+              type="button"
+              class="model-badge-btn"
+              @click="toggleModelMenu"
+              :title="uiStore.direction === 'rtl' ? 'تغییر مدل هوش مصنوعی' : 'Change AI Model'"
+            >
+              <span class="model-dot"></span>
+              <span class="model-name">{{ modelsStore.selectedModel.name }}</span>
+              <svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline :points="modelMenuOpen ? '6 15 12 9 18 15' : '18 15 12 9 6 15'"></polyline>
+              </svg>
+            </button>
+
+            <!-- Dropdown Popover opening upward -->
+            <div v-if="modelMenuOpen" class="composer-model-dropdown">
+              <div class="dropdown-header font-mono">
+                {{ uiStore.direction === 'rtl' ? 'انتخاب مدل هوش مصنوعی' : 'SELECT AI MODEL' }}
+              </div>
+              <div class="model-options-list">
+                <button
+                  v-for="model in modelsStore.models"
+                  :key="model.id"
+                  type="button"
+                  :class="['model-option-btn', { active: model.id === modelsStore.selectedModelId }]"
+                  @click="selectModel(model.id)"
+                >
+                  <div class="model-option-info">
+                    <span class="model-option-name">{{ model.name }}</span>
+                    <span class="model-option-meta font-mono">{{ model.provider }} • {{ model.apiIdentifier }}</span>
+                  </div>
+                  <span v-if="model.id === modelsStore.selectedModelId" class="check-mark">✓</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- Action Button: Stop or Send -->
@@ -169,16 +226,29 @@ function handleStop() {
   padding-top: 4px;
 }
 
-.model-badge {
+.model-picker-container {
+  position: relative;
+}
+
+.model-badge-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
   background-color: var(--secondary);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   font-size: 11px;
   font-family: var(--font-mono);
   color: var(--secondary-foreground);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.model-badge-btn:hover {
+  background-color: var(--card);
+  color: var(--foreground);
+  border-color: var(--muted-foreground);
 }
 
 .model-dot {
@@ -186,6 +256,80 @@ function handleStop() {
   height: 6px;
   border-radius: 50%;
   background-color: var(--primary);
+  flex-shrink: 0;
+}
+
+.chevron-icon {
+  color: var(--muted-foreground);
+}
+
+.composer-model-dropdown {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  inset-inline-start: 0;
+  width: 260px;
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  padding: 6px;
+  z-index: 100;
+}
+
+.dropdown-header {
+  font-size: 10px;
+  color: var(--muted-foreground);
+  padding: 6px 10px 4px;
+}
+
+.model-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.model-option-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  text-align: inherit;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  transition: background-color 150ms ease;
+}
+
+.model-option-btn:hover,
+.model-option-btn.active {
+  background-color: var(--secondary);
+}
+
+.model-option-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: inherit;
+}
+
+.model-option-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+.model-option-meta {
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
+.check-mark {
+  color: var(--primary);
+  font-weight: bold;
 }
 
 .action-buttons {

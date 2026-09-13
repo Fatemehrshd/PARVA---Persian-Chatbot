@@ -65,3 +65,4 @@ describe('LoginView.vue', () => {
     expect(wrapper.text()).toMatch(/ایمیل معتبر|valid email/i)
   })
 })
+

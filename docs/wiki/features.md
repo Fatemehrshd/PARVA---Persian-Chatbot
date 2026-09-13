@@ -16,3 +16,9 @@
 - Fixed ESM compatibility for `tailwind.config.js` and PostCSS bundling in `vite.config.ts`.
 - Configured CSS variables and opacity tokens for shadcn-vue.
 - Added comprehensive unit tests for `LoginView.vue`.
+
+## Task 4: In-Form Model Picker & Admin Panel Access
+- Relocated model selection dropdown from `AppHeader` to the chat composer input form (`ChatComposer.vue`), allowing users to switch models directly where they compose messages.
+- Added popover dropdown with upward orientation in composer footer.
+- Added direct access links to the Admin Panel (`/admin/models`) in Header, Sidebar, and inside the Models Modal.
+- Added unit tests for in-form model selection in `ChatComposer.spec.ts`.

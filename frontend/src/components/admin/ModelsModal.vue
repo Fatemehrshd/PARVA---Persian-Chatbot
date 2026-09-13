@@ -150,6 +150,13 @@ function handleDelete(id: string) {
           </button>
         </div>
       </form>
+
+      <!-- Link to full admin page -->
+      <div class="modal-footer-nav">
+        <router-link to="/admin/models" class="full-page-nav-link" @click="uiStore.closeAdminModels">
+          {{ uiStore.direction === 'rtl' ? 'مشاهده و تست در صفحه اختصاصی پنل ادمین (/admin/models) ↗' : 'Open Dedicated Admin Page (/admin/models) ↗' }}
+        </router-link>
+      </div>
     </div>
   </div>
 </template>
@@ -393,5 +400,25 @@ function handleDelete(id: string) {
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
+}
+
+.modal-footer-nav {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+.full-page-nav-link {
+  font-size: 12px;
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: opacity 150ms ease;
+}
+
+.full-page-nav-link:hover {
+  text-decoration: underline;
+  opacity: 0.9;
 }
 </style>

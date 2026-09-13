@@ -95,6 +95,18 @@ const userInitial = computed(() => {
         </div>
       </div>
 
+      <!-- Admin Panel Section -->
+      <div class="sidebar-admin-section">
+        <router-link to="/admin/models" class="sidebar-admin-link">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+          <span>{{ uiStore.direction === 'rtl' ? 'پنل ادمین (مدیریت مدل‌ها)' : 'Admin Panel (Models)' }}</span>
+        </router-link>
+      </div>
+
       <!-- Bottom User Block -->
       <div class="sidebar-footer">
         <template v-if="authStore.isAuthenticated">
@@ -375,5 +387,31 @@ const userInitial = computed(() => {
 
 .footer-login-btn:hover {
   border-color: var(--primary);
+}
+
+.sidebar-admin-section {
+  padding-top: 10px;
+  margin-top: auto;
+}
+
+.sidebar-admin-link {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background-color: var(--secondary);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--secondary-foreground);
+  text-decoration: none;
+  transition: all 150ms ease;
+}
+
+.sidebar-admin-link:hover {
+  color: var(--foreground);
+  border-color: var(--primary);
+  background-color: var(--card);
 }
 </style>

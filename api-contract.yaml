@@ -5,16 +5,16 @@ info:
   version: 0.1.0
   description: >
     API contract for the CODELESS multi-model AI chat platform.
-    Covers the Day 1-2 scope: authentication (sign-up/login/logout),
+    Covers: authentication (sign-up/login/logout),
     chat with an AI model (with streaming), and the admin model panel
     (add/remove models, set the default model).
   contact:
     name: CODELESS Team
 
 servers:
-  - url: http://localhost:3000/api/v1
+  - url: http://localhost:3000
     description: Local development
-  - url: https://api.codeless.example.com/api/v1
+  - url: https://api.codeless.example.com
     description: Production (placeholder — update once deployed)
 
 tags:
@@ -257,7 +257,7 @@ paths:
       summary: Set this model as the platform-wide default
       description: >
         Kept here because chat needs a fallback model when a conversation
-        doesn't specify one (see the original Day 1-2 "set default model"
+        doesn't specify one (see the "set default model"
         requirement) — remove this endpoint if that's out of scope for you.
       responses:
         '200':

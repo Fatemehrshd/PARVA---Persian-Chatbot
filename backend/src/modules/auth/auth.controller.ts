@@ -21,7 +21,10 @@ export class AuthController {
     return this.auth.signup(d.email, d.password, d.displayName);
   }
 
+  // The OpenAPI contract specifies 200 for /auth/login. NestJS defaults POST
+  // to 201 Created, so we override that explicitly.
   @Post('login')
+  @HttpCode(200)
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   login(@Body() d: LoginDto) {
     return this.auth.login(d.email, d.password);

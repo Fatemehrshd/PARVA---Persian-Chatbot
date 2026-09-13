@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Param,
+  HttpCode,
   UseGuards,
   Res,
   Req,
@@ -37,7 +38,11 @@ export class ChatController {
   @Get(':id/messages') history(@Req() req: any, @Param('id') id: string) {
     return this.chat.history(req.user.sub, id);
   }
-  @Post(':id/messages') async send(
+  // The OpenAPI contract specifies 200 for this endpoint regardless of
+  // whether the reply is streamed or returned as a single JSON message.
+  @Post(':id/messages')
+  @HttpCode(200)
+  async send(
     @Req() req: Request & any,
     @Res() res: Response,
     @Param('id') id: string,

@@ -138,10 +138,12 @@ const userInitial = computed(() => {
 <style scoped>
 .sidebar-backdrop {
   position: fixed;
-  inset: 0;
+  top: var(--header-height);
+  inset-inline: 0;
+  bottom: 0;
   background-color: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(2px);
-  z-index: 30; /* Below sidebar (40) but above content */
+  z-index: 30; /* Below sidebar (40) and header (50) */
 }
 
 @media (min-width: 768px) {

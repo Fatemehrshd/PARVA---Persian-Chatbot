@@ -80,6 +80,7 @@ const authStore = useAuthStore()
 
 <style scoped>
 .app-header {
+  position: relative;
   height: var(--header-height);
   width: 100%;
   background-color: var(--background);
@@ -88,7 +89,7 @@ const authStore = useAuthStore()
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
-  z-index: 10;
+  z-index: 50;
   flex-shrink: 0;
 }
 

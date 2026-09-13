@@ -4,6 +4,19 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
 
+// Shadcn Components
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+
 const router = useRouter()
 const authStore = useAuthStore()
 const uiStore = useUiStore()
@@ -43,101 +56,102 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <div class="min-h-screen w-full flex items-center justify-center bg-background p-4 sm:p-6 lg:p-8" :dir="uiStore.direction">
-    <!-- Main Card -->
-    <div class="w-full max-w-[400px] bg-card border border-border rounded-[14px] p-6 sm:p-8 shadow-[0_20px_40px_rgba(0,0,0,0.5)]">
+  <div class="min-h-screen w-full flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8" :dir="uiStore.direction">
+    <div class="flex flex-col items-center gap-3 mb-8">
+      <div class="w-12 h-12 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-lg">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2C6.477 2 2 6.477 2 12C2 17.523 6.477 22 12 22C17.523 22 22 17.523 22 12C22 6.477 17.523 2 12 2Z" fill="currentColor" fill-opacity="0.2"/>
+          <path d="M12 6V18M6 12H18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <h1 class="text-2xl font-bold tracking-tight text-foreground">NeuralChat</h1>
+    </div>
+
+    <Card class="w-full max-w-[420px] shadow-2xl border-border bg-card">
+      <CardHeader class="space-y-4 pb-4">
+        <!-- Tabs Toggle -->
+        <div class="flex bg-secondary p-1 rounded-lg">
+          <button 
+            :class="['flex-1 py-1.5 text-[13px] font-medium rounded-md transition-all duration-200', !isSignup ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground']" 
+            @click="isSignup = false"
+            type="button"
+          >
+            {{ uiStore.direction === 'rtl' ? 'ورود به حساب' : 'Sign In' }}
+          </button>
+          <button 
+            :class="['flex-1 py-1.5 text-[13px] font-medium rounded-md transition-all duration-200', isSignup ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground']" 
+            @click="isSignup = true"
+            type="button"
+          >
+            {{ uiStore.direction === 'rtl' ? 'ثبت‌نام جدید' : 'Sign Up' }}
+          </button>
+        </div>
+
+        <div>
+          <CardTitle>{{ isSignup ? (uiStore.direction === 'rtl' ? 'ساخت حساب کاربری' : 'Create an account') : (uiStore.direction === 'rtl' ? 'خوش آمدید' : 'Welcome back') }}</CardTitle>
+          <CardDescription>
+            {{ isSignup ? (uiStore.direction === 'rtl' ? 'اطلاعات خود را وارد کنید.' : 'Enter your details below to create your account.') : (uiStore.direction === 'rtl' ? 'برای ورود اطلاعات خود را وارد کنید.' : 'Enter your email and password to sign in.') }}
+          </CardDescription>
+        </div>
+      </CardHeader>
       
-      <!-- Brand Header -->
-      <div class="flex flex-col items-center gap-3 mb-8">
-        <div class="w-12 h-12 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-lg">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2C6.477 2 2 6.477 2 12C2 17.523 6.477 22 12 22C17.523 22 22 17.523 22 12C22 6.477 17.523 2 12 2Z" fill="currentColor" fill-opacity="0.2"/>
-            <path d="M12 6V18M6 12H18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-          </svg>
-        </div>
-        <h1 class="text-[22px] font-bold text-foreground tracking-tight">NeuralChat</h1>
-      </div>
-
-      <!-- Tabs Toggle -->
-      <div class="flex bg-secondary p-1 rounded-lg mb-6">
-        <button 
-          :class="['flex-1 py-2 text-[13px] font-medium rounded-md transition-all duration-200', !isSignup ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground']" 
-          @click="isSignup = false"
-        >
-          {{ uiStore.direction === 'rtl' ? 'ورود به حساب' : 'Sign In' }}
-        </button>
-        <button 
-          :class="['flex-1 py-2 text-[13px] font-medium rounded-md transition-all duration-200', isSignup ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground']" 
-          @click="isSignup = true"
-        >
-          {{ uiStore.direction === 'rtl' ? 'ثبت‌نام جدید' : 'Sign Up' }}
-        </button>
-      </div>
-
-      <!-- Error Message -->
-      <div v-if="formError" class="bg-red-500/15 border border-red-500/40 text-red-400 px-3 py-2 rounded-lg text-xs mb-6 text-center">
-        {{ formError }}
-      </div>
-
-      <!-- Form Elements -->
-      <form class="flex flex-col gap-4" @submit.prevent="handleSubmit">
-        <div v-if="isSignup" class="flex flex-col gap-1.5">
-          <label class="text-xs font-medium text-secondary-foreground">{{ uiStore.direction === 'rtl' ? 'نام نمایشی' : 'Display Name' }}</label>
-          <input 
-            v-model="displayName" 
-            type="text" 
-            class="flex h-10 w-full rounded-md border border-input bg-secondary px-3 py-2 text-sm text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 transition-colors" 
-            :placeholder="uiStore.direction === 'rtl' ? 'نام شما' : 'Your name'" 
-          />
+      <CardContent>
+        <div v-if="formError" class="bg-destructive/15 border border-destructive/40 text-destructive px-3 py-2 rounded-lg text-xs mb-6 text-center">
+          {{ formError }}
         </div>
 
-        <div class="flex flex-col gap-1.5">
-          <label class="text-xs font-medium text-secondary-foreground">{{ uiStore.direction === 'rtl' ? 'ایمیل' : 'Email' }}</label>
-          <input 
-            v-model="email" 
-            type="email" 
-            required 
-            class="flex h-10 w-full rounded-md border border-input bg-secondary px-3 py-2 text-sm text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 transition-colors" 
-            placeholder="user@example.com" 
-          />
-        </div>
+        <form @submit.prevent="handleSubmit" class="space-y-4">
+          <div v-if="isSignup" class="space-y-2">
+            <Label for="displayName">{{ uiStore.direction === 'rtl' ? 'نام نمایشی' : 'Display Name' }}</Label>
+            <Input 
+              id="displayName"
+              v-model="displayName" 
+              type="text" 
+              :placeholder="uiStore.direction === 'rtl' ? 'نام شما' : 'Your name'" 
+            />
+          </div>
 
-        <div class="flex flex-col gap-1.5">
-          <label class="text-xs font-medium text-secondary-foreground">{{ uiStore.direction === 'rtl' ? 'رمز عبور' : 'Password' }}</label>
-          <input 
-            v-model="password" 
-            type="password" 
-            required 
-            class="flex h-10 w-full rounded-md border border-input bg-secondary px-3 py-2 text-sm text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 transition-colors" 
-            placeholder="••••••••" 
-          />
-        </div>
+          <div class="space-y-2">
+            <Label for="email">{{ uiStore.direction === 'rtl' ? 'ایمیل' : 'Email' }}</Label>
+            <Input 
+              id="email"
+              v-model="email" 
+              type="email" 
+              required 
+              placeholder="user@example.com" 
+            />
+          </div>
 
-        <button 
-          type="submit" 
-          class="mt-4 inline-flex items-center justify-center rounded-lg text-sm font-semibold ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-[44px] px-4 py-2 w-full shadow-md" 
-          :disabled="authStore.loading"
-        >
-          <span v-if="authStore.loading" class="animate-pulse">...</span>
-          <span v-else>
-            {{ isSignup
-              ? (uiStore.direction === 'rtl' ? 'ایجاد حساب کاربری' : 'Create Account')
-              : (uiStore.direction === 'rtl' ? 'ورود' : 'Sign In')
-            }}
-          </span>
-        </button>
-      </form>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <Label for="password">{{ uiStore.direction === 'rtl' ? 'رمز عبور' : 'Password' }}</Label>
+            </div>
+            <Input 
+              id="password"
+              v-model="password" 
+              type="password" 
+              required 
+              placeholder="••••••••" 
+            />
+          </div>
 
-      <!-- Back Link -->
-      <div class="mt-8 text-center">
-        <router-link to="/" class="text-xs font-medium text-primary hover:underline hover:text-primary/80 transition-colors">
+          <Button type="submit" class="w-full mt-2" :disabled="authStore.loading">
+            <span v-if="authStore.loading" class="animate-pulse">...</span>
+            <span v-else>
+              {{ isSignup
+                ? (uiStore.direction === 'rtl' ? 'ایجاد حساب کاربری' : 'Create Account')
+                : (uiStore.direction === 'rtl' ? 'ورود' : 'Sign In')
+              }}
+            </span>
+          </Button>
+        </form>
+      </CardContent>
+
+      <CardFooter class="flex justify-center border-t border-border pt-4 mt-2">
+        <router-link to="/" class="text-sm font-medium text-primary hover:underline transition-colors">
           {{ uiStore.direction === 'rtl' ? '← بازگشت به گفتگوها' : '← Back to Chat' }}
         </router-link>
-      </div>
-    </div>
+      </CardFooter>
+    </Card>
   </div>
 </template>
-
-<style scoped>
-/* No custom CSS needed anymore, fully Tailwind! */
-</style>

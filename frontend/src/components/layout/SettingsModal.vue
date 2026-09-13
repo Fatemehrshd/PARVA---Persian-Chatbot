@@ -59,3 +59,4 @@ function setDirection(dir: 'rtl' | 'ltr') {
     </div>
   </div>
 </template>
+

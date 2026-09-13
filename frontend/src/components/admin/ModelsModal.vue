@@ -1,0 +1,397 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useUiStore } from '../../stores/ui'
+import { useModelsStore } from '../../stores/models'
+
+const uiStore = useUiStore()
+const modelsStore = useModelsStore()
+
+const newName = ref('')
+const newProvider = ref('anthropic')
+const newApiIdentifier = ref('')
+const isAdding = ref(false)
+
+async function handleAddModel() {
+  if (!newName.value.trim() || !newApiIdentifier.value.trim()) return
+
+  await modelsStore.addModel({
+    name: newName.value.trim(),
+    provider: newProvider.value,
+    apiIdentifier: newApiIdentifier.value.trim(),
+    isActive: true
+  })
+
+  newName.value = ''
+  newApiIdentifier.value = ''
+  isAdding.value = false
+}
+
+function handleMakeDefault(id: string) {
+  modelsStore.makeDefault(id)
+}
+
+function handleDelete(id: string) {
+  modelsStore.removeModel(id)
+}
+</script>
+
+<template>
+  <div v-if="uiStore.adminModelsModalOpen" class="modal-backdrop" @click.self="uiStore.closeAdminModels">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="header-title-group">
+          <h2 class="modal-title">
+            {{ uiStore.direction === 'rtl' ? 'مدیریت مدل‌های هوش مصنوعی' : 'AI Models Management' }}
+          </h2>
+          <span class="badge-role font-mono">ADMIN</span>
+        </div>
+        <button class="close-btn" @click="uiStore.closeAdminModels" aria-label="Close modal">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Models List -->
+      <div class="models-list">
+        <div
+          v-for="model in modelsStore.models"
+          :key="model.id"
+          class="model-row"
+        >
+          <div class="model-info">
+            <div class="model-name-row">
+              <span class="model-name">{{ model.name }}</span>
+              <span v-if="model.isDefault" class="default-badge font-mono">
+                {{ uiStore.direction === 'rtl' ? 'پیش‌فرض' : 'DEFAULT' }}
+              </span>
+            </div>
+            <div class="model-meta font-mono">
+              <span class="provider-tag">{{ model.provider }}</span>
+              <span>{{ model.apiIdentifier }}</span>
+            </div>
+          </div>
+
+          <div class="model-actions">
+            <button
+              v-if="!model.isDefault"
+              class="action-btn text-btn"
+              @click="handleMakeDefault(model.id)"
+            >
+              {{ uiStore.direction === 'rtl' ? 'انتخاب به عنوان پیش‌فرض' : 'Set Default' }}
+            </button>
+            <button
+              class="action-btn delete-btn"
+              @click="handleDelete(model.id)"
+              :title="uiStore.direction === 'rtl' ? 'حذف مدل' : 'Delete model'"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Add Model Form Toggle -->
+      <div v-if="!isAdding" class="add-section-toggle">
+        <button class="add-toggle-btn" @click="isAdding = true">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>{{ uiStore.direction === 'rtl' ? 'افزودن مدل جدید' : 'Add New Model' }}</span>
+        </button>
+      </div>
+
+      <!-- Add Model Form -->
+      <form v-else class="add-model-form" @submit.prevent="handleAddModel">
+        <h3 class="form-title font-mono">
+          {{ uiStore.direction === 'rtl' ? 'افزودن مدل جدید' : 'NEW MODEL SPECIFICATION' }}
+        </h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Name</label>
+            <input
+              v-model="newName"
+              type="text"
+              required
+              class="form-input"
+              placeholder="e.g. Gemini 1.5 Pro"
+            />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Provider</label>
+            <select v-model="newProvider" class="form-input">
+              <option value="anthropic">anthropic</option>
+              <option value="openai">openai</option>
+              <option value="google">google</option>
+              <option value="local">local</option>
+            </select>
+          </div>
+          <div class="form-group span-2">
+            <label class="form-label">API Identifier</label>
+            <input
+              v-model="newApiIdentifier"
+              type="text"
+              required
+              class="form-input font-mono"
+              placeholder="e.g. gemini-1.5-pro-latest"
+            />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="cancel-btn" @click="isAdding = false">
+            {{ uiStore.direction === 'rtl' ? 'انصراف' : 'Cancel' }}
+          </button>
+          <button type="submit" class="confirm-btn">
+            {{ uiStore.direction === 'rtl' ? 'ثبت مدل' : 'Add Model' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 560px;
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.header-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.badge-role {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: var(--secondary);
+  color: var(--primary);
+  border: 1px solid var(--border);
+}
+
+.close-btn {
+  color: var(--muted-foreground);
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.close-btn:hover {
+  color: var(--foreground);
+  background-color: var(--secondary);
+}
+
+.models-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+}
+
+.model-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background-color: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.model-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.model-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.default-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background-color: rgba(124, 106, 247, 0.15);
+  color: var(--primary);
+  border: 1px solid var(--primary);
+}
+
+.model-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
+.provider-tag {
+  color: var(--secondary-foreground);
+}
+
+.model-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.action-btn {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.text-btn {
+  background-color: var(--card);
+  color: var(--secondary-foreground);
+  border: 1px solid var(--border);
+}
+
+.text-btn:hover {
+  color: var(--foreground);
+  border-color: var(--muted-foreground);
+}
+
+.delete-btn {
+  color: var(--muted-foreground);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+}
+
+.delete-btn:hover {
+  color: #ef4444;
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+.add-section-toggle {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.add-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background-color: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--foreground);
+}
+
+.add-toggle-btn:hover {
+  border-color: var(--primary);
+}
+
+.add-model-form {
+  margin-top: 16px;
+  padding: 16px;
+  background-color: var(--secondary);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.form-title {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  margin-bottom: 12px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.span-2 {
+  grid-column: span 2;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-label {
+  font-size: 11px;
+  color: var(--secondary-foreground);
+}
+
+.form-input {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.cancel-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+.confirm-btn {
+  padding: 6px 14px;
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+}
+</style>

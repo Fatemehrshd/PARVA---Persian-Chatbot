@@ -40,10 +40,6 @@ function selectModel(id: string) {
 
       <!-- Model Dropdown -->
       <div class="model-picker-wrapper">
-        <button class="model-picker-btn" @click="toggleModelMenu">
-          <span class="model-dot"></span>
-          <span class="model-title">{{ modelsStore.selectedModel.name }}</span>
-          <svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <button class="model-picker-btn px-2 sm:px-3" @click="toggleModelMenu">
           <span class="model-dot hidden sm:inline-block"></span>
           <span class="model-title truncate max-w-[60px] sm:max-w-[200px]">{{ modelsStore.selectedModel.name }}</span>
@@ -73,11 +69,9 @@ function selectModel(id: string) {
     </div>
 
     <!-- Right Section: RTL Toggle, Admin Models, User Profile -->
-    <div class="header-right">
     <div class="header-right flex gap-1 sm:gap-3">
       <!-- Language / Direction toggle -->
       <button
-        class="text-badge-btn font-mono"
         class="text-badge-btn font-mono hidden sm:inline-block"
         @click="uiStore.toggleDirection"
         :title="uiStore.direction === 'rtl' ? 'Switch to LTR (English)' : 'تغییر به راست‌چین (فارسی)'"
@@ -87,7 +81,6 @@ function selectModel(id: string) {
 
       <!-- Admin Models link/button -->
       <button
-        class="icon-text-btn"
         class="icon-text-btn px-2 sm:px-3"
         @click="uiStore.openAdminModels"
         :title="uiStore.direction === 'rtl' ? 'مدیریت مدل‌ها' : 'Manage Models'"
@@ -96,7 +89,6 @@ function selectModel(id: string) {
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
         </svg>
-        <span class="btn-label">{{ uiStore.direction === 'rtl' ? 'مدل‌ها' : 'Models' }}</span>
         <span class="btn-label hidden sm:inline">{{ uiStore.direction === 'rtl' ? 'مدل‌ها' : 'Models' }}</span>
       </button>
 

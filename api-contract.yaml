@@ -12,9 +12,9 @@ info:
     name: CODELESS Team
 
 servers:
-  - url: http://localhost:3000/api/v1
+  - url: http://localhost:3000
     description: Local development
-  - url: https://api.codeless.example.com/api/v1
+  - url: https://api.codeless.example.com
     description: Production (placeholder — update once deployed)
 
 tags:

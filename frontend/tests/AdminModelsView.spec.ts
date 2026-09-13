@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import AdminModelsView from '../src/views/AdminModelsView.vue'
+import { useModelsStore } from '../src/stores/models'
 
 // Mock vue-router
 const pushMock = vi.fn()
@@ -53,6 +54,49 @@ describe('AdminModelsView.vue (Dashboard)', () => {
     await newModelBtn!.trigger('click')
     expect(wrapper.find('form').exists()).toBe(true)
     expect(wrapper.find('#modelName').exists()).toBe(true)
+  })
+
+  it('disables inputs and buttons during model registration loading', async () => {
+    const wrapper = mount(AdminModelsView)
+
+    // Open form
+    const buttons = wrapper.findAll('button')
+    const newModelBtn = buttons.find(b => b.text().includes('New Model') || b.text().includes('مدل جدید'))
+    await newModelBtn!.trigger('click')
+
+    // Fill inputs
+    const nameInput = wrapper.find('#modelName')
+    const apiInput = wrapper.find('#apiIdentifier')
+    await nameInput.setValue('Custom Model')
+    await apiInput.setValue('custom-model-v1')
+
+    const modelsStore = useModelsStore()
+    let resolveAddModel!: () => void
+    const addModelPromise = new Promise<void>((resolve) => {
+      resolveAddModel = resolve
+    })
+    vi.spyOn(modelsStore, 'addModel').mockImplementation(() => addModelPromise)
+
+    // Submit form (don't await so we can inspect loading state)
+    wrapper.find('form').trigger('submit.prevent')
+    await wrapper.vm.$nextTick()
+
+    // While loading, inputs and submit button should be disabled
+    expect(nameInput.attributes('disabled')).toBeDefined()
+    expect(apiInput.attributes('disabled')).toBeDefined()
+
+    const submitBtn = wrapper.find('form button[type="submit"]')
+    expect(submitBtn.attributes('disabled')).toBeDefined()
+    expect(submitBtn.find('svg.animate-spin').exists()).toBe(true)
+
+    // Finish adding model
+    resolveAddModel()
+    await addModelPromise
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+
+    // Form is closed on success
+    expect(wrapper.find('form').exists()).toBe(false)
   })
 })
 

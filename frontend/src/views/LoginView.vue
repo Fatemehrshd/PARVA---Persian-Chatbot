@@ -17,6 +17,8 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 
+import { useAsyncAction } from '../composables/useAsyncAction'
+
 const router = useRouter()
 const authStore = useAuthStore()
 const uiStore = useUiStore()
@@ -26,6 +28,21 @@ const email = ref('')
 const password = ref('')
 const displayName = ref('')
 const formError = ref<string | null>(null)
+
+const { isLoading, execute: submitAuth } = useAsyncAction(async () => {
+  let success = false
+  if (isSignup.value) {
+    success = await authStore.signup(email.value, password.value, displayName.value)
+  } else {
+    success = await authStore.login(email.value, password.value)
+  }
+
+  if (success) {
+    router.push('/')
+  } else if (authStore.error) {
+    formError.value = authStore.error
+  }
+})
 
 async function handleSubmit() {
   formError.value = null
@@ -40,18 +57,7 @@ async function handleSubmit() {
     return
   }
 
-  let success = false
-  if (isSignup.value) {
-    success = await authStore.signup(email.value, password.value, displayName.value)
-  } else {
-    success = await authStore.login(email.value, password.value)
-  }
-
-  if (success) {
-    router.push('/')
-  } else if (authStore.error) {
-    formError.value = authStore.error
-  }
+  await submitAuth()
 }
 </script>
 
@@ -74,6 +80,7 @@ async function handleSubmit() {
           <button 
             :class="['flex-1 py-1.5 text-[13px] font-medium rounded-md transition-all duration-200', !isSignup ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground']" 
             @click="isSignup = false"
+            :disabled="isLoading"
             type="button"
           >
             {{ uiStore.direction === 'rtl' ? 'ورود به حساب' : 'Sign In' }}
@@ -81,6 +88,7 @@ async function handleSubmit() {
           <button 
             :class="['flex-1 py-1.5 text-[13px] font-medium rounded-md transition-all duration-200', isSignup ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground']" 
             @click="isSignup = true"
+            :disabled="isLoading"
             type="button"
           >
             {{ uiStore.direction === 'rtl' ? 'ثبت‌نام جدید' : 'Sign Up' }}
@@ -107,6 +115,8 @@ async function handleSubmit() {
               id="displayName"
               v-model="displayName" 
               type="text" 
+              :disabled="isLoading"
+              :loading="isLoading"
               :placeholder="uiStore.direction === 'rtl' ? 'نام شما' : 'Your name'" 
             />
           </div>
@@ -118,6 +128,8 @@ async function handleSubmit() {
               v-model="email" 
               type="email" 
               required 
+              :disabled="isLoading"
+              :loading="isLoading"
               placeholder="user@example.com" 
             />
           </div>
@@ -131,18 +143,22 @@ async function handleSubmit() {
               v-model="password" 
               type="password" 
               required 
+              :disabled="isLoading"
+              :loading="isLoading"
               placeholder="••••••••" 
             />
           </div>
 
-          <Button type="submit" class="w-full mt-2" :disabled="authStore.loading">
-            <span v-if="authStore.loading" class="animate-pulse">...</span>
-            <span v-else>
-              {{ isSignup
-                ? (uiStore.direction === 'rtl' ? 'ایجاد حساب کاربری' : 'Create Account')
-                : (uiStore.direction === 'rtl' ? 'ورود' : 'Sign In')
-              }}
-            </span>
+          <Button 
+            type="submit" 
+            class="w-full mt-2" 
+            :loading="isLoading" 
+            :disabled="isLoading"
+          >
+            {{ isSignup
+              ? (uiStore.direction === 'rtl' ? 'ایجاد حساب کاربری' : 'Create Account')
+              : (uiStore.direction === 'rtl' ? 'ورود' : 'Sign In')
+            }}
           </Button>
         </form>
       </CardContent>

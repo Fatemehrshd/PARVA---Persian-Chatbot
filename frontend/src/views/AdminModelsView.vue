@@ -16,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { useAsyncAction } from '../composables/useAsyncAction'
 
 const router = useRouter()
 const modelsStore = useModelsStore()
@@ -51,7 +52,11 @@ const filteredModels = computed(() => {
   })
 })
 
-async function handleAddModel() {
+const {
+  isLoading: isRegisteringModel,
+  error: addModelError,
+  execute: submitAddModel,
+} = useAsyncAction(async () => {
   if (!newName.value.trim() || !newApiIdentifier.value.trim()) return
 
   await modelsStore.addModel({
@@ -64,6 +69,10 @@ async function handleAddModel() {
   newName.value = ''
   newApiIdentifier.value = ''
   isAdding.value = false
+})
+
+async function handleAddModel() {
+  await submitAddModel()
 }
 
 function handleMakeDefault(id: string) {
@@ -205,15 +214,30 @@ function handleDelete(id: string) {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              <div v-if="addModelError" class="bg-destructive/15 border border-destructive/40 text-destructive px-3 py-2 rounded-lg text-xs mb-4">
+                {{ addModelError }}
+              </div>
               <form @submit.prevent="handleAddModel" class="space-y-4">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div class="space-y-2">
                     <Label for="modelName">{{ uiStore.direction === 'rtl' ? 'نام مدل (نمایش به کاربر)' : 'Model Name' }}</Label>
-                    <Input id="modelName" v-model="newName" required placeholder="e.g. Claude 3.5 Sonnet" />
+                    <Input 
+                      id="modelName" 
+                      v-model="newName" 
+                      required 
+                      :disabled="isRegisteringModel"
+                      :loading="isRegisteringModel"
+                      placeholder="e.g. Claude 3.5 Sonnet" 
+                    />
                   </div>
                   <div class="space-y-2">
                     <Label for="provider">{{ uiStore.direction === 'rtl' ? 'ارائه‌دهنده (Provider)' : 'Provider' }}</Label>
-                    <select id="provider" v-model="newProvider" class="form-select-native">
+                    <select 
+                      id="provider" 
+                      v-model="newProvider" 
+                      class="form-select-native"
+                      :disabled="isRegisteringModel"
+                    >
                       <option value="anthropic">anthropic</option>
                       <option value="openai">openai</option>
                       <option value="google">google</option>
@@ -224,15 +248,37 @@ function handleDelete(id: string) {
                   </div>
                   <div class="space-y-2 sm:col-span-2">
                     <Label for="apiIdentifier">{{ uiStore.direction === 'rtl' ? 'شناسه دقیق مدل (API Identifier)' : 'API Identifier' }}</Label>
-                    <Input id="apiIdentifier" v-model="newApiIdentifier" required class="font-mono" placeholder="claude-3-5-sonnet-20241022" />
+                    <Input 
+                      id="apiIdentifier" 
+                      v-model="newApiIdentifier" 
+                      required 
+                      class="font-mono" 
+                      :disabled="isRegisteringModel"
+                      :loading="isRegisteringModel"
+                      placeholder="claude-3-5-sonnet-20241022" 
+                    />
                   </div>
                 </div>
                 <div class="flex justify-end gap-2 pt-2">
-                  <Button type="button" variant="outline" size="sm" @click="isAdding = false">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm" 
+                    :disabled="isRegisteringModel"
+                    @click="isAdding = false"
+                  >
                     {{ uiStore.direction === 'rtl' ? 'انصراف' : 'Cancel' }}
                   </Button>
-                  <Button type="submit" size="sm">
-                    {{ uiStore.direction === 'rtl' ? 'افزودن به مدل‌ها' : 'Save Engine' }}
+                  <Button 
+                    type="submit" 
+                    size="sm"
+                    :loading="isRegisteringModel"
+                    :disabled="isRegisteringModel"
+                  >
+                    {{ isRegisteringModel 
+                      ? (uiStore.direction === 'rtl' ? 'در حال ثبت مدل...' : 'Registering...') 
+                      : (uiStore.direction === 'rtl' ? 'افزودن به مدل‌ها' : 'Save Engine') 
+                    }}
                   </Button>
                 </div>
               </form>

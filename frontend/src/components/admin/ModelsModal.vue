@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useUiStore } from '../../stores/ui'
 import { useModelsStore } from '../../stores/models'
+import { useAsyncAction } from '../../composables/useAsyncAction'
 
 const uiStore = useUiStore()
 const modelsStore = useModelsStore()
@@ -11,7 +12,11 @@ const newProvider = ref('anthropic')
 const newApiIdentifier = ref('')
 const isAdding = ref(false)
 
-async function handleAddModel() {
+const {
+  isLoading: isRegisteringModel,
+  error: addModelError,
+  execute: submitAddModel,
+} = useAsyncAction(async () => {
   if (!newName.value.trim() || !newApiIdentifier.value.trim()) return
 
   await modelsStore.addModel({
@@ -24,6 +29,10 @@ async function handleAddModel() {
   newName.value = ''
   newApiIdentifier.value = ''
   isAdding.value = false
+})
+
+async function handleAddModel() {
+  await submitAddModel()
 }
 
 function handleMakeDefault(id: string) {
@@ -110,6 +119,9 @@ function handleDelete(id: string) {
         <h3 class="form-title font-mono">
           {{ uiStore.direction === 'rtl' ? 'افزودن مدل جدید' : 'NEW MODEL SPECIFICATION' }}
         </h3>
+        <div v-if="addModelError" class="bg-destructive/15 border border-destructive/40 text-destructive px-3 py-2 rounded-lg text-xs mb-3">
+          {{ addModelError }}
+        </div>
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label">Name</label>
@@ -117,13 +129,14 @@ function handleDelete(id: string) {
               v-model="newName"
               type="text"
               required
+              :disabled="isRegisteringModel"
               class="form-input"
               placeholder="e.g. Gemini 1.5 Pro"
             />
           </div>
           <div class="form-group">
             <label class="form-label">Provider</label>
-            <select v-model="newProvider" class="form-input">
+            <select v-model="newProvider" class="form-input" :disabled="isRegisteringModel">
               <option value="anthropic">anthropic</option>
               <option value="openai">openai</option>
               <option value="google">google</option>
@@ -136,17 +149,33 @@ function handleDelete(id: string) {
               v-model="newApiIdentifier"
               type="text"
               required
+              :disabled="isRegisteringModel"
               class="form-input font-mono"
               placeholder="e.g. gemini-1.5-pro-latest"
             />
           </div>
         </div>
         <div class="form-actions">
-          <button type="button" class="cancel-btn" @click="isAdding = false">
+          <button type="button" class="cancel-btn" :disabled="isRegisteringModel" @click="isAdding = false">
             {{ uiStore.direction === 'rtl' ? 'انصراف' : 'Cancel' }}
           </button>
-          <button type="submit" class="confirm-btn">
-            {{ uiStore.direction === 'rtl' ? 'ثبت مدل' : 'Add Model' }}
+          <button type="submit" class="confirm-btn flex items-center gap-1.5" :disabled="isRegisteringModel">
+            <svg
+              v-if="isRegisteringModel"
+              class="animate-spin h-3.5 w-3.5 text-current inline-block"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>
+              {{ isRegisteringModel
+                ? (uiStore.direction === 'rtl' ? 'در حال ثبت...' : 'Adding...')
+                : (uiStore.direction === 'rtl' ? 'ثبت مدل' : 'Add Model')
+              }}
+            </span>
           </button>
         </div>
       </form>

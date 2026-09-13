@@ -5,6 +5,7 @@ import AppSidebar from '../components/layout/AppSidebar.vue'
 import MessageList from '../components/chat/MessageList.vue'
 import ChatComposer from '../components/chat/ChatComposer.vue'
 import ModelsModal from '../components/admin/ModelsModal.vue'
+import SettingsModal from '../components/layout/SettingsModal.vue'
 import { useChatStore } from '../stores/chat'
 import { useModelsStore } from '../stores/models'
 
@@ -39,6 +40,7 @@ onMounted(async () => {
 
     <!-- Modals -->
     <ModelsModal />
+    <SettingsModal />
   </div>
 </template>
 

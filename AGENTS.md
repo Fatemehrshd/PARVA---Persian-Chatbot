@@ -78,16 +78,3 @@ The project must have a wiki that lets a new team member get the project running
 ## 7. Golden Rule (Repeated on Purpose)
 
 If implementing a new requirement requires changing the behavior of a previous feature, that decision and its reasoning must be stated explicitly in the commit message and in `CHANGELOG.md` — silent, undocumented changes are not allowed.
-
-## 8. Commit Convention (Conventional Commits — Mandatory)
-
-After every implementation stage, create a commit following Conventional Commits:
-
-- Format: `<type>(<scope>): <meaningful subject>` + an explanatory body.
-- Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `build`, `ci`.
-- Rules:
-  - Commits must NOT be too short or vague (bad: `feat: update`, `fix: bug`).
-  - The subject must state WHAT and WHERE; the body must explain WHY and WHAT changed (endpoints, modules, migrations, breaking notes).
-  - One logical stage = one commit (e.g. `feat(backend-auth): implement signup/login/logout with JWT...`).
-  - Never commit secrets (`.env`); only `.env.example`.
-  - Verify `git status`/`git diff` before committing and ensure backend + frontend tests are green for the touched stage.

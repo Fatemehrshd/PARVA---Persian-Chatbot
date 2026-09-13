@@ -1,7 +1,6 @@
 # Compiled output
 /dist
 /node_modules
-
 # Logs
 logs
 *.log
@@ -10,7 +9,6 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 .pnpm-debug.log*
-
 # OS and IDE files
 .DS_Store
 Thumbs.db

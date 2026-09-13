@@ -29,3 +29,6 @@
 - Built structured data table with status badges and quick actions (Set Default, Delete).
 - Fixed root layout in `main.css` (`overflow-y: auto`, `#app min-height: 100vh`) so any page overflowing viewport height scrolls naturally.
 - Added unit tests for Admin Dashboard in `AdminModelsView.spec.ts`.
+
+## Task 6: Browser Autocomplete / Autofill Dark Theme Preservation
+- Configured `-webkit-autofill` and `:autofill` CSS rules with inset box-shadow and text fill overrides to prevent browsers (Chrome, Edge, Safari, Firefox) from replacing input background and text colors with light yellow/white during autocomplete.

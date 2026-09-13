@@ -55,3 +55,4 @@ describe('AdminModelsView.vue (Dashboard)', () => {
     expect(wrapper.find('#modelName').exists()).toBe(true)
   })
 })
+

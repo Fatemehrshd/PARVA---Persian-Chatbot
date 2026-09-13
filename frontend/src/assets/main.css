@@ -16,7 +16,12 @@
   --muted: #1a1b1e;
   --muted-foreground: #6b6760;
   --accent: #7c6af7;
+  --popover: #161719;
+  --popover-foreground: #e8e6e1;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
   --border: #232428;
+  --input: #232428;
   --ring: #7c6af7;
   --radius: 10px;
   --radius-sm: 8px;

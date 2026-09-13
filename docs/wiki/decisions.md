@@ -11,7 +11,7 @@
 
 ## ADR-002: No API versioning prefix; single contract-shaped error envelope
 - **Status**: Accepted
-- **Context**: Day-1-2 MVP must match `api-contract.yaml`. The contract places every endpoint at a natural path (`/auth/signup`, `/chat/conversations/...`, `/admin/models/...`) with no `/api/v1` versioning prefix. The contract also defines a single `Error` schema (`{statusCode, message, error}`), but NestJS's default exception responses do not include the `error` field, and earlier iterations of the controllers had hardcoded `api/v1/...` paths that would drift away from the contract as new modules were added.
+- **Context**: The MVP must match `api-contract.yaml`. The contract places every endpoint at a natural path (`/auth/signup`, `/chat/conversations/...`, `/admin/models/...`) with no `/api/v1` versioning prefix. The contract also defines a single `Error` schema (`{statusCode, message, error}`), but NestJS's default exception responses do not include the `error` field, and earlier iterations of the controllers had hardcoded `api/v1/...` paths that would drift away from the contract as new modules were added.
 - **Decision**:
   - **No `/api/v1` prefix.** Routes are exposed at their natural paths. `main.ts` does NOT call `setGlobalPrefix('api/v1')`. Each controller specifies only its relative path (`@Controller('auth')`, etc.).
   - **Contract-shaped error envelope.** A single global `HttpExceptionFilter` (in `src/shared/`) formats every error response as `{statusCode, message, error}`. This is the only place error formatting lives — controllers, guards, and services throw `HttpException` subclasses and rely on the filter to produce the wire format.

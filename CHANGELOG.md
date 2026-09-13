@@ -20,5 +20,9 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 - `tsconfig.json`: `esModuleInterop` enabled so `bcryptjs` (ESM) imports correctly via `import bcrypt from 'bcryptjs'`.
 - `api-contract.yaml` `servers[].url` no longer includes the `/api/v1` prefix; controllers dropped the hardcoded `api/v1/` segment.
 
+### Fixed
+- `POST /auth/login` was returning `201 Created` (Nest's POST default); the contract specifies `200 OK`. Added `@HttpCode(200)` on the route.
+- `POST /chat/conversations/{id}/messages` was returning `201 Created`; the contract specifies `200 OK`. Added `@HttpCode(200)` on the route. Both bugs were silently violating the contract and would have broken any client that branched on status code.
+
 ### Security
 - `/auth/logout` now requires a valid bearer token (was previously callable without auth). The refresh token in the body is no longer trusted for revocation.

@@ -22,3 +22,10 @@
 - Added popover dropdown with upward orientation in composer footer.
 - Added direct access links to the Admin Panel (`/admin/models`) in Header, Sidebar, and inside the Models Modal.
 - Added unit tests for in-form model selection in `ChatComposer.spec.ts`.
+
+## Task 5: Admin Dashboard Overhaul & Global App Scrolling
+- Transformed `/admin/models` into a full-featured Admin Dashboard with KPI metric cards (Total Models, Active Status, Connected Providers, Total Sessions).
+- Added interactive toolbar with search filter and provider tabs (All, OpenAI, Anthropic, Google, Meta, Local).
+- Built structured data table with status badges and quick actions (Set Default, Delete).
+- Fixed root layout in `main.css` (`overflow-y: auto`, `#app min-height: 100vh`) so any page overflowing viewport height scrolls naturally.
+- Added unit tests for Admin Dashboard in `AdminModelsView.spec.ts`.

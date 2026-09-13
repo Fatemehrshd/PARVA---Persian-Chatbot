@@ -10,7 +10,10 @@ async function bootstrap() {
   // Contract-shaped error envelope: {statusCode, message, error}.
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  app.enableCors({ origin: process.env.FRONTEND_URL ?? 'http://localhost:5173', credentials: true });
+  app.enableCors({
+    origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
+    credentials: true,
+  });
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port);
   console.log(`Backend running on http://localhost:${port}`);

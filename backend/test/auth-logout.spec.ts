@@ -17,7 +17,10 @@ describe('POST /auth/logout (contract)', () => {
       providers: [
         AuthService,
         { provide: UsersService, useValue: {} },
-        { provide: JwtService, useValue: { sign: () => 'tok', verify: () => ({ sub: 'u1', role: 'user' }) } },
+        {
+          provide: JwtService,
+          useValue: { sign: () => 'tok', verify: () => ({ sub: 'u1', role: 'user' }) },
+        },
         JwtAuthGuard,
       ],
     }).compile();

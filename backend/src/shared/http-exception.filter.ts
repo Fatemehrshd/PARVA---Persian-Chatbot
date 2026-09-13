@@ -1,4 +1,11 @@
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
 import type { Request, Response } from 'express';
 
 /**
@@ -28,7 +35,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       } else if (typeof body === 'object' && body !== null) {
         const obj = body as Record<string, unknown>;
         message = (obj.message as string | string[]) ?? exception.message;
-        error = (obj.error as string) ?? (HttpStatus[status] ?? 'Error');
+        error = (obj.error as string) ?? HttpStatus[status] ?? 'Error';
       }
     } else {
       this.logger.error(

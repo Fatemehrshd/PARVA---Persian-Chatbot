@@ -1,4 +1,12 @@
-import { Controller, Post, Body, HttpCode, UsePipes, UseGuards, ValidationPipe } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  HttpCode,
+  UsePipes,
+  UseGuards,
+  ValidationPipe,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignupDto, LoginDto, LogoutDto } from './dto';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';

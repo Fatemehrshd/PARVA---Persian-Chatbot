@@ -14,7 +14,10 @@ describe('Error format (contract)', () => {
       controllers: [AuthController],
       providers: [
         AuthService,
-        { provide: UsersService, useValue: { findByEmail: async () => null, create: async (d: any) => d } },
+        {
+          provide: UsersService,
+          useValue: { findByEmail: async () => null, create: async (d: any) => d },
+        },
         { provide: JwtService, useValue: { sign: () => 'tok' } },
       ],
     }).compile();
@@ -36,9 +39,7 @@ describe('Error format (contract)', () => {
   });
 
   it('validation error includes message as array of constraints', async () => {
-    const res = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({});
+    const res = await request(app.getHttpServer()).post('/auth/login').send({});
     expect(res.status).toBe(400);
     expect(Array.isArray(res.body.message) || typeof res.body.message === 'string').toBe(true);
   });

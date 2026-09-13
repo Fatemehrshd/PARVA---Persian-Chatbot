@@ -5,7 +5,13 @@ import { User } from './user.entity';
 @Injectable()
 export class UsersService {
   constructor(@InjectRepository(User) private repo: Repository<User>) {}
-  findByEmail(email: string) { return this.repo.findOne({ where: { email } }); }
-  findById(id: string) { return this.repo.findOne({ where: { id } }); }
-  create(data: Partial<User>) { return this.repo.save(this.repo.create(data)); }
+  findByEmail(email: string) {
+    return this.repo.findOne({ where: { email } });
+  }
+  findById(id: string) {
+    return this.repo.findOne({ where: { id } });
+  }
+  create(data: Partial<User>) {
+    return this.repo.save(this.repo.create(data));
+  }
 }

@@ -78,9 +78,29 @@ npm run start:dev
 3. With at least one real key configured, chat hits the actual upstream (`stream:true`, token-by-token SSE). If NOTHING is configured the server logs a WARN and answers with the offline echo so local dev still works — provider errors are never silently echoed anymore.
 4. `/v1/models` and `/v1/chat/completions` (OpenAI-compatible facade) require a bearer token and forward to real models.
 
+### Avatars (MinIO)
+Avatar upload needs a reachable MinIO (or S3-compatible) server:
+```env
+MINIO_ENDPOINT=127.0.0.1
+MINIO_PORT=9000
+MINIO_USE_SSL=false
+MINIO_ACCESS_KEY=...
+MINIO_SECRET_KEY=...
+MINIO_BUCKET=codeless
+PUBLIC_BASE_URL=http://localhost:3000   # used to build avatarUrl
+```
+Without these, `POST /users/me/avatar` honestly returns **503** (there is no disk fallback). Uploads accept png/jpeg/webp up to 2 MB; replaced/deleted avatars are removed from the bucket; files are served at `/static/avatars/{userId}/{file}`.
+
+### Database schema changes
+Dev mode (`DB_SYNC=true`) auto-applies new columns. For production/managed DBs use the migration:
+```bash
+cd backend
+npm run migration:run       # or: migration:generate / migration:revert (uses src/data-source.ts)
+```
+
 Run backend tests:
 ```bash
-cd backend && npm test   # 74 tests, no DB required (fakes at repo boundaries)
+cd backend && npm test   # 95 tests, no DB/MinIO required (fakes at service boundaries)
 ```
 
 Build for production:

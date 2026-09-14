@@ -120,3 +120,10 @@
 - **User model switching**: `PATCH /chat/conversations/:id` now accepts `{ modelId }` (and `{ title }` — both optional, at least one required). `GET /models` returns chat-usable (active model of active provider) models to every authenticated user.
 - **Hardening**: `/v1/models` + `/v1/chat/completions` now require a bearer token (they can spend real credits) and forward to real models (unknown model → 404).
 - **Contract**: `api-contract.yaml` → 0.5.0. **Tests**: 74 backend tests passing (44 pre-existing kept green + 30 new).
+
+## Task 15: User Profile, MinIO Avatars, Credentials & Preferences (backend only)
+- **Profile endpoints**: `GET/PATCH /users/me` — `displayName`, unique lowercased `username` (409 on conflict), `bio`. The `User` entity gained `username, bio, avatarUrl, avatarKey, language, theme, timezone, defaultModelId`, shipped via a dedicated TypeORM migration (`src/migrations/…AddUserProfileAndPreferences.ts`, run with `npm run migration:run`; local dev still auto-syncs with `DB_SYNC=true`).
+- **Avatars on MinIO** (new `StorageModule` + `minio` dependency): `POST /users/me/avatar` (multipart field `file`; only `image/png|jpeg|webp`; ≤ 2 MB; replaces + deletes the previous object), `DELETE /users/me/avatar`. Files are served publicly at `GET /static/avatars/{userId}/{file}` (opaque random keys, streamed from MinIO). Without `MINIO_*` env, upload endpoints return **503** — no silent disk fallback.
+- **Credential changes with re-auth**: `POST /users/me/email` (requires the current password → 401 if wrong; 409 if the email exists; applies immediately) and `POST /users/me/password` (requires current password; bcrypt re-hash). No forgot-password/reset flow (product decision).
+- **Preferences**: `GET/PUT /users/me/preferences` — `language` (fa/en), `theme` (light|dark), IANA `timezone` (validated via `Intl`), and `defaultModelId` (must be an active model). Chat now resolves the model as **explicit → user default → platform default → echo sentinel**.
+- **Contract**: new `Users` tag + 7 paths in `api-contract.yaml`. **Tests**: 95 backend tests passing (11 new in `profile.spec.ts`; all previous green). Frontend untouched.

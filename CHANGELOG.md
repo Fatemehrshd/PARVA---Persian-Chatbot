@@ -9,9 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Backend-only release (the frontend was not touched in this task).
+### Added (Task 15: user profile, avatar on MinIO, credentials & preferences — backend only)
+- **Profile endpoints** (`backend/src/modules/users/`): `GET /users/me` and `PATCH /users/me` (`displayName`, unique lowercase `username`, `bio` ≤ 500). `User` gains `username, bio, avatarUrl, avatarKey, language, theme, timezone, defaultModelId` — shipped with a dedicated **TypeORM migration** (`src/migrations/1760000000000-AddUserProfileAndPreferences.ts`, `npm run migration:run|generate|revert` via new `src/data-source.ts`; dev keeps using DB_SYNC).
+- **Avatar upload on MinIO** (new `StorageModule`, `minio` dependency, `MINIO_*` + `PUBLIC_BASE_URL` env): `POST /users/me/avatar` (multipart `file`, only png/jpeg/webp, max 2 MB, replaces + deletes the previous object; `DELETE /users/me/avatar`). Files are served publicly at `GET /static/avatars/{userId}/{file}` (opaque keys, streamed from MinIO). Without `MINIO_*` config the upload endpoints honestly answer **503** (no silent disk fallback).
+- **Credential changes with re-auth:** `POST /users/me/email` — requires the CURRENT password, 409 when the email is taken, applies immediately; `POST /users/me/password` — requires the current password, re-hashes with bcrypt. (No forgot-password/reset flow by product decision.)
+- **Preferences:** `GET/PUT /users/me/preferences` — `language` (fa/en), `theme` (light/dark), IANA `timezone` (validated via Intl), and `defaultModelId` (must be an active model). Chat conversation creation now resolves the model as **explicit → user default → platform default**.
+- Validation messages on all new DTO fields follow the centralized Persian `FA` convention; 11 new tests (`backend/test/profile.spec.ts`), full suite **95/95** green. The frontend was not touched; `api-contract.yaml`, wiki and `backend/AGENTS.md` updated.
 
-### Added
+### Added (Task 14: providers, real streaming, model switching — backend only)
 - **Providers as first-class entities.** New `ai_providers` table (`name` unique, `baseUrl`, `apiKey` — write-only/masked, `isActive`, `defaultModelId`). `AiModel` gains `providerId` (FK, `ON DELETE CASCADE`).
   - `GET/POST /admin/providers`, `PATCH /admin/providers/:id` (metadata + key rotation — an empty `apiKey` leaves the stored key untouched), `PATCH /admin/providers/:id/status`, `PATCH /admin/providers/:id/default` (per-provider default model), `DELETE /admin/providers/:id`.
   - **Cascade delete:** deleting a provider deletes all its models; if the platform-wide default model was among them, the oldest remaining active model (of an active provider) is auto-promoted so the platform is never default-less.

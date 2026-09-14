@@ -18,9 +18,10 @@ describe('Chat (behavior)', () => {
       getDefault: async () => ({ id: 'model1' }),
       resolveProvider: async () => null,
     };
+    const users: any = { findById: async () => null };
     // No credential anywhere -> offline echo fallback path.
     const forwarder: OpenAiCompatForwarder = { resolveTarget: () => null } as any;
-    const s = new ChatService(conv, msg, models, forwarder);
+    const s = new ChatService(conv, msg, models, users, forwarder);
     let reply = '';
     let m: any;
     for await (const c of s.generate('u1', 'c1', 'hello')) {
@@ -33,7 +34,13 @@ describe('Chat (behavior)', () => {
   });
   it('history of unknown conversation -> 404', async () => {
     const conv: any = { findOne: async () => null };
-    const s = new ChatService(conv, { find: async () => [] } as any, {} as any, {} as any);
+    const s = new ChatService(
+      conv,
+      { find: async () => [] } as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
     await expect(s.history('u1', 'nope')).rejects.toThrow('Resource not found');
   });
 });

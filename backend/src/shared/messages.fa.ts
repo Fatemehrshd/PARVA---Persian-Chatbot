@@ -27,6 +27,9 @@ export const FA = {
   modelIdUuid: 'شناسه مدل باید یک UUID معتبر باشد',
   titleString: 'عنوان گفتگو باید متن باشد',
 
+  // ---- uploads ----
+  fileTooLarge: 'حجم فایل بیش از حد مجاز است (حداکثر ۲ مگابایت)',
+
   // ---- admin models ----
   nameRequired: 'نام مدل الزامی است',
   nameString: 'نام مدل باید متن باشد',

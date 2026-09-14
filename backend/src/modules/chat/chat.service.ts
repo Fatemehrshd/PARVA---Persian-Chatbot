@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Conversation } from './conversation.entity';
@@ -87,7 +82,8 @@ export class ChatService {
     const c = await this.assertOwned(userId, id);
     const m = await this.models.getRawById(modelId);
     if (!m) throw new BadRequestException('Selected AI model does not exist');
-    if (m.isActive === false) throw new BadRequestException('Selected AI model is currently disabled');
+    if (m.isActive === false)
+      throw new BadRequestException('Selected AI model is currently disabled');
     const provider = await this.models.resolveProvider(m);
     if (provider && provider.isActive === false) {
       throw new BadRequestException(`Provider "${provider.name}" is disabled`);

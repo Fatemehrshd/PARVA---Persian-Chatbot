@@ -34,15 +34,18 @@ function fakeStores() {
   };
   const mRepo: any = {
     findOne: async ({ where }: any) => models.find((m) => m.id === where.id) ?? null,
-    find: async ({ where }: any) => models.filter((m) => (where.providerId ? m.providerId === where.providerId : true)),
+    find: async ({ where }: any) =>
+      models.filter((m) => (where.providerId ? m.providerId === where.providerId : true)),
     delete: async (where: any) => {
       const ids: string[] = where.id.value ?? [where.id];
-      for (let i = models.length - 1; i >= 0; i--) if (ids.includes(models[i].id)) models.splice(i, 1);
+      for (let i = models.length - 1; i >= 0; i--)
+        if (ids.includes(models[i].id)) models.splice(i, 1);
     },
     update: async (where: any, patch: any) => {
       models.forEach((m) => {
         if (where.id === undefined || m.id === where.id)
-          if (where.isDefault === undefined || m.isDefault === where.isDefault) Object.assign(m, patch);
+          if (where.isDefault === undefined || m.isDefault === where.isDefault)
+            Object.assign(m, patch);
       });
     },
   };
@@ -53,7 +56,11 @@ describe('ProvidersAdminService', () => {
   it('creates and masks the stored key; never returns it raw', async () => {
     const { pRepo, mRepo } = fakeStores();
     const svc = new ProvidersAdminService(pRepo, mRepo);
-    const created: any = await svc.create({ name: 'openai', baseUrl: 'http://x', apiKey: 'sk-secret-key-1234' });
+    const created: any = await svc.create({
+      name: 'openai',
+      baseUrl: 'http://x',
+      apiKey: 'sk-secret-key-1234',
+    });
     expect(created.apiKey).toBe('sk-...1234');
     const list: any = await svc.list();
     expect(list[0].apiKey).toBe('sk-...1234');
@@ -80,7 +87,13 @@ describe('ProvidersAdminService', () => {
     const { pRepo, mRepo, providers, models } = fakeStores();
     const svc = new ProvidersAdminService(pRepo, mRepo);
     const p: any = await svc.create({ name: 'openai' });
-    models.push({ id: 'mm', providerId: p.id, provider: 'openai', isActive: true, isDefault: false });
+    models.push({
+      id: 'mm',
+      providerId: p.id,
+      provider: 'openai',
+      isActive: true,
+      isDefault: false,
+    });
     models.push({ id: 'other', providerId: 'p-other', provider: 'x', isActive: true });
     await expect(svc.setDefaultModel(p.id, 'nope')).rejects.toBeInstanceOf(BadRequestException);
     await expect(svc.setDefaultModel(p.id, 'other')).rejects.toBeInstanceOf(BadRequestException);

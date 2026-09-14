@@ -129,7 +129,8 @@ export class ProvidersAdminService {
     if (!m) throw new BadRequestException('Model not found');
     const belongs = m.providerId === p.id || (!m.providerId && m.provider === p.name);
     if (!belongs) throw new BadRequestException('Model does not belong to this provider');
-    if (m.isActive === false) throw new BadRequestException('Selected AI model is currently disabled');
+    if (m.isActive === false)
+      throw new BadRequestException('Selected AI model is currently disabled');
     p.defaultModelId = m.id;
     return this.mask(await this.repo.save(p));
   }

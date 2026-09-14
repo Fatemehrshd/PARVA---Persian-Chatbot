@@ -14,7 +14,13 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
   // Contract-shaped standard envelope: {success, message, data}.
   app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
   app.enableCors({
     origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
     credentials: true,

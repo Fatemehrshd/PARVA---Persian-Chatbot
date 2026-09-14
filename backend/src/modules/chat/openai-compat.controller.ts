@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Res, HttpCode, NotFoundException, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Res,
+  HttpCode,
+  NotFoundException,
+  UseGuards,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { ModelsAdminService } from '../models-admin/models-admin.service';
 import { OpenAiCompatForwarder } from '../ai/openai-compat.forwarder';

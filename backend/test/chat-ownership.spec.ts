@@ -191,7 +191,7 @@ describe('Chat ownership invariants', () => {
     }
   });
 
-  it('DELETE /chat/conversations/theirs returns 404 (cannot delete another user\'s conversation)', async () => {
+  it("DELETE /chat/conversations/theirs returns 404 (cannot delete another user's conversation)", async () => {
     const app = await makeAppWithFakeGuard();
     try {
       const res = await request(app.getHttpServer())
@@ -215,7 +215,7 @@ describe('Chat ownership invariants', () => {
     }
   });
 
-  it('PATCH /chat/conversations/theirs returns 404 (cannot rename another user\'s conversation)', async () => {
+  it("PATCH /chat/conversations/theirs returns 404 (cannot rename another user's conversation)", async () => {
     const app = await makeAppWithFakeGuard();
     try {
       const res = await request(app.getHttpServer())

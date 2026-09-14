@@ -46,7 +46,9 @@ const AUTH = { Authorization: 'Bearer t' };
 
 describe('/admin/providers — guards & wiring', () => {
   const svc = () => ({
-    list: async () => [{ id: 'p1', name: 'openai', isActive: true, defaultModelId: null, apiKey: 'sk-...1234' }],
+    list: async () => [
+      { id: 'p1', name: 'openai', isActive: true, defaultModelId: null, apiKey: 'sk-...1234' },
+    ],
     create: async (d: any) => ({ id: 'p-new', ...d, apiKey: d.apiKey ? 'sk-...' : undefined }),
     update: async (_id: string, d: any) => ({ id: _id, ...d }),
     updateStatus: async (_id: string, isActive: boolean) => ({ id: _id, isActive }),
@@ -55,15 +57,27 @@ describe('/admin/providers — guards & wiring', () => {
   });
 
   it('401 without token, 403 for plain user, 200 for admin', async () => {
-    let app = await baseApp([ProvidersAdminController], [{ provide: ProvidersAdminService, useValue: svc() }], null);
+    let app = await baseApp(
+      [ProvidersAdminController],
+      [{ provide: ProvidersAdminService, useValue: svc() }],
+      null,
+    );
     expect((await request(app.getHttpServer()).get('/admin/providers')).status).toBe(401);
     await app.close();
 
-    app = await baseApp([ProvidersAdminController], [{ provide: ProvidersAdminService, useValue: svc() }], 'user');
+    app = await baseApp(
+      [ProvidersAdminController],
+      [{ provide: ProvidersAdminService, useValue: svc() }],
+      'user',
+    );
     expect((await request(app.getHttpServer()).get('/admin/providers').set(AUTH)).status).toBe(403);
     await app.close();
 
-    app = await baseApp([ProvidersAdminController], [{ provide: ProvidersAdminService, useValue: svc() }], 'admin');
+    app = await baseApp(
+      [ProvidersAdminController],
+      [{ provide: ProvidersAdminService, useValue: svc() }],
+      'admin',
+    );
     const res = await request(app.getHttpServer()).get('/admin/providers').set(AUTH);
     expect(res.status).toBe(200);
     expect(res.body[0]).toMatchObject({ name: 'openai' });
@@ -77,7 +91,8 @@ describe('/admin/providers — guards & wiring', () => {
       'admin',
     );
     expect(
-      (await request(app.getHttpServer()).post('/admin/providers').set(AUTH).send({ baseUrl: 'x' })).status,
+      (await request(app.getHttpServer()).post('/admin/providers').set(AUTH).send({ baseUrl: 'x' }))
+        .status,
     ).toBe(400);
     const status = await request(app.getHttpServer())
       .patch('/admin/providers/p1/status')
@@ -99,14 +114,29 @@ describe('/admin/providers — guards & wiring', () => {
 describe('GET /models — user-facing active listing', () => {
   const fake = {
     listActive: async () => [
-      { id: 'm1', name: 'GPT-4o', provider: 'openai', apiIdentifier: 'gpt-4o', isActive: true, apiKey: 'sk-...1234' },
+      {
+        id: 'm1',
+        name: 'GPT-4o',
+        provider: 'openai',
+        apiIdentifier: 'gpt-4o',
+        isActive: true,
+        apiKey: 'sk-...1234',
+      },
     ],
   };
   it('requires auth and serves plain users (no admin role)', async () => {
-    let app = await baseApp([ModelsController], [{ provide: ModelsAdminService, useValue: fake }], null);
+    let app = await baseApp(
+      [ModelsController],
+      [{ provide: ModelsAdminService, useValue: fake }],
+      null,
+    );
     expect((await request(app.getHttpServer()).get('/models')).status).toBe(401);
     await app.close();
-    app = await baseApp([ModelsController], [{ provide: ModelsAdminService, useValue: fake }], 'user');
+    app = await baseApp(
+      [ModelsController],
+      [{ provide: ModelsAdminService, useValue: fake }],
+      'user',
+    );
     const res = await request(app.getHttpServer()).get('/models').set(AUTH);
     expect(res.status).toBe(200);
     expect(res.body.map((m: any) => m.id)).toEqual(['m1']);
@@ -121,7 +151,13 @@ describe('/v1 OpenAI-compatible facade — now authenticated', () => {
     ],
     resolveProvider: async () => null,
   };
-  const forwarderFake = { resolveTarget: () => null, stream: () => (async function* () { yield 'x'; })() };
+  const forwarderFake = {
+    resolveTarget: () => null,
+    stream: () =>
+      (async function* () {
+        yield 'x';
+      })(),
+  };
   const mk = (role: 'admin' | 'user' | null) =>
     baseApp(
       [OpenAiCompatController],
@@ -136,8 +172,11 @@ describe('/v1 OpenAI-compatible facade — now authenticated', () => {
     const app = await mk(null);
     expect((await request(app.getHttpServer()).get('/v1/models')).status).toBe(401);
     expect(
-      (await request(app.getHttpServer()).post('/v1/chat/completions').send({ model: 'gpt-4o', messages: [] }))
-        .status,
+      (
+        await request(app.getHttpServer())
+          .post('/v1/chat/completions')
+          .send({ model: 'gpt-4o', messages: [] })
+      ).status,
     ).toBe(401);
     await app.close();
   });
@@ -184,17 +223,26 @@ describe('PATCH /chat/conversations/:id — title and/or model switch', () => {
     };
   }
   it('modelId-only switches the model', async () => {
-    const app = await baseApp([ChatController], [{ provide: ChatService, useValue: chatFake() }], 'user');
+    const app = await baseApp(
+      [ChatController],
+      [{ provide: ChatService, useValue: chatFake() }],
+      'user',
+    );
+    const NEW = '00000000-0000-4000-8000-000000000002';
     const res = await request(app.getHttpServer())
       .patch('/chat/conversations/mine')
       .set(AUTH)
-      .send({ modelId: 'm2' });
+      .send({ modelId: NEW });
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('modelId', 'm2');
+    expect(res.body).toHaveProperty('modelId', NEW);
     await app.close();
   });
   it('title-only still works (existing rename flow)', async () => {
-    const app = await baseApp([ChatController], [{ provide: ChatService, useValue: chatFake() }], 'user');
+    const app = await baseApp(
+      [ChatController],
+      [{ provide: ChatService, useValue: chatFake() }],
+      'user',
+    );
     const res = await request(app.getHttpServer())
       .patch('/chat/conversations/mine')
       .set(AUTH)
@@ -204,8 +252,15 @@ describe('PATCH /chat/conversations/:id — title and/or model switch', () => {
     await app.close();
   });
   it('empty body -> 400', async () => {
-    const app = await baseApp([ChatController], [{ provide: ChatService, useValue: chatFake() }], 'user');
-    const res = await request(app.getHttpServer()).patch('/chat/conversations/mine').set(AUTH).send({});
+    const app = await baseApp(
+      [ChatController],
+      [{ provide: ChatService, useValue: chatFake() }],
+      'user',
+    );
+    const res = await request(app.getHttpServer())
+      .patch('/chat/conversations/mine')
+      .set(AUTH)
+      .send({});
     expect(res.status).toBe(400);
     await app.close();
   });

@@ -1,0 +1,140 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useUiStore } from '../../stores/ui'
+import type { Conversation } from '../../types'
+
+const props = defineProps<{
+  isOpen: boolean
+  conversation: Conversation | null
+}>()
+
+const emit = defineEmits<{
+  (e: 'close'): void
+  (e: 'confirm', id: string): void
+}>()
+
+const uiStore = useUiStore()
+const isDeleting = ref(false)
+
+async function handleConfirm() {
+  if (!props.conversation) return
+  isDeleting.value = true
+  try {
+    emit('confirm', props.conversation.id)
+  } finally {
+    isDeleting.value = false
+  }
+}
+</script>
+
+<template>
+  <div
+    v-if="isOpen && conversation"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+    @click.self="emit('close')"
+    :dir="uiStore.direction"
+  >
+    <div class="w-full max-w-md bg-card border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col scale-in-95 duration-200">
+      <!-- Header -->
+      <div class="px-6 py-4 border-b border-border flex items-center justify-between bg-destructive/10">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-full bg-destructive/20 text-destructive flex items-center justify-center flex-shrink-0">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18"/>
+              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+              <line x1="10" y1="11" x2="10" y2="17"/>
+              <line x1="14" y1="11" x2="14" y2="17"/>
+            </svg>
+          </div>
+          <h3 class="text-base font-semibold text-foreground">
+            {{ uiStore.direction === 'rtl' ? 'حذف گفتگو' : 'Delete Chat' }}
+          </h3>
+        </div>
+
+        <button
+          @click="emit('close')"
+          class="text-muted-foreground hover:text-foreground hover:bg-secondary p-1.5 rounded-md transition-colors"
+          aria-label="Close"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="p-6 space-y-3">
+        <p class="text-sm text-foreground">
+          <template v-if="uiStore.direction === 'rtl'">
+            آیا از حذف گفتگوی 
+            <span class="font-semibold text-primary">«{{ conversation.title }}»</span> 
+            اطمینان دارید؟
+          </template>
+          <template v-else>
+            Are you sure you want to delete 
+            <span class="font-semibold text-primary">"{{ conversation.title }}"</span>?
+          </template>
+        </p>
+        <p class="text-xs text-muted-foreground">
+          {{ uiStore.direction === 'rtl' 
+            ? 'تمامی پیام‌ها و تاریخچه این گفتگو به صورت دائمی حذف خواهد شد و این عملیات قابل بازگشت نیست.' 
+            : 'All messages and history within this conversation will be permanently removed. This action cannot be undone.' }}
+        </p>
+      </div>
+
+      <!-- Footer Buttons -->
+      <div class="px-6 py-4 border-t border-border bg-secondary/30 flex items-center justify-between gap-3 w-full">
+        <template v-if="uiStore.direction === 'rtl'">
+          <button
+            type="button"
+            @click="handleConfirm"
+            :disabled="isDeleting"
+            class="px-4 py-2 rounded-lg bg-destructive hover:bg-destructive/90 text-destructive-foreground text-xs sm:text-sm font-medium shadow-sm transition-colors flex items-center gap-2"
+          >
+            <svg v-if="isDeleting" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>{{ uiStore.direction === 'rtl' ? 'حذف قطعی گفتگو' : 'Delete Chat' }}</span>
+          </button>
+
+          <button
+            type="button"
+            @click="emit('close')"
+            :disabled="isDeleting"
+            class="px-4 py-2 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-secondary-foreground text-xs sm:text-sm font-medium transition-colors"
+          >
+            {{ uiStore.direction === 'rtl' ? 'انصراف' : 'Cancel' }}
+          </button>
+        </template>
+
+        <template v-else>
+          <button
+            type="button"
+            @click="emit('close')"
+            :disabled="isDeleting"
+            class="px-4 py-2 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-secondary-foreground text-xs sm:text-sm font-medium transition-colors"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            @click="handleConfirm"
+            :disabled="isDeleting"
+            class="px-4 py-2 rounded-lg bg-destructive hover:bg-destructive/90 text-destructive-foreground text-xs sm:text-sm font-medium shadow-sm transition-colors flex items-center gap-2"
+          >
+            <svg v-if="isDeleting" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>Delete Chat</span>
+          </button>
+        </template>
+      </div>
+    </div>
+  </div>
+</template>
+

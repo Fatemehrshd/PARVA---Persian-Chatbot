@@ -2,20 +2,24 @@
 openapi: 3.0.3
 info:
   title: CODELESS API
-  version: 0.1.0
+  version: 0.4.0
   description: >
     API contract for the CODELESS multi-model AI chat platform.
-    Covers the Day 1-2 scope: authentication (sign-up/login/logout),
-    chat with an AI model (with streaming), and the admin model panel
-    (add/remove models, set the default model).
+    Features: authentication (sign-up/login/logout), multi-turn chat
+    with AI models (Server-Sent Events streaming & JSON fallback), admin
+    model panel (CRUD, default model selection, active/inactive toggle,
+    custom OpenAI-compatible Base URL & API key credentials), and standard
+    OpenAI-compatible endpoints (/v1/models, /v1/chat/completions).
+    All standard JSON responses are wrapped in a unified envelope:
+    { success: boolean, message: string, data: any }.
   contact:
     name: CODELESS Team
 
 servers:
   - url: http://localhost:3000/api/v1
-    description: Local development
+    description: Local development API base
   - url: https://api.codeless.example.com/api/v1
-    description: Production (placeholder — update once deployed)
+    description: Production API base (placeholder)
 
 tags:
   - name: Auth
@@ -23,7 +27,9 @@ tags:
   - name: Chat
     description: Conversations and messages with an AI model
   - name: Admin - Models
-    description: Manage available AI models (admin only)
+    description: Manage available AI models and credentials (admin only)
+  - name: OpenAI Compatibility
+    description: Standard OpenAI-compatible endpoints for listing active models and completions
 
 security:
   - bearerAuth: []
@@ -132,6 +138,42 @@ paths:
                 $ref: '#/components/schemas/ConversationApiResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+  /chat/conversations/{conversationId}:
+    parameters:
+      - $ref: '#/components/parameters/ConversationId'
+    delete:
+      tags: [Chat]
+      summary: Delete a conversation and its messages
+      responses:
+        '204':
+          description: Conversation deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Chat]
+      summary: Update conversation details (e.g. title)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateConversationRequest'
+      responses:
+        '200':
+          description: Conversation updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationApiResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /chat/conversations/{conversationId}/messages:
     parameters:
@@ -267,6 +309,76 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /admin/models/{modelId}/status:
+    parameters:
+      - $ref: '#/components/parameters/ModelId'
+    patch:
+      tags: [Admin - Models]
+      summary: Toggle active/inactive status of an AI model
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateModelStatusRequest'
+      responses:
+        '200':
+          description: Model status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelApiResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/models:
+    get:
+      tags: [OpenAI Compatibility]
+      summary: List active models (OpenAI-compatible)
+      description: Returns a list of all active AI models in standard OpenAI format.
+      security: []
+      responses:
+        '200':
+          description: List of active models
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenAiModelListResponse'
+
+  /v1/chat/completions:
+    post:
+      tags: [OpenAI Compatibility]
+      summary: Create chat completion (OpenAI-compatible)
+      description: >
+        OpenAI-compatible chat completion endpoint. Supports single JSON response
+        or real-time streaming chunks using Server-Sent Events (`stream: true`).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenAiChatCompletionRequest'
+      responses:
+        '200':
+          description: Completion result (JSON object or SSE token stream)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenAiChatCompletionResponse'
+            text/event-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -386,6 +498,16 @@ components:
         title:
           type: string
 
+    UpdateConversationRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: Updated title for the conversation
+          example: "Updated Conversation Name"
+
     Conversation:
       type: object
       properties:
@@ -443,9 +565,23 @@ components:
         apiIdentifier:
           type: string
           description: The model name/id sent to the provider's API.
+        apiKey:
+          type: string
+          description: Optional provider API key (masked on read).
+        baseUrl:
+          type: string
+          description: Optional custom base URL for OpenAI-compatible LLM endpoints.
         isActive:
           type: boolean
           default: true
+
+    UpdateModelStatusRequest:
+      type: object
+      required: [isActive]
+      properties:
+        isActive:
+          type: boolean
+          description: Whether the model is active and selectable for chat.
 
     Model:
       type: object
@@ -459,6 +595,14 @@ components:
           type: string
         apiIdentifier:
           type: string
+        apiKey:
+          type: string
+          description: Masked provider API key.
+          nullable: true
+        baseUrl:
+          type: string
+          description: Custom base URL.
+          nullable: true
         isActive:
           type: boolean
         isDefault:
@@ -562,3 +706,120 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/Model'
+
+    OpenAiModelItem:
+      type: object
+      properties:
+        id:
+          type: string
+          example: gpt-4o
+        object:
+          type: string
+          example: model
+        created:
+          type: integer
+          example: 1726300000
+        owned_by:
+          type: string
+          example: openai
+        permission:
+          type: array
+          items:
+            type: object
+        root:
+          type: string
+          example: gpt-4o
+        parent:
+          nullable: true
+          type: string
+          example: null
+
+    OpenAiModelListResponse:
+      type: object
+      required: [object, data]
+      properties:
+        object:
+          type: string
+          example: list
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpenAiModelItem'
+
+    OpenAiChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant]
+          example: user
+        content:
+          type: string
+          example: "Hello, how are you?"
+
+    OpenAiChatCompletionRequest:
+      type: object
+      required: [messages]
+      properties:
+        model:
+          type: string
+          description: Model apiIdentifier or display name.
+          example: gpt-4o
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpenAiChatMessage'
+        stream:
+          type: boolean
+          default: false
+          description: If set, partial message deltas will be sent as Server-Sent Events.
+        temperature:
+          type: number
+          nullable: true
+          example: 0.7
+        max_tokens:
+          type: integer
+          nullable: true
+          example: 1000
+
+    OpenAiChatCompletionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: chatcmpl-1726300000
+        object:
+          type: string
+          example: chat.completion
+        created:
+          type: integer
+          example: 1726300000
+        model:
+          type: string
+          example: gpt-4o
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              index:
+                type: integer
+                example: 0
+              message:
+                $ref: '#/components/schemas/OpenAiChatMessage'
+              finish_reason:
+                type: string
+                example: stop
+        usage:
+          type: object
+          properties:
+            prompt_tokens:
+              type: integer
+              example: 10
+            completion_tokens:
+              type: integer
+              example: 25
+            total_tokens:
+              type: integer
+              example: 35

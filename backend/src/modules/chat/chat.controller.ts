@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
+  Patch,
   Body,
   Param,
   HttpCode,
@@ -19,6 +21,11 @@ class CreateConvDto {
   @IsOptional() @IsString() modelId?: string;
   @IsOptional() @IsString() title?: string;
 }
+class UpdateConvDto {
+  @IsString()
+  @MinLength(1)
+  title: string;
+}
 class SendMsgDto {
   @IsString() @MinLength(1) content: string;
 }
@@ -34,6 +41,20 @@ export class ChatController {
     @Body() d: CreateConvDto,
   ) {
     return this.chat.create(req.user.sub, d?.modelId, d?.title);
+  }
+  @Patch(':id')
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  async update(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() d: UpdateConvDto,
+  ) {
+    return this.chat.updateTitle(req.user.sub, id, d.title);
+  }
+  @Delete(':id')
+  @HttpCode(204)
+  async delete(@Req() req: any, @Param('id') id: string) {
+    await this.chat.delete(req.user.sub, id);
   }
   @Get(':id/messages') history(@Req() req: any, @Param('id') id: string) {
     return this.chat.history(req.user.sub, id);

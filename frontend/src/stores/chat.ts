@@ -29,9 +29,9 @@ export const useChatStore = defineStore('chat', () => {
     ]
   }
 
-  const conversations = ref<Conversation[]>(sampleConversations)
-  const currentConversationId = ref<string | null>('c-1')
-  const messages = ref<Message[]>(sampleMessages['c-1'] || [])
+  const conversations = ref<Conversation[]>([])
+  const currentConversationId = ref<string | null>(null)
+  const messages = ref<Message[]>([])
   const isStreaming = ref(false)
   const isThinking = ref(false)
   const currentStreamingText = ref('')
@@ -43,14 +43,29 @@ export const useChatStore = defineStore('chat', () => {
   async function loadConversations() {
     try {
       const data = await chatService.listConversations()
-      if (Array.isArray(data) && data.length > 0) {
-        conversations.value = data
-        if (!currentConversationId.value) {
-          selectConversation(data[0].id)
+      if (Array.isArray(data)) {
+        if (data.length > 0) {
+          conversations.value = data
+          if (
+            !currentConversationId.value ||
+            currentConversationId.value === 'c-1' ||
+            !data.some((c) => c.id === currentConversationId.value)
+          ) {
+            await selectConversation(data[0].id)
+          }
+        } else {
+          conversations.value = []
+          currentConversationId.value = null
+          messages.value = []
         }
+        return
       }
-    } catch {
-      // Keep sample conversations
+    } catch (err) {
+      console.warn('Backend listConversations failed:', err)
+    }
+    if (conversations.value.length === 0) {
+      currentConversationId.value = null
+      messages.value = []
     }
   }
 
@@ -74,37 +89,60 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function createNewConversation(title = 'گفتگوی جدید'): Promise<string> {
-    const modelId = modelsStore.selectedModelId
+    const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
     try {
       const created = await chatService.createConversation(modelId, title)
-      conversations.value.unshift(created)
-      currentConversationId.value = created.id
-      messages.value = []
-      return created.id
-    } catch {
-      const newConv: Conversation = {
-        id: `c-${Date.now()}`,
-        title,
-        modelId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+      if (created && created.id) {
+        conversations.value.unshift(created)
+        currentConversationId.value = created.id
+        messages.value = []
+        return created.id
       }
-      conversations.value.unshift(newConv)
-      currentConversationId.value = newConv.id
-      messages.value = []
-      return newConv.id
+    } catch (err) {
+      console.warn('Backend createConversation failed, falling back to local ID:', err)
     }
+    const newConv: Conversation = {
+      id: `c-${Date.now()}`,
+      title,
+      modelId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+    conversations.value.unshift(newConv)
+    currentConversationId.value = newConv.id
+    messages.value = []
+    return newConv.id
   }
 
-  function deleteConversation(id: string) {
+  async function deleteConversation(id: string) {
+    try {
+      await chatService.deleteConversation(id)
+    } catch (err: any) {
+      console.warn('Backend deleteConversation failed:', err)
+    }
     conversations.value = conversations.value.filter((c) => c.id !== id)
     delete sampleMessages[id]
     if (currentConversationId.value === id) {
       if (conversations.value.length > 0) {
-        selectConversation(conversations.value[0].id)
+        await selectConversation(conversations.value[0].id)
       } else {
-        createNewConversation()
+        currentConversationId.value = null
+        messages.value = []
       }
+    }
+  }
+
+  async function updateConversationTitle(id: string, newTitle: string) {
+    const trimmed = newTitle.trim()
+    if (!trimmed) return
+    const conv = conversations.value.find((c) => c.id === id)
+    if (conv) {
+      conv.title = trimmed
+    }
+    try {
+      await chatService.updateConversation(id, trimmed)
+    } catch (err: any) {
+      console.warn('Backend updateConversation failed:', err)
     }
   }
 
@@ -112,12 +150,22 @@ export const useChatStore = defineStore('chat', () => {
     if (!content.trim() || isStreaming.value) return
 
     if (!currentConversationId.value) {
-      await createNewConversation()
+      const tempId = `c-${Date.now()}`
+      const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
+      const newConv: Conversation = {
+        id: tempId,
+        title: content.slice(0, 30),
+        modelId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+      conversations.value.unshift(newConv)
+      currentConversationId.value = tempId
     }
 
-    const convId = currentConversationId.value!
+    let convId = currentConversationId.value!
 
-    // Add user message
+    // Add user message immediately
     const userMessage: Message = {
       id: `msg-${Date.now()}`,
       conversationId: convId,
@@ -131,6 +179,24 @@ export const useChatStore = defineStore('chat', () => {
     const conv = conversations.value.find((c) => c.id === convId)
     if (conv && (conv.title === 'گفتگوی جدید' || conv.title === 'New Chat')) {
       conv.title = content.slice(0, 30) + (content.length > 30 ? '...' : '')
+    }
+
+    // If conversation is a local placeholder (starts with 'c-'), persist it to backend
+    if (convId.startsWith('c-')) {
+      try {
+        const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
+        const created = await chatService.createConversation(modelId, conv?.title || content.slice(0, 30))
+        if (created && created.id) {
+          const oldId = convId
+          if (conv) conv.id = created.id
+          currentConversationId.value = created.id
+          userMessage.conversationId = created.id
+          convId = created.id
+          delete sampleMessages[oldId]
+        }
+      } catch (err) {
+        console.warn('Could not persist conversation to backend before streaming:', err)
+      }
     }
 
     // Prepare assistant response
@@ -213,6 +279,7 @@ export const useChatStore = defineStore('chat', () => {
     selectConversation,
     createNewConversation,
     deleteConversation,
+    updateConversationTitle,
     sendMessage,
     stopStreaming
   }

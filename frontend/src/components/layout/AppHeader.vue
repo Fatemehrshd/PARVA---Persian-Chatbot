@@ -40,8 +40,9 @@ const authStore = useAuthStore()
         </svg>
       </button>
 
-      <!-- Admin Panel link/button -->
+      <!-- Admin Panel link/button (Admin Only) -->
       <button
+        v-if="authStore.isAdmin"
         class="icon-text-btn px-2 sm:px-3"
         @click="uiStore.openAdminModels"
         :title="uiStore.direction === 'rtl' ? 'پنل ادمین (مدیریت مدل‌ها)' : 'Admin Panel (Manage Models)'"
@@ -60,13 +61,9 @@ const authStore = useAuthStore()
           <div class="header-avatar">
             {{ authStore.user?.displayName?.charAt(0).toUpperCase() || 'U' }}
           </div>
-          <button class="logout-btn" @click="authStore.logout" :title="uiStore.direction === 'rtl' ? 'خروج' : 'Logout'">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
-          </button>
+          <span class="user-name-header font-medium text-xs hidden sm:inline px-1">
+            {{ authStore.user?.displayName || authStore.user?.email }}
+          </span>
         </div>
       </template>
       <template v-else>
@@ -159,15 +156,7 @@ const authStore = useAuthStore()
   justify-content: center;
 }
 
-.logout-btn {
-  color: var(--muted-foreground);
-  display: flex;
-  align-items: center;
-}
 
-.logout-btn:hover {
-  color: #ef4444;
-}
 
 .login-trigger-btn {
   padding: 5px 12px;

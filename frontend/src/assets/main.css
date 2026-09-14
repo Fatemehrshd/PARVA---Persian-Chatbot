@@ -5,24 +5,24 @@
 @tailwind utilities;
 
 :root {
-  --background: #0e0f11;
-  --foreground: #e8e6e1;
-  --card: #161719;
-  --card-foreground: #e8e6e1;
-  --primary: #7c6af7;
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --primary: #6366f1;
   --primary-foreground: #ffffff;
-  --secondary: #1e2025;
-  --secondary-foreground: #a8a49e;
-  --muted: #1a1b1e;
-  --muted-foreground: #6b6760;
-  --accent: #7c6af7;
-  --popover: #161719;
-  --popover-foreground: #e8e6e1;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #334155;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #6366f1;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: #232428;
-  --input: #232428;
-  --ring: #7c6af7;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #6366f1;
   --radius: 10px;
   --radius-sm: 8px;
   --radius-lg: 14px;
@@ -34,6 +34,82 @@
   /* Header and Sidebar constants */
   --header-height: 48px;
   --sidebar-width: 260px;
+
+  /* Message bubbles (Light mode) */
+  --chat-user-bg: #f1f5f9;
+  --chat-user-fg: #0f172a;
+  --chat-user-border: #e2e8f0;
+  --chat-assistant-bg: #ffffff;
+  --chat-assistant-fg: #0f172a;
+  --chat-assistant-border: #e2e8f0;
+}
+
+.dark,
+[data-theme="dark"],
+html.dark {
+  --background: #030306;
+  --foreground: #f3f4f6;
+  --card: #0c0d13;
+  --card-foreground: #f3f4f6;
+  --primary: #7c3aed;
+  --primary-foreground: #ffffff;
+  --secondary: #141620;
+  --secondary-foreground: #9ca3af;
+  --muted: #111218;
+  --muted-foreground: #6b7280;
+  --accent: #8b5cf6;
+  --popover: #0c0d13;
+  --popover-foreground: #f3f4f6;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #1e202d;
+  --input: #1e202d;
+  --ring: #7c3aed;
+
+  /* Message bubbles (Dark mode - dark obsidian/slate surfaces) */
+  --chat-user-bg: #1e202d;
+  --chat-user-fg: #f3f4f6;
+  --chat-user-border: #2e3247;
+  --chat-assistant-bg: #0c0d13;
+  --chat-assistant-fg: #f3f4f6;
+  --chat-assistant-border: #1e202d;
+}
+
+/* Explicit global rules for chat bubbles according to active theme */
+.dark .bubble-user,
+html.dark .bubble-user,
+[data-theme="dark"] .bubble-user {
+  background-color: #1e202d !important;
+  color: #f3f4f6 !important;
+  border-color: #2e3247 !important;
+}
+
+.dark .bubble-assistant,
+html.dark .bubble-assistant,
+[data-theme="dark"] .bubble-assistant {
+  background-color: #0c0d13 !important;
+  color: #f3f4f6 !important;
+  border-color: #1e202d !important;
+}
+
+.dark .bubble,
+html.dark .bubble,
+[data-theme="dark"] .bubble {
+  color: #f3f4f6 !important;
+}
+
+html:not(.dark) .bubble-user,
+[data-theme="light"] .bubble-user {
+  background-color: #f1f5f9;
+  color: #0f172a;
+  border-color: #e2e8f0;
+}
+
+html:not(.dark) .bubble-assistant,
+[data-theme="light"] .bubble-assistant {
+  background-color: #ffffff;
+  color: #0f172a;
+  border-color: #e2e8f0;
 }
 
 * {
@@ -172,4 +248,104 @@ code, pre, .font-mono {
 
 [dir="ltr"] {
   text-align: left;
+}
+
+/* ==========================================================================
+   Grok Fluid Cosmic Aurora Gradient Engine
+   ========================================================================== */
+
+@keyframes grokAuroraFlow {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+  33% {
+    transform: translate(40px, -60px) scale(1.15) rotate(120deg);
+  }
+  66% {
+    transform: translate(-35px, 30px) scale(0.92) rotate(240deg);
+  }
+  100% {
+    transform: translate(0, 0) scale(1) rotate(360deg);
+  }
+}
+
+@keyframes grokPulse {
+  0%, 100% {
+    opacity: 0.6;
+    filter: blur(80px);
+  }
+  50% {
+    opacity: 0.9;
+    filter: blur(100px);
+  }
+}
+
+.grok-aurora-wrapper {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Dark mode Grok Aurora */
+.dark .grok-blob-1 {
+  position: absolute;
+  top: -10%;
+  right: -5%;
+  width: 550px;
+  height: 550px;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.45) 0%, rgba(37, 99, 235, 0.25) 50%, transparent 70%);
+  animation: grokAuroraFlow 20s ease-in-out infinite, grokPulse 7s ease-in-out infinite;
+}
+
+.dark .grok-blob-2 {
+  position: absolute;
+  bottom: -15%;
+  left: -5%;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(236, 72, 153, 0.35) 0%, rgba(124, 58, 237, 0.25) 50%, transparent 70%);
+  animation: grokAuroraFlow 24s ease-in-out infinite reverse, grokPulse 9s ease-in-out infinite;
+}
+
+.dark .grok-blob-3 {
+  position: absolute;
+  top: 35%;
+  left: 30%;
+  width: 480px;
+  height: 480px;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.28) 0%, rgba(37, 99, 235, 0.18) 50%, transparent 70%);
+  animation: grokAuroraFlow 16s ease-in-out infinite, grokPulse 6s ease-in-out infinite;
+}
+
+/* Light mode Grok Aurora */
+.grok-blob-1 {
+  position: absolute;
+  top: -10%;
+  right: -5%;
+  width: 550px;
+  height: 550px;
+  background: radial-gradient(circle, rgba(199, 210, 254, 0.5) 0%, rgba(224, 231, 255, 0.35) 50%, transparent 70%);
+  animation: grokAuroraFlow 20s ease-in-out infinite, grokPulse 7s ease-in-out infinite;
+}
+
+.grok-blob-2 {
+  position: absolute;
+  bottom: -15%;
+  left: -5%;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(254, 205, 211, 0.45) 0%, rgba(254, 226, 226, 0.35) 50%, transparent 70%);
+  animation: grokAuroraFlow 24s ease-in-out infinite reverse, grokPulse 9s ease-in-out infinite;
+}
+
+.grok-blob-3 {
+  position: absolute;
+  top: 35%;
+  left: 30%;
+  width: 480px;
+  height: 480px;
+  background: radial-gradient(circle, rgba(187, 247, 208, 0.4) 0%, rgba(207, 250, 254, 0.3) 50%, transparent 70%);
+  animation: grokAuroraFlow 16s ease-in-out infinite, grokPulse 6s ease-in-out infinite;
 }

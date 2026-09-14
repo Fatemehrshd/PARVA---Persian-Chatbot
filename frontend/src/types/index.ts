@@ -52,6 +52,10 @@ export interface CreateConversationRequest {
   title?: string
 }
 
+export interface UpdateConversationRequest {
+  title: string
+}
+
 export interface Message {
   id: string
   conversationId: string
@@ -73,6 +77,8 @@ export interface Model {
   name: string
   provider: string
   apiIdentifier: string
+  apiKey?: string
+  baseUrl?: string
   isActive: boolean
   isDefault: boolean
   createdAt?: string
@@ -82,7 +88,13 @@ export interface CreateModelRequest {
   name: string
   provider: string
   apiIdentifier: string
+  apiKey?: string
+  baseUrl?: string
   isActive?: boolean
+}
+
+export interface UpdateModelStatusRequest {
+  isActive: boolean
 }
 
 // ========================

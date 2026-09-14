@@ -31,19 +31,7 @@ export const useAuthStore = defineStore('auth', () => {
       setSession(response.user, response.accessToken, response.refreshToken)
       return true
     } catch (err: any) {
-      error.value = err.message || 'Login failed'
-      // Mock fallback for prototype testing if backend is not yet started
-      if (err.statusCode === 404 || err.message.includes('fetch')) {
-        const mockUser: User = {
-          id: 'mock-user-id',
-          email,
-          displayName: email.split('@')[0],
-          role: email.includes('admin') ? 'admin' : 'user'
-        }
-        setSession(mockUser, 'mock-jwt-token', 'mock-refresh-token')
-        error.value = null
-        return true
-      }
+      error.value = err.message || 'ورود با خطا مواجه شد.'
       return false
     } finally {
       loading.value = false
@@ -58,18 +46,7 @@ export const useAuthStore = defineStore('auth', () => {
       setSession(response.user, response.accessToken, response.refreshToken)
       return true
     } catch (err: any) {
-      error.value = err.message || 'Sign up failed'
-      if (err.statusCode === 404 || err.message.includes('fetch')) {
-        const mockUser: User = {
-          id: 'mock-user-id',
-          email,
-          displayName: displayName || email.split('@')[0],
-          role: 'user'
-        }
-        setSession(mockUser, 'mock-jwt-token', 'mock-refresh-token')
-        error.value = null
-        return true
-      }
+      error.value = err.message || 'ثبت‌نام با خطا مواجه شد.'
       return false
     } finally {
       loading.value = false

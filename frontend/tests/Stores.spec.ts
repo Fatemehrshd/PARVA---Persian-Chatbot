@@ -17,6 +17,13 @@ describe('Pinia Stores', () => {
     expect(chatStore.conversations.length).toBe(initialCount + 1)
     expect(chatStore.currentConversationId).toBe(newId)
     expect(chatStore.messages.length).toBe(0)
+
+    await chatStore.updateConversationTitle(newId, 'عنوان جدید تست')
+    const updated = chatStore.conversations.find((c) => c.id === newId)
+    expect(updated?.title).toBe('عنوان جدید تست')
+
+    await chatStore.deleteConversation(newId)
+    expect(chatStore.conversations.some((c) => c.id === newId)).toBe(false)
   })
 
   it('modelsStore: can select active model and make default', async () => {

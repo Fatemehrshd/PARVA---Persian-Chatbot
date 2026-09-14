@@ -99,6 +99,15 @@ onMounted(() => {
   width: 100%;
 }
 
+.row-assistant {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+}
+
+html[dir="ltr"] .row-assistant {
+  flex-direction: row;
+}
+
 .avatar {
   width: 32px;
   height: 32px;
@@ -115,6 +124,10 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   max-width: 82%;
+  align-items: flex-end;
+}
+
+html[dir="ltr"] .bubble-container {
   align-items: flex-start;
 }
 
@@ -122,12 +135,18 @@ onMounted(() => {
   padding: 12px 16px;
   font-size: 14px;
   line-height: 1.6;
-  background-color: var(--card);
-  color: var(--card-foreground);
-  border: 1px solid var(--border);
+  background-color: var(--chat-assistant-bg, #0c0d13);
+  color: var(--chat-assistant-fg, #f3f4f6);
+  border: 1px solid var(--chat-assistant-border, #1e202d);
   border-radius: 18px 18px 18px 4px;
   word-break: break-word;
   white-space: pre-wrap;
+  text-align: right;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+html[dir="ltr"] .bubble {
+  text-align: left;
 }
 
 .streaming-cursor {

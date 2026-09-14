@@ -26,13 +26,15 @@ export class ResponseEnvelopeInterceptor<T>
     const res = http.getResponse<Response>();
     const req = http.getRequest<Request>();
 
-    // Skip intercepting for Server-Sent Events (SSE) streaming responses
+    // Skip intercepting for Server-Sent Events (SSE) streaming responses and OpenAI-compatible endpoints
     const accept = (req.headers?.['accept'] as string) ?? '';
     const contentType = (res.getHeader?.('content-type') as string) ?? '';
     if (
       accept.includes('text/event-stream') ||
       contentType.includes('text/event-stream') ||
-      res.headersSent
+      res.headersSent ||
+      req.url?.includes('/v1/models') ||
+      req.url?.includes('/v1/chat/completions')
     ) {
       return next.handle();
     }
@@ -64,3 +66,4 @@ export class ResponseEnvelopeInterceptor<T>
     );
   }
 }
+

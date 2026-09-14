@@ -37,6 +37,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
         message = (obj.message as string | string[]) ?? exception.message;
         error = (obj.error as string) ?? HttpStatus[status] ?? 'Error';
       }
+    } else if ((exception as any)?.code === '22P02') {
+      status = HttpStatus.NOT_FOUND;
+      message = 'Resource not found';
+      error = 'Not Found';
     } else {
       this.logger.error(
         `Unhandled exception on ${req.method} ${req.url}`,

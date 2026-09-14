@@ -60,6 +60,37 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
 
   if (!response.ok) {
     const message = json.message || (Array.isArray(json.message) ? json.message.join(', ') : 'An unexpected error occurred')
+
+    // Global 401 Unauthorized handling (session expired or invalid token)
+    if (response.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/signup')) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      localStorage.removeItem('refreshToken')
+      try {
+        const { useUiStore } = await import('../stores/ui')
+        useUiStore().showToast('نشست کاربری شما منقضی شده است. لطفاً مجدداً وارد شوید.', 'warning')
+      } catch {
+        // UI store not available in non-Vue context
+      }
+      if (
+        typeof window !== 'undefined' &&
+        window.location.pathname !== '/login' &&
+        (!import.meta.env || import.meta.env.MODE !== 'test')
+      ) {
+        window.location.href = '/login'
+      }
+    }
+
+    // Global 500+ Internal Server Error notification
+    if (response.status >= 500) {
+      try {
+        const { useUiStore } = await import('../stores/ui')
+        useUiStore().showToast(message || 'خطای سرور رخ داده است. لطفاً بعداً تلاش کنید.', 'error')
+      } catch {
+        // UI store not available in non-Vue context
+      }
+    }
+
     throw new ApiError(response.status, message, json.error)
   }
 

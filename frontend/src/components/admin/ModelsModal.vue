@@ -2,51 +2,73 @@
 import { ref } from 'vue'
 import { useUiStore } from '../../stores/ui'
 import { useModelsStore } from '../../stores/models'
-import { useAsyncAction } from '../../composables/useAsyncAction'
+import { useFormSubmit } from '../../composables/useFormSubmit'
 
 const uiStore = useUiStore()
 const modelsStore = useModelsStore()
 
 const newName = ref('')
-const newProvider = ref('anthropic')
+const newProvider = ref('openai')
 const newApiIdentifier = ref('')
+const newBaseUrl = ref('')
+const newApiKey = ref('')
 const isAdding = ref(false)
 
 const {
-  isLoading: isRegisteringModel,
+  isSubmitting: isRegisteringModel,
   error: addModelError,
-  execute: submitAddModel,
-} = useAsyncAction(async () => {
-  if (!newName.value.trim() || !newApiIdentifier.value.trim()) return
+  submit: submitAddModel
+} = useFormSubmit(
+  async () => {
+    if (!newName.value.trim() || !newApiIdentifier.value.trim()) return
 
-  await modelsStore.addModel({
-    name: newName.value.trim(),
-    provider: newProvider.value,
-    apiIdentifier: newApiIdentifier.value.trim(),
-    isActive: true
-  })
-
-  newName.value = ''
-  newApiIdentifier.value = ''
-  isAdding.value = false
-})
+    await modelsStore.addModel({
+      name: newName.value.trim(),
+      provider: newProvider.value,
+      apiIdentifier: newApiIdentifier.value.trim(),
+      baseUrl: newBaseUrl.value.trim() || undefined,
+      apiKey: newApiKey.value.trim() || undefined,
+      isActive: true
+    })
+  },
+  {
+    successMessage: uiStore.direction === 'rtl' ? 'مدل با موفقیت ثبت شد.' : 'Model created successfully.',
+    onSuccess: () => {
+      newName.value = ''
+      newApiIdentifier.value = ''
+      newBaseUrl.value = ''
+      newApiKey.value = ''
+      isAdding.value = false
+    }
+  }
+)
 
 async function handleAddModel() {
   await submitAddModel()
 }
 
-function handleMakeDefault(id: string) {
-  modelsStore.makeDefault(id)
+async function handleMakeDefault(id: string) {
+  try {
+    await modelsStore.makeDefault(id)
+    uiStore.showToast(uiStore.direction === 'rtl' ? 'مدل پیش‌فرض با موفقیت تغییر یافت.' : 'Default model updated.', 'success')
+  } catch (err: any) {
+    uiStore.showToast(err?.message || 'خطا در تغییر مدل پیش‌فرض', 'error')
+  }
 }
 
-function handleDelete(id: string) {
-  modelsStore.removeModel(id)
+async function handleDelete(id: string) {
+  try {
+    await modelsStore.removeModel(id)
+    uiStore.showToast(uiStore.direction === 'rtl' ? 'مدل با موفقیت حذف شد.' : 'Model deleted.', 'success')
+  } catch (err: any) {
+    uiStore.showToast(err?.message || 'خطا در حذف مدل', 'error')
+  }
 }
 </script>
 
 <template>
   <div v-if="uiStore.adminModelsModalOpen" class="modal-backdrop" @click.self="uiStore.closeAdminModels">
-    <div class="modal-card">
+    <div class="modal-card" :dir="uiStore.direction">
       <div class="modal-header">
         <div class="header-title-group">
           <h2 class="modal-title">
@@ -155,28 +177,50 @@ function handleDelete(id: string) {
             />
           </div>
         </div>
-        <div class="form-actions">
-          <button type="button" class="cancel-btn" :disabled="isRegisteringModel" @click="isAdding = false">
-            {{ uiStore.direction === 'rtl' ? 'انصراف' : 'Cancel' }}
-          </button>
-          <button type="submit" class="confirm-btn flex items-center gap-1.5" :disabled="isRegisteringModel">
-            <svg
-              v-if="isRegisteringModel"
-              class="animate-spin h-3.5 w-3.5 text-current inline-block"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <span>
-              {{ isRegisteringModel
-                ? (uiStore.direction === 'rtl' ? 'در حال ثبت...' : 'Adding...')
-                : (uiStore.direction === 'rtl' ? 'ثبت مدل' : 'Add Model')
-              }}
-            </span>
-          </button>
+        <div class="form-actions flex items-center justify-between w-full">
+          <template v-if="uiStore.direction === 'rtl'">
+            <button type="submit" class="confirm-btn flex items-center gap-1.5" :disabled="isRegisteringModel">
+              <svg
+                v-if="isRegisteringModel"
+                class="animate-spin h-3.5 w-3.5 text-current inline-block"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span>
+                {{ isRegisteringModel ? 'در حال ثبت...' : 'ثبت مدل' }}
+              </span>
+            </button>
+
+            <button type="button" class="cancel-btn" :disabled="isRegisteringModel" @click="isAdding = false">
+              انصراف
+            </button>
+          </template>
+
+          <template v-else>
+            <button type="button" class="cancel-btn" :disabled="isRegisteringModel" @click="isAdding = false">
+              Cancel
+            </button>
+
+            <button type="submit" class="confirm-btn flex items-center gap-1.5" :disabled="isRegisteringModel">
+              <svg
+                v-if="isRegisteringModel"
+                class="animate-spin h-3.5 w-3.5 text-current inline-block"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span>
+                {{ isRegisteringModel ? 'Adding...' : 'Add Model' }}
+              </span>
+            </button>
+          </template>
         </div>
       </form>
 
@@ -412,7 +456,9 @@ function handleDelete(id: string) {
 
 .form-actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
   gap: 8px;
 }
 

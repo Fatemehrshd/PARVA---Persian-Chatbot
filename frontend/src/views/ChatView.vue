@@ -1,30 +1,38 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import AppHeader from '../components/layout/AppHeader.vue'
 import AppSidebar from '../components/layout/AppSidebar.vue'
 import MessageList from '../components/chat/MessageList.vue'
 import ChatComposer from '../components/chat/ChatComposer.vue'
 import ModelsModal from '../components/admin/ModelsModal.vue'
 import SettingsModal from '../components/layout/SettingsModal.vue'
+import GrokAurora from '../components/ui/GrokAurora.vue'
 import { useChatStore } from '../stores/chat'
 import { useModelsStore } from '../stores/models'
 
 const chatStore = useChatStore()
 const modelsStore = useModelsStore()
+const isEntering = ref(true)
 
 onMounted(async () => {
   await modelsStore.fetchModels()
   await chatStore.loadConversations()
+  setTimeout(() => {
+    isEntering.value = false
+  }, 3500)
 })
 </script>
 
 <template>
-  <div class="chat-layout">
+  <div class="chat-layout relative overflow-hidden">
+    <!-- Grok Fluid Aurora Animated Background on Entrance -->
+    <GrokAurora :intensity="isEntering ? 'vibrant' : 'subtle'" class="transition-opacity duration-1000 z-0" />
+
     <!-- Top Bar -->
-    <AppHeader />
+    <AppHeader class="relative z-10" />
 
     <!-- Main Workspace Container -->
-    <div class="workspace-body">
+    <div class="workspace-body relative z-10">
       <!-- Left / Right Collapsible Sidebar -->
       <AppSidebar />
 
@@ -71,6 +79,6 @@ onMounted(async () => {
   height: 100%;
   position: relative;
   overflow: hidden;
-  background-color: var(--background);
+  background-color: transparent;
 }
 </style>

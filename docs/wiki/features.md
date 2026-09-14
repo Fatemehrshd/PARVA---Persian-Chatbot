@@ -56,3 +56,60 @@
 - Enhanced frontend `api.ts` base client to unwrap `data` automatically when an envelope is detected.
 - Verified test suite: 100% passing tests (38 backend tests across 8 suites, 39 frontend tests across 10 suites).
 - Both frontend and backend production builds compile with 0 errors.
+
+## Task 10: Hybrid Form Handling, Auth Route Guards & Model Admin Security
+- **Universal Form Composable (`useFormSubmit`)**: Built a reusable composable (`frontend/src/composables/useFormSubmit.ts`) managing submission lifecycle (`isSubmitting`), form errors, field-specific validation mappings from NestJS `class-validator` arrays, and toast integration.
+- **Global Network & Auth Interceptor (`api.ts`)**: Implemented automatic 401 session expiry handling (clears localStorage, notifies with toast, redirects to `/login`) and 500 server error notifications.
+- **Root-Cause Resolution for Model Registration**: Eliminated silent offline fallbacks from `models.ts` and `auth.ts` that previously masked backend 403 Forbidden responses.
+- **Route Navigation Guards (`router.beforeEach`)**: Protected `/` and `/chat/:id` with `requiresAuth`, `/admin/models` with `requiresAuth` and `requiresAdmin`, and `/login` & `/signup` with `guestOnly`.
+- **Role-Based UI Gating**: Hidden admin entry points (e.g. Admin Panel button in `AppHeader.vue`) behind `v-if="authStore.isAdmin"`.
+- **Reactive Toast Notification System**: Added floating, animated toast alerts in `ToastContainer.vue` powered by `uiStore.toasts`.
+- **Test Coverage**: Added `tests/useFormSubmit.spec.ts`, bringing frontend unit tests to 45 passing tests across 11 test suites. Backend tests remain at 38/38 passing. Production builds for both frontend and backend compile cleanly with 0 errors.
+
+## Task 11: OpenAI-Compatible Engine, Admin Decluttering, Light/Dark Modes & Grok Gradient
+- **OpenAI-Compatible Endpoints & Outbound LLM Forwarding**:
+  - Enhanced `AiModel` entity with `apiKey` and `baseUrl` columns.
+  - `ChatService` dynamically connects to custom OpenAI-compatible endpoints (`${baseUrl}/chat/completions`) using provided API keys, passing conversation history and handling streamed/non-streamed generation with mock/offline fallbacks.
+  - Exposes standard inbound OpenAI-compatible endpoints `GET /v1/models` and `POST /v1/chat/completions` supporting standard format and Server-Sent Events (SSE).
+  - Masked API key storage and delivery (`sk-...last4`) preventing credential exposure.
+  - Added model active/inactive status control (`isActive`) with `PATCH /admin/models/:modelId/status`, preventing chat interaction with deactivated models.
+- **Decluttered Admin Dashboard (`AdminModelsView.vue`)**:
+  - Replaced oversized KPI metric cards with sleek, minimalist stat badges, preserving required test selectors while eliminating visual bloat.
+  - Streamlined table with instant interactive active/inactive toggle switches and quick actions.
+  - Added optional `baseUrl` and `apiKey` fields to model creation forms.
+- **Light & Dark Theme Engine (`SettingsModal.vue`, `uiStore`)**:
+  - Centralized theme state in `useUiStore` (`'dark' | 'light'`) with auto-persistence in `localStorage` and `html.dark` class sync.
+  - Interactive theme selection cards in the Settings modal with real-time visual feedback.
+  - Refined theme CSS variables in `main.css` for both Obsidian Dark mode and clean Light mode.
+- **Grok-Style Animated Aurora Background (`GrokAurora.vue`)**:
+  - Hardware-accelerated fluid multi-color cosmic gradient background.
+  - Ambient fluid animation on `/login` with loading pulse during sign-in.
+  - Smooth entrance animation on `/chat` across both light and dark themes.
+- **Conversation Management & Navigation Refinements**:
+  - Added `DELETE /chat/conversations/:id` endpoint in backend with strict ownership verification (returns 404 for other users' conversations, 204 on success).
+  - Wired frontend `chatService.deleteConversation` and `chatStore.deleteConversation` to sync deletion with backend.
+  - Cleaned up `AppSidebar.vue` by removing the redundant Admin Panel section, keeping the sidebar focused solely on chat history.
+  - Admin access is role-gated and accessible via the Header button (`v-if="authStore.isAdmin"`) and Settings modal.
+- **Verification**:
+  - 100% test pass rate: 41 backend tests and 45 frontend tests passing cleanly.
+
+## Task 12: Conversation Rename & Delete Modals, Toast Right-Alignment & Theme Adaptivity
+- **Conversation Rename & Deletion Modals**:
+  - `EditConversationModal.vue`: Dedicated component dialog for renaming conversation titles with autofocus, trim validation, cancel, and save actions.
+  - `DeleteConversationModal.vue`: Dedicated confirmation modal dialog requiring explicit user confirmation before conversation deletion, with warning icon and danger button styling.
+  - Quick Action Buttons in `AppSidebar.vue`: Edit (pencil) and Delete (trash) action buttons appear seamlessly on conversation item hover.
+  - Backend integration: `PATCH /chat/conversations/:id` renames conversation with ownership enforcement (404 for unauthorized) and title validation. `DELETE /chat/conversations/:id` removes conversation and its messages.
+- **Right-Aligned & Theme-Adaptive Toasts**:
+  - `ToastContainer.vue`: Anchored to the top-right screen edge (`right-4 items-end`), ensuring toast alerts are consistently displayed on the right.
+  - Dynamic theme styling: Crisp light backgrounds (`bg-white/95 text-slate-900 border-slate-200/80 shadow-md`) in light mode and dark obsidian backgrounds (`bg-slate-900/95 text-slate-100 border-slate-700/60`) in dark mode.
+## Task 13: Sidebar Bottom Logout & RTL/LTR Modal Button Layout
+- **Sidebar Bottom Logout Flow**:
+  - Removed direct logout trigger button from navbar (`AppHeader.vue`) and decoupled it from the user card in the sidebar.
+  - Positioned a dedicated full-width logout button (`.logout-footer-btn`) sticking to the very bottom of the sidebar (`AppSidebar.vue`), clearly separated from user profile information.
+- **RTL/LTR Left-Right Modal Button Layout**:
+  - Standardized action buttons across all modals (`LogoutModal.vue`, `DeleteConversationModal.vue`, `EditConversationModal.vue`, and `ModelsModal.vue`) to occupy both the left and right edges (`justify-between`).
+  - Buttons adapt dynamically to layout direction:
+    - **RTL (Persian)**: Primary action button (e.g. `تأیید و خروج`, `حذف قطعی گفتگو`, `ذخیره عنوان`, `ثبت مدل`) positioned on the **Right** (start), and `انصراف` (Cancel) positioned on the **Left** (end).
+    - **LTR (English)**: `Cancel` positioned on the **Left** (start), and Primary action button positioned on the **Right** (end).
+- **Verification**:
+  - 100% test pass rate: 44 backend tests and 47 frontend unit tests passing cleanly (91/91 total).

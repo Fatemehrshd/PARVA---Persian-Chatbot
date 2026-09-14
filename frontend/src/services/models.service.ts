@@ -43,5 +43,16 @@ export const modelsService = {
     return request<Model>(`/admin/models/${modelId}/default`, {
       method: 'PATCH'
     })
+  },
+
+  /**
+   * Toggle active/inactive status of an AI model.
+   * PATCH /admin/models/{modelId}/status
+   */
+  async updateModelStatus(modelId: string, isActive: boolean): Promise<Model> {
+    return request<Model>(`/admin/models/${modelId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isActive })
+    })
   }
 }

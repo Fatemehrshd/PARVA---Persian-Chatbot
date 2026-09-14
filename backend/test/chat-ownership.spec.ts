@@ -38,6 +38,17 @@ function makeChatService() {
       if (!owned) throw new NotFoundException('Resource not found');
       return [];
     },
+    delete: async (userId: string, id: string) => {
+      const idx = convs.findIndex((c) => c.id === id && c.userId === userId);
+      if (idx < 0) throw new NotFoundException('Resource not found');
+      convs.splice(idx, 1);
+    },
+    updateTitle: async (userId: string, id: string, title: string) => {
+      const conv = convs.find((c) => c.id === id && c.userId === userId);
+      if (!conv) throw new NotFoundException('Resource not found');
+      conv.title = title;
+      return conv;
+    },
     answer: async (userId: string, id: string, content: string) => {
       const owned = convs.find((c) => c.id === id && c.userId === userId);
       if (!owned) throw new NotFoundException('Resource not found');
@@ -167,6 +178,71 @@ describe('Chat ownership invariants', () => {
       expect(res.body.data).toHaveProperty('id');
       expect(res.body.data).toHaveProperty('role', 'assistant');
       expect(res.body.data).toHaveProperty('content', 'Echo: hi');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('DELETE /chat/conversations/theirs returns 404 (cannot delete another user\'s conversation)', async () => {
+    const app = await makeAppWithFakeGuard();
+    try {
+      const res = await request(app.getHttpServer())
+        .delete('/chat/conversations/theirs')
+        .set('Authorization', AUTH);
+      expect(res.status).toBe(404);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('DELETE /chat/conversations/mine returns 204 (deletes own conversation)', async () => {
+    const app = await makeAppWithFakeGuard();
+    try {
+      const res = await request(app.getHttpServer())
+        .delete('/chat/conversations/mine')
+        .set('Authorization', AUTH);
+      expect(res.status).toBe(204);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('PATCH /chat/conversations/theirs returns 404 (cannot rename another user\'s conversation)', async () => {
+    const app = await makeAppWithFakeGuard();
+    try {
+      const res = await request(app.getHttpServer())
+        .patch('/chat/conversations/theirs')
+        .set('Authorization', AUTH)
+        .send({ title: 'Hacked Title' });
+      expect(res.status).toBe(404);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('PATCH /chat/conversations/mine updates conversation title', async () => {
+    const app = await makeAppWithFakeGuard();
+    try {
+      const res = await request(app.getHttpServer())
+        .patch('/chat/conversations/mine')
+        .set('Authorization', AUTH)
+        .send({ title: 'Updated Conversation Title' });
+      expect(res.status).toBe(200);
+      const title = res.body.data ? res.body.data.title : res.body.title;
+      expect(title).toBe('Updated Conversation Title');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('PATCH /chat/conversations/mine with empty title returns 400', async () => {
+    const app = await makeAppWithFakeGuard();
+    try {
+      const res = await request(app.getHttpServer())
+        .patch('/chat/conversations/mine')
+        .set('Authorization', AUTH)
+        .send({ title: '' });
+      expect(res.status).toBe(400);
     } finally {
       await app.close();
     }

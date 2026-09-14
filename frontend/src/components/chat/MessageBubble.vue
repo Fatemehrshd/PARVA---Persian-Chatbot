@@ -79,11 +79,22 @@ function copyContent() {
   width: 100%;
 }
 
+/* RTL layout (Default): User is anchored on the RIGHT, Assistant on the LEFT */
 .row-user {
-  flex-direction: row-reverse;
+  flex-direction: row;
+  justify-content: flex-start;
 }
 
 .row-assistant {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+}
+
+html[dir="ltr"] .row-user {
+  flex-direction: row-reverse;
+}
+
+html[dir="ltr"] .row-assistant {
   flex-direction: row;
 }
 
@@ -116,10 +127,18 @@ function copyContent() {
 }
 
 .row-user .bubble-container {
-  align-items: flex-end;
+  align-items: flex-start;
 }
 
 .row-assistant .bubble-container {
+  align-items: flex-end;
+}
+
+html[dir="ltr"] .row-user .bubble-container {
+  align-items: flex-end;
+}
+
+html[dir="ltr"] .row-assistant .bubble-container {
   align-items: flex-start;
 }
 
@@ -129,18 +148,27 @@ function copyContent() {
   line-height: 1.6;
   word-break: break-word;
   white-space: pre-wrap;
+  text-align: right;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
+html[dir="ltr"] .bubble {
+  text-align: left;
+}
+
+/* User Message Bubble */
 .bubble-user {
-  background-color: var(--primary);
-  color: var(--primary-foreground);
+  background-color: var(--chat-user-bg, #1e202d);
+  color: var(--chat-user-fg, #f3f4f6);
+  border: 1px solid var(--chat-user-border, #2e3247);
   border-radius: 18px 18px 4px 18px;
 }
 
+/* Assistant Message Bubble */
 .bubble-assistant {
-  background-color: var(--card);
-  color: var(--card-foreground);
-  border: 1px solid var(--border);
+  background-color: var(--chat-assistant-bg, #0c0d13);
+  color: var(--chat-assistant-fg, #f3f4f6);
+  border: 1px solid var(--chat-assistant-border, #1e202d);
   border-radius: 18px 18px 18px 4px;
 }
 

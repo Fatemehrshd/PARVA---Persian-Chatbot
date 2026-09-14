@@ -1,5 +1,5 @@
 import { request, buildUrl } from './api'
-import type { Conversation, Message, CreateConversationRequest, SendMessageRequest } from '../types'
+import type { Conversation, Message, CreateConversationRequest, UpdateConversationRequest, SendMessageRequest } from '../types'
 
 /**
  * Chat Service (Maps 1:1 with OpenAPI tag: Chat)
@@ -26,6 +26,28 @@ export const chatService = {
     return request<Conversation>('/chat/conversations', {
       method: 'POST',
       body: JSON.stringify(payload)
+    })
+  },
+
+  /**
+   * Update conversation title.
+   * PATCH /chat/conversations/{conversationId}
+   */
+  async updateConversation(conversationId: string, title: string): Promise<Conversation> {
+    const payload: UpdateConversationRequest = { title }
+    return request<Conversation>(`/chat/conversations/${conversationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    })
+  },
+
+  /**
+   * Delete a conversation.
+   * DELETE /chat/conversations/{conversationId}
+   */
+  async deleteConversation(conversationId: string): Promise<void> {
+    return request<void>(`/chat/conversations/${conversationId}`, {
+      method: 'DELETE'
     })
   },
 

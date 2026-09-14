@@ -60,30 +60,19 @@ export const useModelsStore = defineStore('models', () => {
     }
   }
 
-  async function addModel(data: CreateModelRequest) {
-    try {
-      const newModel = await modelsService.createModel(data)
-      models.value.push(newModel)
-    } catch {
-      // Offline fallback creation
-      const fallbackModel: Model = {
-        id: `m-${Date.now()}`,
-        name: data.name,
-        provider: data.provider,
-        apiIdentifier: data.apiIdentifier,
-        isActive: data.isActive !== false,
-        isDefault: false,
-        createdAt: new Date().toISOString()
-      }
-      models.value.push(fallbackModel)
-    }
+  async function addModel(data: CreateModelRequest): Promise<Model> {
+    const newModel = await modelsService.createModel(data)
+    models.value.push(newModel)
+    return newModel
   }
 
   async function removeModel(id: string) {
     try {
       await modelsService.deleteModel(id)
-    } catch {
-      // offline fallback
+    } catch (err: any) {
+      if (err?.statusCode === 403 || err?.statusCode === 401) {
+        throw err
+      }
     }
     models.value = models.value.filter((m) => m.id !== id)
     if (selectedModelId.value === id && models.value.length > 0) {
@@ -94,8 +83,10 @@ export const useModelsStore = defineStore('models', () => {
   async function makeDefault(id: string) {
     try {
       await modelsService.setDefaultModel(id)
-    } catch {
-      // offline fallback
+    } catch (err: any) {
+      if (err?.statusCode === 403) {
+        throw err
+      }
     }
     models.value.forEach((m) => {
       m.isDefault = m.id === id
@@ -104,6 +95,20 @@ export const useModelsStore = defineStore('models', () => {
 
   function selectModel(id: string) {
     selectedModelId.value = id
+  }
+
+  async function toggleModelStatus(id: string, isActive: boolean) {
+    try {
+      await modelsService.updateModelStatus(id, isActive)
+    } catch (err: any) {
+      if (err?.statusCode === 403 || err?.statusCode === 401) {
+        throw err
+      }
+    }
+    const target = models.value.find((m) => m.id === id)
+    if (target) {
+      target.isActive = isActive
+    }
   }
 
   return {
@@ -117,6 +122,7 @@ export const useModelsStore = defineStore('models', () => {
     addModel,
     removeModel,
     makeDefault,
+    toggleModelStatus,
     selectModel
   }
 })

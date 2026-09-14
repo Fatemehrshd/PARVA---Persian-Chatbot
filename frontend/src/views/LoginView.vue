@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-import { useAsyncAction } from '../composables/useAsyncAction'
+import { useFormSubmit } from '../composables/useFormSubmit'
+import GrokAurora from '@/components/ui/GrokAurora.vue'
 import loginArtwork from '@/assets/login-artwork.jpg'
 
 const router = useRouter()
@@ -23,7 +24,7 @@ const displayName = ref('')
 const showPassword = ref(false)
 const formError = ref<string | null>(null)
 
-const { isLoading, execute: submitAuth } = useAsyncAction(async () => {
+const { isSubmitting: isLoading, submit: submitAuth } = useFormSubmit(async () => {
   let success = false
   if (isSignup.value) {
     success = await authStore.signup(email.value, password.value, displayName.value)
@@ -32,6 +33,12 @@ const { isLoading, execute: submitAuth } = useAsyncAction(async () => {
   }
 
   if (success) {
+    uiStore.showToast(
+      isSignup.value
+        ? (uiStore.direction === 'rtl' ? 'حساب کاربری با موفقیت ایجاد شد.' : 'Account created successfully.')
+        : (uiStore.direction === 'rtl' ? 'با موفقیت وارد شدید.' : 'Logged in successfully.'),
+      'success'
+    )
     router.push('/')
   } else if (authStore.error) {
     formError.value = authStore.error
@@ -56,8 +63,10 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <!-- Full Screen Two-Column Split (50% Form on Left, 50% Image strictly on Right) -->
-  <div class="split-login-page">
+  <!-- Full Screen Two-Column Split with Grok Aurora Dynamic Mesh -->
+  <div class="split-login-page relative overflow-hidden bg-background">
+    <!-- Grok Fluid Aurora Background -->
+    <GrokAurora :intensity="isLoading ? 'vibrant' : 'subtle'" />
     
     <!-- LEFT HALF: Form Pane (50%) -->
     <div class="form-half" :dir="uiStore.direction">
@@ -254,14 +263,7 @@ async function handleSubmit() {
         </form>
 
         <!-- Back to Chat Link -->
-        <div class="flex justify-center border-t border-border/50 pt-5 mt-8">
-          <router-link 
-            to="/" 
-            class="text-xs font-medium text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5"
-          >
-            <span>{{ uiStore.direction === 'rtl' ? '← بازگشت به صفحه گفتگوها' : '← Back to Chat Workspace' }}</span>
-          </router-link>
-        </div>
+    
 
       </div>
     </div>

@@ -58,6 +58,12 @@ function makeModelsService() {
       m.isDefault = true;
       return m;
     },
+    updateStatus: async (id: string, isActive: boolean) => {
+      const m = models.find((x) => x.id === id);
+      if (!m) throw new NotFoundException('Resource not found');
+      m.isActive = isActive;
+      return m;
+    },
     getDefault: async () => models.find((m) => m.isDefault) ?? null,
   };
 }
@@ -238,6 +244,20 @@ describe('/admin/models — setDefault invariant', () => {
         .delete('/admin/models/m2')
         .set('Authorization', 'Bearer admin-token');
       expect(res.status).toBe(204);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('updateStatus toggles active state of a model', async () => {
+    const app = await makeApp('admin');
+    try {
+      const res = await request(app.getHttpServer())
+        .patch('/admin/models/m2/status')
+        .set('Authorization', 'Bearer admin-token')
+        .send({ isActive: false });
+      expect(res.status).toBe(200);
+      expect(res.body.data.isActive).toBe(false);
     } finally {
       await app.close();
     }

@@ -8,8 +8,8 @@ import { ResponseEnvelopeInterceptor } from './shared/response-envelope.intercep
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  // Match OpenAPI contract prefix: http://localhost:3000/api/v1
-  app.setGlobalPrefix('api/v1', { exclude: ['/'] });
+  // Match OpenAPI contract prefix: http://localhost:3000/api/v1, exclude root and direct /v1 OpenAI routes
+  app.setGlobalPrefix('api/v1', { exclude: ['/', 'v1/(.*)', 'v1'] });
   // Contract-shaped error envelope: {statusCode, message, error}.
   app.useGlobalFilters(new HttpExceptionFilter());
   // Contract-shaped standard envelope: {success, message, data}.

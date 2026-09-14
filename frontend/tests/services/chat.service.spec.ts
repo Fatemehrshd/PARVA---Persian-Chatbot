@@ -29,6 +29,27 @@ describe('Chat Service (chat.service.ts)', () => {
     expect(result).toEqual(mockCreated)
   })
 
+  it('updates conversation title via PATCH /chat/conversations/:id', async () => {
+    const mockUpdated = { id: 'c-2', title: 'Renamed Topic', modelId: 'm-1', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
+    const requestSpy = vi.spyOn(apiModule, 'request').mockResolvedValue(mockUpdated as any)
+
+    const result = await chatService.updateConversation('c-2', 'Renamed Topic')
+    expect(requestSpy).toHaveBeenCalledWith('/chat/conversations/c-2', {
+      method: 'PATCH',
+      body: JSON.stringify({ title: 'Renamed Topic' })
+    })
+    expect(result).toEqual(mockUpdated)
+  })
+
+  it('deletes conversation via DELETE /chat/conversations/:id', async () => {
+    const requestSpy = vi.spyOn(apiModule, 'request').mockResolvedValue(undefined as any)
+
+    await chatService.deleteConversation('c-2')
+    expect(requestSpy).toHaveBeenCalledWith('/chat/conversations/c-2', {
+      method: 'DELETE'
+    })
+  })
+
   it('gets message history via GET /chat/conversations/:id/messages', async () => {
     const mockMessages = [{ id: 'msg-1', conversationId: 'c-1', role: 'user', content: 'hello', createdAt: '2026-01-01' }]
     const requestSpy = vi.spyOn(apiModule, 'request').mockResolvedValue(mockMessages as any)

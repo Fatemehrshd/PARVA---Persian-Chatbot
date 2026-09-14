@@ -1,24 +1,67 @@
-import { request } from './api'
-import type { Conversation, Message } from '../types'
+import { request, buildUrl } from './api'
+import type { Conversation, Message, CreateConversationRequest, SendMessageRequest } from '../types'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
-
+/**
+ * Chat Service (Maps 1:1 with OpenAPI tag: Chat)
+ * Handles conversation creation, message history, and real-time SSE streaming.
+ */
 export const chatService = {
+  /**
+   * List the current user's conversations.
+   * GET /chat/conversations
+   */
   async listConversations(): Promise<Conversation[]> {
     return request<Conversation[]>('/chat/conversations')
   },
 
+  /**
+   * Start a new conversation.
+   * POST /chat/conversations
+   */
   async createConversation(modelId?: string, title?: string): Promise<Conversation> {
+    const payload: CreateConversationRequest = {
+      ...(modelId ? { modelId } : {}),
+      ...(title ? { title } : {})
+    }
     return request<Conversation>('/chat/conversations', {
       method: 'POST',
-      body: JSON.stringify({ modelId, title })
+      body: JSON.stringify(payload)
     })
   },
 
+  /**
+   * Get the message history of a conversation (ordered oldest first).
+   * GET /chat/conversations/{conversationId}/messages
+   */
   async getMessages(conversationId: string): Promise<Message[]> {
     return request<Message[]>(`/chat/conversations/${conversationId}/messages`)
   },
 
+  /**
+   * Send a message and receive a synchronous JSON reply (non-streaming).
+   * POST /chat/conversations/{conversationId}/messages with Accept: application/json
+   */
+  async sendMessage(conversationId: string, content: string): Promise<Message> {
+    const payload: SendMessageRequest = { content }
+    return request<Message>(`/chat/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    })
+  },
+
+  /**
+   * Send a message and stream the model's reply via Server-Sent Events (SSE).
+   * POST /chat/conversations/{conversationId}/messages with Accept: text/event-stream
+   *
+   * @param conversationId UUID of the conversation
+   * @param content Prompt sent by user
+   * @param onToken Callback fired incrementally for each received token chunk
+   * @param onDone Callback fired when generation is complete, providing the saved message ID
+   * @param onError Callback fired if a transport or protocol error occurs
+   */
   async sendMessageStream(
     conversationId: string,
     content: string,
@@ -35,8 +78,10 @@ export const chatService = {
       headers['Authorization'] = `Bearer ${token}`
     }
 
+    const url = buildUrl(`/chat/conversations/${conversationId}/messages`)
+
     try {
-      const response = await fetch(`${BASE_URL}/chat/conversations/${conversationId}/messages`, {
+      const response = await fetch(url, {
         method: 'POST',
         headers,
         body: JSON.stringify({ content })
@@ -44,7 +89,8 @@ export const chatService = {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.message || `Server responded with ${response.status}`)
+        const message = errorData.message || `Server responded with status ${response.status}`
+        throw new Error(message)
       }
 
       if (!response.body) {
@@ -74,13 +120,13 @@ export const chatService = {
             const dataStr = trimmed.substring(5).trim()
             try {
               const data = JSON.parse(dataStr)
-              if (currentEvent === 'token' && data.content) {
+              if (currentEvent === 'token' && data.content !== undefined) {
                 onToken(data.content)
               } else if (currentEvent === 'done' && data.messageId) {
                 onDone(data.messageId)
               }
             } catch {
-              // Raw text fallback
+              // Raw text fallback if JSON parsing fails
               if (currentEvent === 'token') {
                 onToken(dataStr)
               }

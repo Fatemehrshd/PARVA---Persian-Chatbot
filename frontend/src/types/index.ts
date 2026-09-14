@@ -1,3 +1,11 @@
+/**
+ * Domain Models & Request/Response DTOs matching api-contract.yaml
+ */
+
+// ========================
+// User & Auth Schemas
+// ========================
+
 export interface User {
   id: string
   email: string
@@ -6,11 +14,30 @@ export interface User {
   createdAt?: string
 }
 
+export interface SignupRequest {
+  email: string
+  password: string
+  displayName?: string
+}
+
+export interface LoginRequest {
+  email: string
+  password: string
+}
+
+export interface LogoutRequest {
+  refreshToken?: string
+}
+
 export interface AuthResponse {
   user: User
   accessToken: string
   refreshToken: string
 }
+
+// ========================
+// Chat Schemas
+// ========================
 
 export interface Conversation {
   id: string
@@ -20,6 +47,11 @@ export interface Conversation {
   updatedAt: string
 }
 
+export interface CreateConversationRequest {
+  modelId?: string
+  title?: string
+}
+
 export interface Message {
   id: string
   conversationId: string
@@ -27,6 +59,14 @@ export interface Message {
   content: string
   createdAt: string
 }
+
+export interface SendMessageRequest {
+  content: string
+}
+
+// ========================
+// Model Schemas (Admin)
+// ========================
 
 export interface Model {
   id: string
@@ -43,4 +83,14 @@ export interface CreateModelRequest {
   provider: string
   apiIdentifier: string
   isActive?: boolean
+}
+
+// ========================
+// Error Schemas
+// ========================
+
+export interface ApiErrorResponse {
+  statusCode: number
+  message: string
+  error?: string
 }

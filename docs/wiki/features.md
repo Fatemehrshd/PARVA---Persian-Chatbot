@@ -40,3 +40,11 @@
 - Integrated `useAsyncAction` into AI model registration (both in `AdminModelsView.vue` and `ModelsModal.vue`), automatically disabling all form inputs (`name`, `provider`, `apiIdentifier`), secondary buttons (`cancel`), and the submission button while rendering an active loading spinner until completion.
 - Integrated `useAsyncAction` into `LoginView.vue` for sign-in and sign-up flows.
 - Added comprehensive unit test suite in `tests/useAsyncAction.spec.ts` and updated `AdminModelsView.spec.ts` and `LoginView.spec.ts`.
+
+## Task 8: Frontend-Backend API Connection & Dedicated Service Layer
+- Connected frontend to backend in accordance with OpenAPI specification (`api-contract.yaml`).
+- Established clear separation of concerns: Presentation (`views/`, `components/`) -> State/Business Logic (`stores/`) -> Domain API Clients (`services/`) -> Base HTTP Client (`api.ts`).
+- Created dedicated, strongly-typed services: `authService`, `chatService` (with SSE token streaming reader and JSON fallback), and `modelsService`.
+- Standardized error handling, automatic JWT Bearer injection, and response parsing in `api.ts`.
+- Added unit test suites for all API services in `tests/services/` (total 38 tests passing across 10 test suites).
+- Created dedicated frontend documentation in `docs/frontend/README.md` and `docs/frontend/services-architecture.md`.

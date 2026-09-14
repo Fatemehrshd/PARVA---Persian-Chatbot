@@ -7,6 +7,8 @@ import { HttpExceptionFilter } from './shared/http-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Match OpenAPI contract prefix: http://localhost:3000/api/v1
+  app.setGlobalPrefix('api/v1', { exclude: ['/'] });
   // Contract-shaped error envelope: {statusCode, message, error}.
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
@@ -16,6 +18,6 @@ async function bootstrap() {
   });
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port);
-  console.log(`Backend running on http://localhost:${port}`);
+  console.log(`Backend running on http://localhost:${port}/api/v1`);
 }
 bootstrap();

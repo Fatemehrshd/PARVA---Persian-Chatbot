@@ -40,36 +40,45 @@ export const useChatStore = defineStore('chat', () => {
     conversations.value.find((c) => c.id === currentConversationId.value)
   )
 
-  async function loadConversations() {
+  async function loadConversations(targetId?: string) {
     try {
       const data = await chatService.listConversations()
       if (Array.isArray(data)) {
+        conversations.value = data
         if (data.length > 0) {
-          conversations.value = data
-          if (
-            !currentConversationId.value ||
-            currentConversationId.value === 'c-1' ||
-            !data.some((c) => c.id === currentConversationId.value)
-          ) {
-            await selectConversation(data[0].id)
+          let idToSelect: string = data[0].id
+          if (targetId && data.some((c) => c.id === targetId)) {
+            idToSelect = targetId
+          } else if (!targetId && currentConversationId.value && data.some((c) => c.id === currentConversationId.value)) {
+            idToSelect = currentConversationId.value
+          } else if (targetId) {
+            idToSelect = targetId
           }
+          await selectConversation(idToSelect)
         } else {
           conversations.value = []
-          currentConversationId.value = null
-          messages.value = []
+          if (targetId) {
+            await selectConversation(targetId)
+          } else {
+            currentConversationId.value = null
+            messages.value = []
+          }
         }
         return
       }
     } catch (err) {
       console.warn('Backend listConversations failed:', err)
     }
-    if (conversations.value.length === 0) {
+    if (targetId) {
+      await selectConversation(targetId)
+    } else if (conversations.value.length === 0) {
       currentConversationId.value = null
       messages.value = []
     }
   }
 
   async function selectConversation(id: string) {
+    if (!id) return
     currentConversationId.value = id
     isStreaming.value = false
     isThinking.value = false
@@ -81,8 +90,8 @@ export const useChatStore = defineStore('chat', () => {
         messages.value = data
         return
       }
-    } catch {
-      // fallback
+    } catch (err) {
+      console.warn('Backend getMessages failed:', err)
     }
 
     messages.value = sampleMessages[id] || []

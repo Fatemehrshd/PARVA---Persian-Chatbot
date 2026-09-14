@@ -11,6 +11,11 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/chat',
+      redirect: '/',
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/chat/:id',
       name: 'chat-conversation',
       component: ChatView,

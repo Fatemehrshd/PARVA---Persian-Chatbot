@@ -22,12 +22,18 @@ const isDeleteModalOpen = ref(false)
 
 const isLogoutModalOpen = ref(false)
 
-function handleNewChat() {
-  chatStore.createNewConversation()
+async function handleNewChat() {
+  const newId = await chatStore.createNewConversation()
+  if (newId) {
+    router.push(`/chat/${newId}`)
+  }
 }
 
 function handleSelect(id: string) {
   chatStore.selectConversation(id)
+  if (router.currentRoute.value.params.id !== id) {
+    router.push(`/chat/${id}`)
+  }
 }
 
 function openEditModal(event: Event, conv: Conversation) {
@@ -64,6 +70,11 @@ async function handleConfirmDelete(id: string) {
     await chatStore.deleteConversation(id)
     isDeleteModalOpen.value = false
     deletingConversation.value = null
+    if (chatStore.currentConversationId) {
+      router.push(`/chat/${chatStore.currentConversationId}`)
+    } else {
+      router.push('/')
+    }
     uiStore.showToast(
       uiStore.direction === 'rtl' ? 'گفتگو با موفقیت حذف شد.' : 'Conversation deleted successfully.',
       'success'

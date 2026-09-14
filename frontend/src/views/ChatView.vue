@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import AppHeader from '../components/layout/AppHeader.vue'
 import AppSidebar from '../components/layout/AppSidebar.vue'
 import MessageList from '../components/chat/MessageList.vue'
 import ChatComposer from '../components/chat/ChatComposer.vue'
@@ -68,9 +67,6 @@ watch(
     <!-- Grok Fluid Aurora Animated Background on Entrance -->
     <GrokAurora :intensity="isEntering ? 'vibrant' : 'subtle'" class="transition-opacity duration-1000 z-0" />
 
-    <!-- Top Bar -->
-    <AppHeader class="relative z-10" />
-
     <!-- Network Status Indicator -->
     <NetworkStatusBanner class="relative z-10" />
 
@@ -110,7 +106,7 @@ watch(
   display: flex;
   flex: 1;
   width: 100%;
-  height: calc(100vh - var(--header-height));
+  height: 100vh;
   overflow: hidden;
   position: relative;
 }

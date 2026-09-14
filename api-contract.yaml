@@ -2,14 +2,18 @@
 openapi: 3.0.3
 info:
   title: CODELESS API
-  version: 0.4.0
+  version: 0.5.0
   description: >
     API contract for the CODELESS multi-model AI chat platform.
     Features: authentication (sign-up/login/logout), multi-turn chat
-    with AI models (Server-Sent Events streaming & JSON fallback), admin
-    model panel (CRUD, default model selection, active/inactive toggle,
-    custom OpenAI-compatible Base URL & API key credentials), and standard
-    OpenAI-compatible endpoints (/v1/models, /v1/chat/completions).
+    with AI models (Server-Sent Events streaming & JSON fallback), model
+    switching mid-conversation, a user-facing active-model listing
+    (GET /models), admin management of PROVIDERS as first-class entities
+    (CRUD, enable/disable, per-provider default model, provider cascade
+    delete) and of models (CRUD, platform default, active/inactive toggle,
+    optional per-model key/baseUrl overrides), forwarding chat to real
+    OpenAI-compatible upstreams, and standard OpenAI-compatible endpoints
+    (/v1/models, /v1/chat/completions) now behind bearer auth.
     All standard JSON responses are wrapped in a unified envelope:
     { success: boolean, message: string, data: any }.
   contact:
@@ -27,7 +31,7 @@ tags:
   - name: Chat
     description: Conversations and messages with an AI model
   - name: Admin - Models
-    description: Manage available AI models and credentials (admin only)
+    description: Manage AI providers and models (admin only)
   - name: OpenAI Compatibility
     description: Standard OpenAI-compatible endpoints for listing active models and completions
 
@@ -154,7 +158,7 @@ paths:
           $ref: '#/components/responses/NotFound'
     patch:
       tags: [Chat]
-      summary: Update conversation details (e.g. title)
+      summary: Update conversation details (title and/or AI model)
       requestBody:
         required: true
         content:
@@ -228,6 +232,203 @@ paths:
                 $ref: '#/components/schemas/MessageApiResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /models:
+    get:
+      tags: [Chat]
+      summary: List active AI models available for chatting
+      description: >
+        Any authenticated user (not only admins) can list the models usable
+        in chat: isActive models whose provider is also active. Credentials
+        are masked. Powers the chat model switcher.
+      responses:
+        '200':
+          description: List of active models
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Model'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/providers:
+    get:
+      tags: [Admin - Models]
+      summary: List configured AI providers (admin only)
+      responses:
+        '200':
+          description: List of providers (apiKey masked)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Provider'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin - Models]
+      summary: Register a new AI provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProviderRequest'
+      responses:
+        '201':
+          description: Provider added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Provider'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: A provider with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/providers/{providerId}:
+    parameters:
+      - name: providerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Admin - Models]
+      summary: Update provider metadata (name / baseUrl / apiKey rotation)
+      description: >
+        An absent or empty apiKey leaves the stored key untouched; a non-empty
+        apiKey rotates it. Keys are write-only over the API (masked on read).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProviderRequest'
+      responses:
+        '200':
+          description: Provider updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Provider'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Another provider already uses the new name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Admin - Models]
+      summary: Delete a provider AND CASCADE-DELETE ALL ITS MODELS
+      description: >
+        If the platform-wide default model lived among the deleted models, the
+        oldest remaining active model (of an active provider) is promoted to
+        default so the platform never ends up default-less.
+      responses:
+        '204':
+          description: Provider and its models removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/providers/{providerId}/status:
+    parameters:
+      - name: providerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Admin - Models]
+      summary: Enable or disable a provider (its models become unchat-usable when disabled)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateModelStatusRequest'
+      responses:
+        '200':
+          description: Provider status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Provider'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/providers/{providerId}/default:
+    parameters:
+      - name: providerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Admin - Models]
+      summary: Set this provider's default model
+      description: >
+        The model must belong to this provider and be active. Deleting the
+        provider's default model clears `defaultModelId` (set to null) so the
+        admin can point it at another model — the deletion itself never fails.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [modelId]
+              properties:
+                modelId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Provider default updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Provider'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -341,8 +542,10 @@ paths:
     get:
       tags: [OpenAI Compatibility]
       summary: List active models (OpenAI-compatible)
-      description: Returns a list of all active AI models in standard OpenAI format.
-      security: []
+      description: >
+        Returns a list of all active AI models (of active providers) in
+        standard OpenAI format. Requires a bearer token: the same facade can
+        drive real, paid upstream models via /v1/chat/completions.
       responses:
         '200':
           description: List of active models
@@ -358,6 +561,10 @@ paths:
       description: >
         OpenAI-compatible chat completion endpoint. Supports single JSON response
         or real-time streaming chunks using Server-Sent Events (`stream: true`).
+        Requests are forwarded to the matching ACTIVE model's provider
+        (OpenAI-compatible upstream); unknown model names return 404. Requires a
+        bearer token because it can drive real paid upstream models. If NO provider
+        credential is configured anywhere, the legacy offline echo answers (dev only).
       security: []
       requestBody:
         required: true
@@ -500,13 +707,19 @@ components:
 
     UpdateConversationRequest:
       type: object
-      required: [title]
       properties:
         title:
           type: string
           minLength: 1
           description: Updated title for the conversation
           example: "Updated Conversation Name"
+        modelId:
+          type: string
+          format: uuid
+          description: >
+            Switch the model that answers this conversation from now on.
+            Must be an ACTIVE model whose provider is also ACTIVE.
+            At least one of title/modelId is required.
 
     Conversation:
       type: object
@@ -552,6 +765,64 @@ components:
           type: string
           format: date-time
 
+    CreateProviderRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: Unique provider label (e.g. openai, ollama, lm-studio).
+        baseUrl:
+          type: string
+          description: OpenAI-compatible base URL; defaults to https://api.openai.com/v1 when unset.
+        apiKey:
+          type: string
+          writeOnly: true
+          description: Provider API key (stored; masked as sk-...last4 on read).
+        isActive:
+          type: boolean
+          default: true
+
+    UpdateProviderRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        baseUrl:
+          type: string
+        apiKey:
+          type: string
+          writeOnly: true
+          description: Non-empty rotates the stored key; absent/empty leaves it unchanged.
+        isActive:
+          type: boolean
+
+    Provider:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        baseUrl:
+          type: string
+          nullable: true
+        apiKey:
+          type: string
+          nullable: true
+          description: Masked (sk-...last4); the raw key is never returned.
+        isActive:
+          type: boolean
+        defaultModelId:
+          type: string
+          format: uuid
+          nullable: true
+          description: This provider's default model; null when unset or after its deletion.
+        createdAt:
+          type: string
+          format: date-time
+
     CreateModelRequest:
       type: object
       required: [name, provider, apiIdentifier]
@@ -561,7 +832,13 @@ components:
           description: Display name shown in the admin panel and chat UI.
         provider:
           type: string
-          description: e.g. openai, anthropic, local
+          description: >
+            Provider name. Auto-registers the provider if the name is new
+            (backward compatible); prefer providerId when available.
+        providerId:
+          type: string
+          format: uuid
+          description: Optional — link the model to an existing provider row.
         apiIdentifier:
           type: string
           description: The model name/id sent to the provider's API.
@@ -593,6 +870,11 @@ components:
           type: string
         provider:
           type: string
+        providerId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Owning provider row (models cascade-delete with it).
         apiIdentifier:
           type: string
         apiKey:

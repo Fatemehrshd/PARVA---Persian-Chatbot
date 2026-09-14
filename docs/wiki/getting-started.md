@@ -45,11 +45,42 @@ Copy `.env.example` to `.env`:
 PORT=3000
 NODE_ENV=development
 FRONTEND_URL=http://localhost:5173
+# DB_* + JWT_SECRET + ADMIN_EMAIL/ADMIN_PASSWORD also live here (see .env.example)
+# Optional GLOBAL fallback for AI credentials (real keys are stored per-provider in the DB):
+OPENAI_API_KEY=
+OPENAI_BASE_URL=https://api.openai.com/v1
 ```
 
 Run in development mode:
 ```bash
 npm run start:dev
+```
+
+### Chatting with real AI models
+1. Seed the first admin (`npm run seed:admin`), then register providers and models via the admin API (the frontend `/admin/models` panel uses the same endpoints):
+   ```bash
+   # create a provider with its real API key (stored in DB, masked on read)
+   curl -X POST http://localhost:3000/admin/providers \
+     -H "Authorization: Bearer <admin-token>" -H 'Content-Type: application/json' \
+     -d '{"name":"openai","baseUrl":"https://api.openai.com/v1","apiKey":"sk-real-key"}'
+
+   # add a model under it (providerId optional; free-text provider still accepted)
+   curl -X POST http://localhost:3000/admin/models \
+     -H "Authorization: Bearer <admin-token>" -H 'Content-Type: application/json' \
+     -d '{"name":"GPT-4o","provider":"openai","apiIdentifier":"gpt-4o"}'
+
+   # make it the platform default + each provider's own default
+   curl -X PATCH http://localhost:3000/admin/models/<model-id>/default -H "Authorization: Bearer <admin-token>"
+   curl -X PATCH http://localhost:3000/admin/providers/<provider-id>/default \
+     -H "Authorization: Bearer <admin-token>" -H 'Content-Type: application/json' -d '{"modelId":"<model-id>"}'
+   ```
+2. Upgrade an existing database: `npm run seed:providers` backfills provider rows from the legacy free-text `provider` labels (idempotent).
+3. With at least one real key configured, chat hits the actual upstream (`stream:true`, token-by-token SSE). If NOTHING is configured the server logs a WARN and answers with the offline echo so local dev still works — provider errors are never silently echoed anymore.
+4. `/v1/models` and `/v1/chat/completions` (OpenAI-compatible facade) require a bearer token and forward to real models.
+
+Run backend tests:
+```bash
+cd backend && npm test   # 74 tests, no DB required (fakes at repo boundaries)
 ```
 
 Build for production:

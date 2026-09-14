@@ -49,13 +49,21 @@ function makeChatService() {
       conv.title = title;
       return conv;
     },
-    answer: async (userId: string, id: string, content: string) => {
+    generate: async function* (userId: string, id: string, content: string) {
       const owned = convs.find((c) => c.id === id && c.userId === userId);
       if (!owned) throw new NotFoundException('Resource not found');
-      return {
-        reply: `Echo: ${content}`,
+      for (const w of `Echo: ${content}`.split(/(\s+)/)) {
+        if (w) yield { token: w };
+      }
+      yield {
         saved: { id: 'm-new', conversationId: id, role: 'assistant', content: `Echo: ${content}` },
       };
+    },
+    setModel: async (userId: string, id: string, modelId: string) => {
+      const conv = convs.find((c) => c.id === id && c.userId === userId);
+      if (!conv) throw new NotFoundException('Resource not found');
+      conv.modelId = modelId;
+      return conv;
     },
   };
 }

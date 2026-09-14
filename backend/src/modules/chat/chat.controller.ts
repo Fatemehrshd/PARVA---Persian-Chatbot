@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -22,9 +23,8 @@ class CreateConvDto {
   @IsOptional() @IsString() title?: string;
 }
 class UpdateConvDto {
-  @IsString()
-  @MinLength(1)
-  title: string;
+  @IsOptional() @IsString() @MinLength(1) title?: string;
+  @IsOptional() @IsString() @MinLength(1) modelId?: string;
 }
 class SendMsgDto {
   @IsString() @MinLength(1) content: string;
@@ -49,7 +49,13 @@ export class ChatController {
     @Param('id') id: string,
     @Body() d: UpdateConvDto,
   ) {
-    return this.chat.updateTitle(req.user.sub, id, d.title);
+    if (!d.title && !d.modelId) {
+      throw new BadRequestException('At least one of title or modelId is required');
+    }
+    let result;
+    if (d.title) result = await this.chat.updateTitle(req.user.sub, id, d.title);
+    if (d.modelId) result = await this.chat.setModel(req.user.sub, id, d.modelId);
+    return result;
   }
   @Delete(':id')
   @HttpCode(204)
@@ -69,22 +75,33 @@ export class ChatController {
     @Param('id') id: string,
     @Body(new ValidationPipe({ whitelist: true })) d: SendMsgDto,
   ) {
-    const { reply, saved } = await this.chat.answer(req.user.sub, id, d.content);
+    const gen = this.chat.generate(req.user.sub, id, d.content);
     const accept = (req.headers['accept'] as string) ?? '';
     if (accept.includes('application/json')) {
+      // Buffer the whole stream: nothing has been written yet, so provider
+      // failures land in the exception filter as a clean 502 envelope.
+      let saved;
+      for await (const chunk of gen) if (chunk.saved) saved = chunk.saved;
       return res.json({
         success: true,
         message: 'Operation successful',
         data: saved,
       });
     }
+    // Pull the FIRST chunk before committing to SSE: a provider/ownership
+    // error that happens before any token is still a plain JSON response.
+    const first = await gen.next();
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
-    const words = reply.split(/(\s+)/);
-    for (const w of words) {
-      res.write(`event: token\ndata: ${JSON.stringify({ content: w })}\n\n`);
+    const writeToken = (t: string) =>
+      res.write(`event: token\ndata: ${JSON.stringify({ content: t })}\n\n`);
+    if (!first.done && first.value?.token) writeToken(first.value.token);
+    for await (const chunk of gen) {
+      if (chunk.token) writeToken(chunk.token);
+      if (chunk.saved) {
+        res.write(`event: done\ndata: ${JSON.stringify({ messageId: chunk.saved.id })}\n\n`);
+      }
     }
-    res.write(`event: done\ndata: ${JSON.stringify({ messageId: saved.id })}\n\n`);
     res.end();
   }
 }

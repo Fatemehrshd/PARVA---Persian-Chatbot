@@ -19,6 +19,7 @@ class CreateModelDto {
   @IsString() name: string;
   @IsString() provider: string;
   @IsString() apiIdentifier: string;
+  @IsOptional() @IsString() providerId?: string;
   @IsOptional() @IsString() apiKey?: string;
   @IsOptional() @IsString() baseUrl?: string;
   @IsOptional() @IsBoolean() isActive?: boolean;

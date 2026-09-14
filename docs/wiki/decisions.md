@@ -70,3 +70,19 @@
   - **Cosmic Grok Aurora**:
     - Created `<GrokAurora />` utilizing radial blur gradients and CSS `@keyframes grokAuroraFlow` for 60fps GPU acceleration without heavy canvas libraries.
     - Embedded in `LoginView.vue` with pulse during auth, and in `ChatView.vue` with entrance fade/scale animation in both light and dark modes.
+
+## ADR-005: Providers as First-Class Entities + Real Streaming + Credentialed `/v1`
+- **Status**: Accepted
+- **Context**: Requirements: (1) the admin must manage *providers* (create, delete, enable/disable, and a per-provider default model) and manage models under each; (2) provider API keys must live in the DB table (not env) so chat uses real models; (3) chat must actually stream real replies rather than mock echo. The previous model had `provider` only as a free-text label on `AiModel`, chat used `stream:false` (buffered) with a *silent* fallback to `Echo`, and `/v1/*` was unauthenticated.
+- **Decision**:
+  - New `AiProvider` entity (`ai_providers`): `name` (unique), `baseUrl`, `apiKey` (write-only; masked `sk-...last4` on every read), `isActive`, `defaultModelId`. `AiModel.providerId` is a FK with `ON DELETE CASCADE`; the legacy free-text `provider` column is retained for display and backward compatibility.
+  - `ProvidersAdminService` owns provider CRUD: duplicate names → 409; empty `apiKey` on update means "keep existing"; deleting a provider cascades to its models and, if the platform-wide default was inside, re-promotes the oldest remaining active model of an active provider. `PATCH /admin/providers/:id/default` sets the per-provider default (model must belong to the provider and be active). Deleting a model that is some provider's default nulls that `defaultModelId` (never blocks the delete) so the admin re-points it.
+  - **Backward compatibility for the existing admin UI**: `POST /admin/models` still accepts a free-text `provider` label and auto-upserts the provider row; it also honors an explicit `providerId`. A model may override the provider's `apiKey`/`baseUrl`.
+  - **Credential resolution order** (`OpenAiCompatForwarder.resolveTarget`): key `model.apiKey → provider.apiKey → OPENAI_API_KEY` (env, optional global fallback only); baseUrl `model.baseUrl → provider.baseUrl → OPENAI_BASE_URL → https://api.openai.com/v1`.
+  - **Real streaming**: `ChatService.answer()` → `generate()` async generator; upstream is called with `stream:true` and its SSE deltas are relayed token-by-token using Node 18+ global `fetch` (no new npm dependency). The offline `Echo` path now runs *only* when no credential resolves anywhere, and logs a WARN.
+  - **Truthful failures**: before the first token → HTTP 502 envelope (SSE not yet started, so the exception filter still applies); mid-stream failure → the partial reply is persisted and the stream still ends with `event: done` (keeps the released frontend's `sendMessageStream` working — it does not understand a new `event: error`).
+  - **`/v1/*` is now behind `JwtAuthGuard`** and forwards to real upstreams (unknown model → 404). Rationale: it can consume paid credits, so it must not be open.
+- **Consequences**:
+  - Adding a provider is a DB insert with a masked key — no server restart needed (unlike the earlier env-only proposal, superseded here).
+  - Two "default" concepts coexist: platform-wide (`AiModel.isDefault`, used by the released frontend) and per-provider (`AiProvider.defaultModelId`). The platform default drives the chat fallback chain.
+  - The SSE success wire format (`event: token` / `event: done`) is unchanged; only the failure path and internal chunking differ from v1.0.0.

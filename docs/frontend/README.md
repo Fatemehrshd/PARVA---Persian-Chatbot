@@ -47,8 +47,8 @@
 |---|---|---|---|
 | **Base API** | [`src/services/api.ts`](../../frontend/src/services/api.ts) | Security / Error | تزریق خودکار توکن JWT، بیلد کردن URL، تبدیل خطاهای سرور به کلاس `ApiError` |
 | **Auth Service** | [`src/services/auth.service.ts`](../../frontend/src/services/auth.service.ts) | `Auth` | ثبت‌نام کاربر جدید، ورود به حساب و ابطال سشن (خروج) |
-| **Chat Service** | [`src/services/chat.service.ts`](../../frontend/src/services/chat.service.ts) | `Chat` | مدیریت گفتگوها، دریافت پیام‌ها و مصرف استریم زنده توکن‌ها (SSE) |
-| **Models Service** | [`src/services/models.service.ts`](../../frontend/src/services/models.service.ts) | `Admin - Models` | دریافت لیست مدل‌ها، افزودن مدل، حذف مدل و انتخاب مدل پیش‌فرض |
+| **Chat Service** | [`src/services/chat.service.ts`](../../frontend/src/services/chat.service.ts) | `Chat` | مدیریت گفتگوها، دریافت پیام‌ها، استریم زنده (SSE) و تغییر زنده مدل مکالمه (`setModel`) |
+| **Models Service** | [`src/services/models.service.ts`](../../frontend/src/services/models.service.ts) | `Chat` & `Admin - Models` | دریافت مدل‌های فعال برای کاربران عادی (`/models`)، مدیریت کامل مدل‌ها و ارائه‌دهنده‌ها برای ادمین (`/admin/models`, `/admin/providers`) |
 
 جزئیات کامل امضای متدها و نمونه کدها در فایل [services-architecture.md](./services-architecture.md) شرح داده شده است.
 
@@ -75,17 +75,33 @@ VITE_API_BASE_URL=http://localhost:3000/api/v1
 ## ۴. لایه استیت و مدیریت داده (Pinia Stores)
 
 - **`useAuthStore`:** وضعیت کاربر فعال (`user`)، توکن‌ها (`token`, `refreshToken`)، دسترسی ادمین (`isAdmin`) و وضعیت لاگین بودن را نگهداری کرده و با `authService` همگام می‌ماند.
-- **`useChatStore`:** گفتگوها و پیام‌ها را نگهداری کرده و در زمان ارسال پیام با استفاده از `chatService.sendMessageStream` پاسخ هوش مصنوعی را توکن‌به‌توکن و بدون وقفه نمایش می‌دهد.
-- **`useModelsStore`:** فهرست مدل‌های هوش مصنوعی را از `modelsService` دریافت کرده و مدل پیش‌فرض سامانه و مدل انتخابی کاربر را مدیریت می‌کند.
+- **`useChatStore`:** گفتگوها و پیام‌ها را نگهداری کرده و در زمان ارسال پیام با استفاده از `chatService.sendMessageStream` پاسخ هوش مصنوعی را توکن‌به‌توکن و بدون وقفه نمایش می‌دهد. همچنین با تغییر مدل در گفتگوی جاری، مدل متناظر در بکند را از طریق `switchConversationModel` بروزرسانی می‌کند.
+- **`useModelsStore`:** فهرست مدل‌های فعال را برای کاربران عادی و کل مدل‌ها را برای ادمین دریافت کرده و مدل پیش‌فرض سامانه و مدل انتخابی کاربر را مدیریت می‌کند.
 
 ---
 
-## ۵. اجرای آزمون‌ها (Testing)
+---
+
+## ۵. ابزار تشخیص و چینش پویای زبان (Dynamic Text Direction & BiDi)
+
+تابع `getTextDirection` در مسیر [`src/utils/textDirection.ts`](../../frontend/src/utils/textDirection.ts) وظیفه تشخیص هوشمند زبان محتوای متنی و اعمال جهت متناسب (RTL / LTR) را بر عهده دارد:
+
+- **متون فارسی:** در صورت وجود حروف الفبای فارسی/عربی (`\u0600-\u06FF` و دامنه‌های مربوطه مانند گ، چ، پ، ژ)، مقدار `'rtl'` برگردانده شده و حباب پیام یا تکست‌اریا به صورت راست‌چین (`text-align: right; direction: rtl;`) نمایش داده می‌شود.
+- **متون انگلیسی و لاتین:** در صورت شروع با کاراکترهای انگلیسی، مقدار `'ltr'` برگردانده شده و پیام به صورت چپ‌چین (`text-align: left; direction: ltr;`) درج می‌گردد.
+- **علائم نگارشی، نقل‌قول‌ها و نشانه‌گذاری مارک‌داون:** کاراکترهایی مانند `-`، `*`، `1.`، `>`، کدبلاک‌ها و فضاهای خالی پیش از محتوا فیلتر شده و زبان واقعی متن مبنای تصمیم‌گیری قرار می‌گیرد.
+- **کامپوننت‌های متصل:**
+  - `MessageBubble.vue`: رندر پیام‌های کاربر و دستیار با جهت پویای RTL / LTR.
+  - `MessageList.vue`: حباب در حال استریم زنده توکن‌ها با جهت پویای RTL / LTR.
+  - `ChatComposer.vue`: اینپوت متن کاربر با تغییر خودکار جهت همگام با تایپ متن فارسی یا انگلیسی.
+
+---
+
+## ۶. اجرای آزمون‌ها (Testing)
 
 تمامی لایه‌ها دارای تست‌های واحد و رفتاری با Vitest هستند:
 ```bash
 # اجرای تست‌های فرانت‌اند (شامل تست‌های سرویس‌ها، استورها و کامپوننت‌ها)
 npm run test:unit
 ```
-نتایج: **۳۸ تست از ۳۸ تست سبز (۱۰ فایل تست)**.
+نتایج: **۶۱ تست از ۶۱ تست سبز (۱۳ فایل تست)** شامل تست‌های جامع واحد برای `getTextDirection` و رفتارهای RTL/LTR حباب پیام‌ها.
 

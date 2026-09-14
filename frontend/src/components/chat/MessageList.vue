@@ -1,20 +1,28 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useChatStore } from '../../stores/chat'
+import { useUiStore } from '../../stores/ui'
+import { getTextDirection } from '../../utils/textDirection'
 import MessageBubble from './MessageBubble.vue'
 import EmptyState from './EmptyState.vue'
 import ThinkingIndicator from './ThinkingIndicator.vue'
 
 const chatStore = useChatStore()
+const uiStore = useUiStore()
 const containerRef = ref<HTMLElement | null>(null)
+const streamingDirection = computed(() => getTextDirection(chatStore.currentStreamingText))
 
 function scrollToBottom(smooth = true) {
   nextTick(() => {
     if (containerRef.value) {
-      containerRef.value.scrollTo({
-        top: containerRef.value.scrollHeight,
-        behavior: smooth ? 'smooth' : 'auto'
-      })
+      if (typeof containerRef.value.scrollTo === 'function') {
+        containerRef.value.scrollTo({
+          top: containerRef.value.scrollHeight,
+          behavior: smooth ? 'smooth' : 'auto'
+        })
+      } else {
+        containerRef.value.scrollTop = containerRef.value.scrollHeight
+      }
     }
   })
 }
@@ -58,13 +66,26 @@ onMounted(() => {
             </svg>
           </div>
           <div class="bubble-container">
-            <div class="bubble bubble-assistant">
+            <div 
+              :class="['bubble', 'bubble-assistant', streamingDirection]"
+              :dir="streamingDirection"
+            >
               <div v-if="chatStore.currentStreamingText" class="message-text">
                 {{ chatStore.currentStreamingText }}
                 <span class="streaming-cursor"></span>
               </div>
               <ThinkingIndicator v-else-if="chatStore.isThinking" />
             </div>
+
+            <button
+              type="button"
+              class="stop-stream-btn"
+              @click="chatStore.stopStreaming"
+              :title="uiStore.direction === 'rtl' ? 'توقف تولید پاسخ' : 'Stop generating'"
+            >
+              <span class="stop-icon"></span>
+              <span>{{ uiStore.direction === 'rtl' ? 'توقف تولید پاسخ' : 'Stop generating' }}</span>
+            </button>
           </div>
         </div>
       </template>
@@ -141,12 +162,19 @@ html[dir="ltr"] .bubble-container {
   border-radius: 18px 18px 18px 4px;
   word-break: break-word;
   white-space: pre-wrap;
-  text-align: right;
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
-html[dir="ltr"] .bubble {
+.bubble.rtl,
+.bubble[dir="rtl"] {
+  text-align: right;
+  direction: rtl;
+}
+
+.bubble.ltr,
+.bubble[dir="ltr"] {
   text-align: left;
+  direction: ltr;
 }
 
 .streaming-cursor {
@@ -162,5 +190,32 @@ html[dir="ltr"] .bubble {
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
+}
+
+.stop-stream-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 10px;
+  background-color: var(--secondary);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--muted-foreground);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.stop-stream-btn:hover {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.stop-icon {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background-color: currentColor;
 }
 </style>

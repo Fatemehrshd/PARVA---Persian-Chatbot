@@ -3,12 +3,14 @@ import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useChatStore } from '../../stores/chat'
 import { useModelsStore } from '../../stores/models'
 import { useUiStore } from '../../stores/ui'
+import { getTextDirection } from '../../utils/textDirection'
 
 const chatStore = useChatStore()
 const modelsStore = useModelsStore()
 const uiStore = useUiStore()
 
 const inputContent = ref('')
+const inputDirection = computed(() => getTextDirection(inputContent.value, uiStore.direction))
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isFocused = ref(false)
 const modelMenuOpen = ref(false)
@@ -49,6 +51,10 @@ function handleSubmit() {
   chatStore.sendMessage(text)
 }
 
+const selectableModels = computed(() => {
+  return modelsStore.activeModels.length > 0 ? modelsStore.activeModels : modelsStore.models
+})
+
 function handleStop() {
   chatStore.stopStreaming()
 }
@@ -57,9 +63,16 @@ function toggleModelMenu() {
   modelMenuOpen.value = !modelMenuOpen.value
 }
 
-function selectModel(id: string) {
-  modelsStore.selectModel(id)
+async function selectModel(id: string) {
   modelMenuOpen.value = false
+  try {
+    await chatStore.switchConversationModel(id)
+  } catch (err: any) {
+    uiStore.showToast(
+      err?.message || (uiStore.direction === 'rtl' ? 'خطا در تغییر مدل گفتگو' : 'Failed to switch model'),
+      'error'
+    )
+  }
 }
 
 function handleClickOutside(event: MouseEvent) {
@@ -84,7 +97,8 @@ onUnmounted(() => {
         <textarea
           ref="textareaRef"
           v-model="inputContent"
-          class="composer-textarea"
+          :class="['composer-textarea', inputDirection]"
+          :dir="inputDirection"
           :placeholder="uiStore.direction === 'rtl' ? 'پیام خود را بنویسید... (Enter برای ارسال)' : 'Type a message... (Enter to send)'"
           rows="1"
           @focus="isFocused = true"
@@ -116,7 +130,7 @@ onUnmounted(() => {
               </div>
               <div class="model-options-list">
                 <button
-                  v-for="model in modelsStore.models"
+                  v-for="model in selectableModels"
                   :key="model.id"
                   type="button"
                   :class="['model-option-btn', { active: model.id === modelsStore.selectedModelId }]"
@@ -212,6 +226,18 @@ onUnmounted(() => {
   min-height: 24px;
   max-height: 180px;
   padding: 0;
+}
+
+.composer-textarea.rtl,
+.composer-textarea[dir="rtl"] {
+  direction: rtl;
+  text-align: right;
+}
+
+.composer-textarea.ltr,
+.composer-textarea[dir="ltr"] {
+  direction: ltr;
+  text-align: left;
 }
 
 .composer-textarea::placeholder {
@@ -362,10 +388,21 @@ onUnmounted(() => {
   border-radius: 10px;
   background-color: var(--secondary);
   border: 1px solid var(--border);
+  border: none;
   color: var(--foreground);
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.btn-stop:hover {
+  background-color: rgba(239, 68, 68, 0.15);
+}
+
+.btn-stop:hover .stop-square {
+  background-color: #ef4444;
 }
 
 .stop-square {
@@ -373,6 +410,7 @@ onUnmounted(() => {
   height: 10px;
   border-radius: 2px;
   background-color: var(--primary);
+  transition: background-color 150ms ease;
 }
 
 .disclaimer {

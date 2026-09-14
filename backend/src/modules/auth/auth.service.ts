@@ -2,6 +2,8 @@ import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/co
 import bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
+import { FA } from '../../shared/messages.fa';
+
 @Injectable()
 export class AuthService {
   private revoked = new Set<string>();
@@ -35,7 +37,7 @@ export class AuthService {
   async login(email: string, password: string) {
     const u = await this.users.findByEmail(email);
     if (!u || !(await bcrypt.compare(password, u.passwordHash)))
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException(FA.invalidCredentials);
     return { user: this.toUserJson(u), ...this.tokens(u) };
   }
   async logout() {

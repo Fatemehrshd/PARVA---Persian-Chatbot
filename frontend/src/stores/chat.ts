@@ -3,19 +3,11 @@ import { ref, computed } from 'vue'
 import type { Conversation, Message } from '../types'
 import { chatService } from '../services/chat.service'
 import { useModelsStore } from './models'
+import { useUiStore } from './ui'
 
 export const useChatStore = defineStore('chat', () => {
   const modelsStore = useModelsStore()
-
-  const sampleConversations: Conversation[] = [
-    {
-      id: 'c-1',
-      title: 'خوش‌آمدگویی به پلتفرم هوش مصنوعی',
-      modelId: 'm-1',
-      createdAt: new Date(Date.now() - 3600000).toISOString(),
-      updatedAt: new Date(Date.now() - 3600000).toISOString()
-    }
-  ]
+  const uiStore = useUiStore()
 
   const sampleMessages: Record<string, Message[]> = {
     'c-1': [
@@ -35,6 +27,8 @@ export const useChatStore = defineStore('chat', () => {
   const isStreaming = ref(false)
   const isThinking = ref(false)
   const currentStreamingText = ref('')
+  const lastUserPrompt = ref('')
+  let currentAbortController: AbortController | null = null
 
   const activeConversation = computed(() =>
     conversations.value.find((c) => c.id === currentConversationId.value)
@@ -79,10 +73,18 @@ export const useChatStore = defineStore('chat', () => {
 
   async function selectConversation(id: string) {
     if (!id) return
+    if (isStreaming.value) {
+      stopStreaming()
+    }
     currentConversationId.value = id
     isStreaming.value = false
     isThinking.value = false
     currentStreamingText.value = ''
+
+    const conv = conversations.value.find((c) => c.id === id)
+    if (conv?.modelId) {
+      modelsStore.selectModel(conv.modelId)
+    }
 
     try {
       const data = await chatService.getMessages(id)
@@ -95,15 +97,38 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     messages.value = sampleMessages[id] || []
+    messages.value = []
+  }
+
+  async function switchConversationModel(modelId: string) {
+    modelsStore.selectModel(modelId)
+    const conv = activeConversation.value
+    if (conv) {
+      conv.modelId = modelId
+    }
+    if (currentConversationId.value && !currentConversationId.value.startsWith('c-')) {
+      try {
+        await chatService.setModel(currentConversationId.value, modelId)
+      } catch (err) {
+        console.warn('Backend setModel failed:', err)
+        throw err
+      }
+    }
   }
 
   async function createNewConversation(title = 'گفتگوی جدید'): Promise<string> {
+    if (isStreaming.value) {
+      stopStreaming()
+    }
     const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
     try {
       const created = await chatService.createConversation(modelId, title)
       if (created && created.id) {
         conversations.value.unshift(created)
         currentConversationId.value = created.id
+        if (created.modelId) {
+          modelsStore.selectModel(created.modelId)
+        }
         messages.value = []
         return created.id
       }
@@ -196,17 +221,18 @@ export const useChatStore = defineStore('chat', () => {
         const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
         const created = await chatService.createConversation(modelId, conv?.title || content.slice(0, 30))
         if (created && created.id) {
-          const oldId = convId
           if (conv) conv.id = created.id
           currentConversationId.value = created.id
           userMessage.conversationId = created.id
           convId = created.id
-          delete sampleMessages[oldId]
         }
       } catch (err) {
         console.warn('Could not persist conversation to backend before streaming:', err)
       }
     }
+
+    // Track last prompt for retry capability
+    lastUserPrompt.value = content
 
     // Prepare assistant response
     isThinking.value = true
@@ -214,6 +240,13 @@ export const useChatStore = defineStore('chat', () => {
     currentStreamingText.value = ''
 
     let streamedAny = false
+
+    if (currentAbortController) {
+      currentAbortController.abort()
+      currentAbortController = null
+    }
+    const abortCtrl = new AbortController()
+    currentAbortController = abortCtrl
 
     await chatService.sendMessageStream(
       convId,
@@ -224,27 +257,48 @@ export const useChatStore = defineStore('chat', () => {
         currentStreamingText.value += token
       },
       (messageId: string) => {
+        currentAbortController = null
         finishStream(messageId)
       },
-      async (_err: any) => {
-        if (!streamedAny) {
-          // Graceful simulated streaming for offline UI preview
-          await simulateResponse(convId, content)
+      async (err: any) => {
+        currentAbortController = null
+        isThinking.value = false
+        isStreaming.value = false
+        const errorMessage =
+          typeof err === 'string'
+            ? err
+            : (err?.message || 'خطا در برقراری ارتباط با سرور هوش مصنوعی')
+
+        if (streamedAny) {
+          finishStream(`msg-${Date.now()}`, true)
+          uiStore.showToast(errorMessage, 'error')
         } else {
-          finishStream(`msg-${Date.now()}`)
+          messages.value.push({
+            id: `msg-err-${Date.now()}`,
+            conversationId: convId,
+            role: 'assistant',
+            content: `⚠️ **خطای برقراری ارتباط:** ${errorMessage}`,
+            createdAt: new Date().toISOString(),
+            isInterrupted: true
+          })
+          currentStreamingText.value = ''
+          uiStore.showToast(errorMessage, 'error')
         }
-      }
+      },
+      abortCtrl.signal
     )
   }
 
-  function finishStream(messageId: string) {
+  function finishStream(messageId: string, isInterrupted = false) {
+    currentAbortController = null
     if (currentStreamingText.value) {
       messages.value.push({
         id: messageId,
         conversationId: currentConversationId.value!,
         role: 'assistant',
         content: currentStreamingText.value,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        isInterrupted
       })
     }
     currentStreamingText.value = ''
@@ -252,24 +306,32 @@ export const useChatStore = defineStore('chat', () => {
     isThinking.value = false
   }
 
-  async function simulateResponse(_convId: string, userPrompt: string) {
-    await new Promise((resolve) => setTimeout(resolve, 600))
-    isThinking.value = false
-
-    const responseText = `درخواست شما دریافت شد: "${userPrompt}"\n\nاین یک پاسخ نمونه هوشمند از پلتفرم **NeuralChat** است. رابط کاربری به‌صورت زنده طراحی شده و با استانداردهای مدرن وب، پشتیبانی از RTL، و جریان داده‌های توکن‌به‌توکن (Streaming) تطابق دارد.`
-
-    const chunks = responseText.split(/(?<=[ \n،.])/g)
-    for (const chunk of chunks) {
-      currentStreamingText.value += chunk
-      await new Promise((resolve) => setTimeout(resolve, 40))
+  async function retryLastMessage() {
+    if (!lastUserPrompt.value) return
+    if (messages.value.length > 0 && messages.value[messages.value.length - 1].role === 'assistant') {
+      const last = messages.value[messages.value.length - 1]
+      if (last.isInterrupted || last.id.startsWith('msg-err-')) {
+        messages.value.pop()
+      }
     }
+    if (messages.value.length > 0 && messages.value[messages.value.length - 1].role === 'user') {
+      messages.value.pop()
+    }
+    await sendMessage(lastUserPrompt.value)
+  }
 
-    finishStream(`msg-${Date.now()}`)
+  async function continueLastMessage() {
+    const prompt = uiStore.direction === 'rtl' ? 'ادامه بده' : 'Please continue'
+    await sendMessage(prompt)
   }
 
   function stopStreaming() {
+    if (currentAbortController) {
+      currentAbortController.abort()
+      currentAbortController = null
+    }
     if (isStreaming.value && currentStreamingText.value) {
-      finishStream(`msg-${Date.now()}`)
+      finishStream(`msg-${Date.now()}`, true)
     } else {
       isStreaming.value = false
       isThinking.value = false
@@ -284,12 +346,16 @@ export const useChatStore = defineStore('chat', () => {
     isStreaming,
     isThinking,
     currentStreamingText,
+    lastUserPrompt,
     loadConversations,
     selectConversation,
     createNewConversation,
     deleteConversation,
     updateConversationTitle,
+    switchConversationModel,
     sendMessage,
+    retryLastMessage,
+    continueLastMessage,
     stopStreaming
   }
 })

@@ -9,14 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added (Task 15: user profile, avatar on MinIO, credentials & preferences — backend only)
-- **Profile endpoints** (`backend/src/modules/users/`): `GET /users/me` and `PATCH /users/me` (`displayName`, unique lowercase `username`, `bio` ≤ 500). `User` gains `username, bio, avatarUrl, avatarKey, language, theme, timezone, defaultModelId` — shipped with a dedicated **TypeORM migration** (`src/migrations/1760000000000-AddUserProfileAndPreferences.ts`, `npm run migration:run|generate|revert` via new `src/data-source.ts`; dev keeps using DB_SYNC).
-- **Avatar upload on MinIO** (new `StorageModule`, `minio` dependency, `MINIO_*` + `PUBLIC_BASE_URL` env): `POST /users/me/avatar` (multipart `file`, only png/jpeg/webp, max 2 MB, replaces + deletes the previous object; `DELETE /users/me/avatar`). Files are served publicly at `GET /static/avatars/{userId}/{file}` (opaque keys, streamed from MinIO). Without `MINIO_*` config the upload endpoints honestly answer **503** (no silent disk fallback).
-- **Credential changes with re-auth:** `POST /users/me/email` — requires the CURRENT password, 409 when the email is taken, applies immediately; `POST /users/me/password` — requires the current password, re-hashes with bcrypt. (No forgot-password/reset flow by product decision.)
-- **Preferences:** `GET/PUT /users/me/preferences` — `language` (fa/en), `theme` (light/dark), IANA `timezone` (validated via Intl), and `defaultModelId` (must be an active model). Chat conversation creation now resolves the model as **explicit → user default → platform default**.
-- Validation messages on all new DTO fields follow the centralized Persian `FA` convention; 11 new tests (`backend/test/profile.spec.ts`), full suite **95/95** green. The frontend was not touched; `api-contract.yaml`, wiki and `backend/AGENTS.md` updated.
-
-### Added (Task 14: providers, real streaming, model switching — backend only)
+### Added
+- **Stream Resilience & Partial Message Recovery**:
+- **Stream Resilience, Cancellation & Partial Message Recovery**:
+  - `ChatService.generate()`: Guarantees via `try ... finally` that any accumulated assistant tokens are saved to PostgreSQL even when aborted mid-stream or when the client closes the tab/refreshes.
+  - `ChatController.sendMessage()`: Implemented safe socket disconnect handling (`req.on('close')` and write-guards).
+  - `useChatStore`: Tracks `lastUserPrompt` and adds `retryLastMessage()` and `continueLastMessage()` actions.
+  - `useChatStore`: Integrated `AbortController` to abort ongoing HTTP streams when the user clicks stop, or switches/creates conversations.
+  - `ChatComposer.vue` & `MessageList.vue`: Added borderless stop buttons (`.btn-stop` and `.stop-stream-btn`) allowing the user to halt AI token generation instantly with one click.
+  - `MessageBubble.vue`: Displays compact "تلاش مجدد" (Retry) and "ادامه پاسخ" (Continue) buttons for interrupted or error assistant messages.
+- **Online / Offline Network Detection**:
+  - `useUiStore`: Added reactive `isOnline` status listening to browser `online` and `offline` events.
+  - `NetworkStatusBanner.vue`: Displays an interactive offline warning banner with an on-demand "تلاش مجدد" (Retry) button.
+- **Field-level authentication validation errors**: `LoginView.vue` presents targeted error messages directly underneath each input field (`displayName`, `email`, `password`) along with warning icons and red error focus outlines. Input modifications clear the respective error reactively.
+- **Minimalist navigation and sidebar styling**:
+  - Replaced boxy elements and harsh borders in `AppHeader.vue` and `AppSidebar.vue` with subtle hairline dividers (`rgba(140, 140, 160, 0.12)`).
+  - Modernized `AppHeader.vue`: ghost-style navigation icons, borderless admin link, and sleek pill user status.
+  - Modernized `AppSidebar.vue`: borderless card-free user profile section, ghost logout button with subtle red hover feedback, borderless action buttons (edit/delete chat title), and low-contrast sleek "New Chat" button.
 - **Providers as first-class entities.** New `ai_providers` table (`name` unique, `baseUrl`, `apiKey` — write-only/masked, `isActive`, `defaultModelId`). `AiModel` gains `providerId` (FK, `ON DELETE CASCADE`).
   - `GET/POST /admin/providers`, `PATCH /admin/providers/:id` (metadata + key rotation — an empty `apiKey` leaves the stored key untouched), `PATCH /admin/providers/:id/status`, `PATCH /admin/providers/:id/default` (per-provider default model), `DELETE /admin/providers/:id`.
   - **Cascade delete:** deleting a provider deletes all its models; if the platform-wide default model was among them, the oldest remaining active model (of an active provider) is auto-promoted so the platform is never default-less.

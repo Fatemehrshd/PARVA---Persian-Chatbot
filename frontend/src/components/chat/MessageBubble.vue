@@ -2,15 +2,21 @@
 import { computed, ref } from 'vue'
 import type { Message } from '../../types'
 import { useAuthStore } from '../../stores/auth'
+import { useChatStore } from '../../stores/chat'
+import { useUiStore } from '../../stores/ui'
+import { getTextDirection } from '../../utils/textDirection'
 
 const props = defineProps<{
   message: Message
 }>()
 
 const authStore = useAuthStore()
+const chatStore = useChatStore()
+const uiStore = useUiStore()
 const copied = ref(false)
 
 const isUser = computed(() => props.message.role === 'user')
+const textDirection = computed(() => getTextDirection(props.message.content))
 
 const formattedTime = computed(() => {
   if (!props.message.createdAt) return ''
@@ -52,7 +58,10 @@ function copyContent() {
 
     <!-- Bubble Content -->
     <div class="bubble-container">
-      <div :class="['bubble', isUser ? 'bubble-user' : 'bubble-assistant']">
+      <div 
+        :class="['bubble', isUser ? 'bubble-user' : 'bubble-assistant', textDirection]"
+        :dir="textDirection"
+      >
         <div class="message-text">{{ message.content }}</div>
       </div>
 
@@ -67,11 +76,66 @@ function copyContent() {
           <span v-else class="copied-text font-mono">✓</span>
         </button>
       </div>
+
+      <!-- Recovery Action Bar for Interrupted / Error Assistant Messages -->
+      <div v-if="!isUser && (message.isInterrupted || message.id.startsWith('msg-err-'))" class="recovery-bar">
+        <button class="recovery-btn retry-btn" @click="chatStore.retryLastMessage">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="1 4 1 10 7 10"></polyline>
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+          </svg>
+          <span>{{ uiStore.direction === 'rtl' ? 'تلاش مجدد' : 'Retry' }}</span>
+        </button>
+
+        <button v-if="!message.id.startsWith('msg-err-')" class="recovery-btn continue-btn" @click="chatStore.continueLastMessage">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          <span>{{ uiStore.direction === 'rtl' ? 'ادامه پاسخ' : 'Continue' }}</span>
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+.recovery-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.recovery-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.retry-btn {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.retry-btn:hover {
+  background-color: rgba(239, 68, 68, 0.18);
+}
+
+.continue-btn {
+  background-color: var(--secondary);
+  color: var(--foreground);
+}
+
+.continue-btn:hover {
+  background-color: rgba(140, 140, 160, 0.18);
+}
 .message-row {
   display: flex;
   gap: 12px;
@@ -148,12 +212,19 @@ html[dir="ltr"] .row-assistant .bubble-container {
   line-height: 1.6;
   word-break: break-word;
   white-space: pre-wrap;
-  text-align: right;
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
-html[dir="ltr"] .bubble {
+.bubble.rtl,
+.bubble[dir="rtl"] {
+  text-align: right;
+  direction: rtl;
+}
+
+.bubble.ltr,
+.bubble[dir="ltr"] {
   text-align: left;
+  direction: ltr;
 }
 
 /* User Message Bubble */

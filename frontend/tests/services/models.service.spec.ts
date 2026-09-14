@@ -48,5 +48,35 @@ describe('Models Service (models.service.ts)', () => {
     })
     expect(result.isDefault).toBe(true)
   })
+
+  it('lists active models via GET /models for general chat switcher', async () => {
+    const mockActive = [{ id: 'm-1', name: 'Claude', provider: 'anthropic', apiIdentifier: 'claude-3-5', isActive: true, isDefault: true }]
+    const requestSpy = vi.spyOn(apiModule, 'request').mockResolvedValue(mockActive as any)
+
+    const result = await modelsService.listActiveModels()
+    expect(requestSpy).toHaveBeenCalledWith('/models')
+    expect(result).toEqual(mockActive)
+  })
+
+  it('updates model status via PATCH /admin/models/:id/status', async () => {
+    const mockUpdated = { id: 'm-2', name: 'GPT-4o', provider: 'openai', apiIdentifier: 'gpt-4o', isActive: false, isDefault: false }
+    const requestSpy = vi.spyOn(apiModule, 'request').mockResolvedValue(mockUpdated as any)
+
+    const result = await modelsService.updateModelStatus('m-2', false)
+    expect(requestSpy).toHaveBeenCalledWith('/admin/models/m-2/status', {
+      method: 'PATCH',
+      body: JSON.stringify({ isActive: false })
+    })
+    expect(result.isActive).toBe(false)
+  })
+
+  it('lists providers via GET /admin/providers', async () => {
+    const mockProviders = [{ id: 'p-1', name: 'openai', isActive: true }]
+    const requestSpy = vi.spyOn(apiModule, 'request').mockResolvedValue(mockProviders as any)
+
+    const result = await modelsService.listProviders()
+    expect(requestSpy).toHaveBeenCalledWith('/admin/providers')
+    expect(result).toEqual(mockProviders)
+  })
 })
 

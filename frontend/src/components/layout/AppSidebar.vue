@@ -32,7 +32,7 @@ async function handleNewChat() {
 function handleSelect(id: string) {
   chatStore.selectConversation(id)
   if (router.currentRoute.value.params.id !== id) {
-    router.push(`/chat/${id}`)
+    return router.push(`/chat/${id}`)
   }
 }
 
@@ -280,7 +280,7 @@ const userInitial = computed(() => {
   width: var(--sidebar-width);
   height: 100%;
   background-color: var(--background);
-  border-inline-end: 1px solid var(--border);
+  border-inline-end: none;
   transition: width 300ms ease-in-out, transform 300ms ease-in-out;
   flex-shrink: 0;
   overflow: hidden;
@@ -360,16 +360,16 @@ const userInitial = computed(() => {
   gap: 8px;
   padding: 8px 12px;
   background-color: var(--card);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius);
   font-size: 13px;
   font-weight: 500;
   color: var(--foreground);
+  cursor: pointer;
 }
 
 .new-chat-btn:hover {
   background-color: var(--secondary);
-  border-color: var(--muted-foreground);
 }
 
 .chat-list-section {
@@ -449,7 +449,7 @@ const userInitial = computed(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid transparent;
+  border: none;
   background-color: transparent;
   cursor: pointer;
   transition: all 150ms ease;
@@ -463,7 +463,6 @@ const userInitial = computed(() => {
 .action-chat-btn.edit-chat-btn:hover {
   background-color: #ffffff;
   color: #0f172a;
-  border-color: #cbd5e1;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
@@ -474,7 +473,6 @@ const userInitial = computed(() => {
 .action-chat-btn.delete-chat-btn:hover {
   background-color: #fee2e2;
   color: #dc2626;
-  border-color: #fca5a5;
   box-shadow: 0 1px 3px rgba(239, 68, 68, 0.15);
 }
 
@@ -488,7 +486,6 @@ const userInitial = computed(() => {
 :global([data-theme="dark"]) .action-chat-btn.edit-chat-btn:hover {
   background-color: #1e202d;
   color: #f3f4f6;
-  border-color: #3b4261;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
@@ -501,13 +498,12 @@ const userInitial = computed(() => {
 :global([data-theme="dark"]) .action-chat-btn.delete-chat-btn:hover {
   background-color: rgba(239, 68, 68, 0.18);
   color: #f87171;
-  border-color: rgba(239, 68, 68, 0.4);
   box-shadow: 0 1px 4px rgba(239, 68, 68, 0.2);
 }
 
 .sidebar-footer {
   padding-top: 12px;
-  border-top: 1px solid var(--border);
+  border-top: none;
   margin-top: auto;
   display: flex;
   flex-direction: column;
@@ -521,7 +517,7 @@ const userInitial = computed(() => {
   padding: 6px 8px;
   border-radius: var(--radius);
   background-color: var(--card);
-  border: 1px solid var(--border);
+  border: none;
 }
 
 .user-avatar {
@@ -553,7 +549,7 @@ const userInitial = computed(() => {
   padding: 7px 12px;
   border-radius: var(--radius);
   background-color: transparent;
-  border: 1px solid var(--border);
+  border: none;
   color: var(--muted-foreground);
   font-size: 12px;
   font-weight: 500;
@@ -564,14 +560,12 @@ const userInitial = computed(() => {
 .logout-footer-btn:hover {
   color: #ef4444;
   background-color: rgba(239, 68, 68, 0.08);
-  border-color: rgba(239, 68, 68, 0.25);
 }
 
 :global(.dark) .logout-footer-btn:hover,
 :global([data-theme="dark"]) .logout-footer-btn:hover {
   color: #f87171;
-  background-color: rgba(239, 68, 68, 0.16);
-  border-color: rgba(239, 68, 68, 0.35);
+  background-color: rgba(239, 68, 68, 0.15);
 }
 
 .user-name {
@@ -597,12 +591,12 @@ const userInitial = computed(() => {
   padding: 8px 12px;
   border-radius: var(--radius);
   background-color: var(--secondary);
-  border: 1px solid var(--border);
+  border: none;
   font-size: 12px;
   color: var(--foreground);
 }
 
 .footer-login-btn:hover {
-  border-color: var(--primary);
+  opacity: 0.9;
 }
 </style>

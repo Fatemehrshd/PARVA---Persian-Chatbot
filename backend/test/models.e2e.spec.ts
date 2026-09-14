@@ -7,13 +7,13 @@ describe('Admin models (behavior)', () => {
       update: async () => {},
       save: async (m: any) => m,
     };
-    const s = new ModelsAdminService(repo);
+    const s = new ModelsAdminService(repo, {} as any);
     const r = await s.setDefault('m1');
     expect(r.isDefault).toBe(true);
   });
   it('remove unknown model -> 404', async () => {
     const repo: any = { findOne: async () => null };
-    const s = new ModelsAdminService(repo);
+    const s = new ModelsAdminService(repo, {} as any);
     await expect(s.remove('nope')).rejects.toThrow('Resource not found');
   });
 });

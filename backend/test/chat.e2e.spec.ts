@@ -1,4 +1,6 @@
 import { ChatService } from '../src/modules/chat/chat.service';
+import { OpenAiCompatForwarder } from '../src/modules/ai/openai-compat.forwarder';
+
 describe('Chat (behavior)', () => {
   it('send message returns assistant reply and saves', async () => {
     const conv: any = { findOne: async () => ({ id: 'c1' }), update: async () => {} };
@@ -12,15 +14,31 @@ describe('Chat (behavior)', () => {
         return m;
       },
     };
-    const models: any = { getDefault: async () => ({ id: 'model1' }) };
-    const s = new ChatService(conv, msg, models);
-    const { reply, saved: m } = await s.answer('u1', 'c1', 'hello');
+    const models: any = {
+      getDefault: async () => ({ id: 'model1' }),
+      resolveProvider: async () => null,
+    };
+    // No credential anywhere -> offline echo fallback path.
+    const forwarder: OpenAiCompatForwarder = { resolveTarget: () => null } as any;
+    const s = new ChatService(conv, msg, models, forwarder);
+    let reply = '';
+    let m: any;
+    for await (const c of s.generate('u1', 'c1', 'hello')) {
+      if (c.token) reply += c.token;
+      if (c.saved) m = c.saved;
+    }
     expect(reply).toContain('hello');
     expect(m.role).toBe('assistant');
+    expect(m.content).toBe(reply);
   });
   it('history of unknown conversation -> 404', async () => {
     const conv: any = { findOne: async () => null };
-    const s = new ChatService(conv, { find: async () => [] } as any, {} as any);
+    const s = new ChatService(
+      conv,
+      { find: async () => [] } as any,
+      {} as any,
+      {} as any,
+    );
     await expect(s.history('u1', 'nope')).rejects.toThrow('Resource not found');
   });
 });

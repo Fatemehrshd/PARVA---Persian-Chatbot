@@ -17,6 +17,7 @@ import { User } from '../modules/users/user.entity';
 import { Conversation } from '../modules/chat/conversation.entity';
 import { Message } from '../modules/chat/message.entity';
 import { AiModel } from '../modules/models-admin/ai-model.entity';
+import { AiProvider } from '../modules/models-admin/ai-provider.entity';
 
 async function main(): Promise<void> {
   const email = process.env.ADMIN_EMAIL;
@@ -37,7 +38,7 @@ async function main(): Promise<void> {
     username: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASS || 'postgres',
     database: process.env.DB_NAME || 'codeless',
-    entities: [User, Conversation, Message, AiModel],
+    entities: [User, Conversation, Message, AiModel, AiProvider],
     synchronize: (process.env.DB_SYNC ?? 'true') === 'true',
   });
   await ds.initialize();

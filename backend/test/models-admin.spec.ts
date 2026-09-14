@@ -7,6 +7,7 @@ import { ModelsAdminService } from '../src/modules/models-admin/models-admin.ser
 import { JwtAuthGuard } from '../src/shared/jwt-auth.guard';
 import { AdminGuard } from '../src/shared/admin.guard';
 import { HttpExceptionFilter } from '../src/shared/http-exception.filter';
+import { ResponseEnvelopeInterceptor } from '../src/shared/response-envelope.interceptor';
 
 /**
  * /admin/models invariants:
@@ -84,6 +85,7 @@ async function makeApp(role: 'admin' | 'user' | null) {
   }).compile();
   const app = mod.createNestApplication();
   app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.init();
   return app;
@@ -133,8 +135,9 @@ describe('/admin/models — auth guards order', () => {
         .get('/admin/models')
         .set('Authorization', 'Bearer admin-token');
       expect(res.status).toBe(200);
-      expect(Array.isArray(res.body)).toBe(true);
-      expect((res.body as any[]).map((m) => m.name)).toEqual(['gpt-4', 'claude']);
+      expect(res.body).toHaveProperty('success', true);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect((res.body.data as any[]).map((m) => m.name)).toEqual(['gpt-4', 'claude']);
     } finally {
       await app.close();
     }
@@ -181,13 +184,14 @@ describe('/admin/models — setDefault invariant', () => {
         .patch('/admin/models/m2/default')
         .set('Authorization', 'Bearer admin-token');
       expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('isDefault', true);
+      expect(res.body).toHaveProperty('success', true);
+      expect(res.body.data).toHaveProperty('isDefault', true);
 
       // Now list and verify only m2 is default
       const list = await request(app.getHttpServer())
         .get('/admin/models')
         .set('Authorization', 'Bearer admin-token');
-      const models = list.body as { id: string; isDefault: boolean }[];
+      const models = list.body.data as { id: string; isDefault: boolean }[];
       const defaults = models.filter((m) => m.isDefault);
       expect(defaults.length).toBe(1);
       expect(defaults[0].id).toBe('m2');

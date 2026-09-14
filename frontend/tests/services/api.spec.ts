@@ -35,6 +35,21 @@ describe('Base API Client (api.ts)', () => {
     expect(capturedHeaders.get('Content-Type')).toBe('application/json')
   })
 
+  it('unwraps data payload from standard { success, message, data } API response envelope', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        message: 'Operation successful',
+        data: { id: 'item-1', name: 'Item One' }
+      })
+    } as any)
+
+    const result = await request<{ id: string; name: string }>('/items/item-1')
+    expect(result).toEqual({ id: 'item-1', name: 'Item One' })
+  })
+
   it('handles 204 No Content responses correctly without JSON parsing error', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,

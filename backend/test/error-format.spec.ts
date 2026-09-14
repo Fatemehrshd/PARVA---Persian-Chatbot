@@ -33,6 +33,8 @@ describe('Error format (contract)', () => {
       .post('/auth/login')
       .send({ email: 'not-an-email', password: 'x' });
     expect(res.status).toBe(400);
+    expect(res.body).toHaveProperty('success', false);
+    expect(res.body).toHaveProperty('data', null);
     expect(res.body).toHaveProperty('statusCode', 400);
     expect(res.body).toHaveProperty('message');
     expect(res.body).toHaveProperty('error');

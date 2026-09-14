@@ -46,7 +46,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
+                $ref: '#/components/schemas/AuthApiResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '409':
@@ -73,7 +73,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
+                $ref: '#/components/schemas/AuthApiResponse'
         '401':
           description: Invalid email or password
           content:
@@ -111,9 +111,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Conversation'
+                $ref: '#/components/schemas/ConversationsListApiResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
     post:
@@ -131,7 +129,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Conversation'
+                $ref: '#/components/schemas/ConversationApiResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -147,9 +145,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Message'
+                $ref: '#/components/schemas/MessagesListApiResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -187,7 +183,7 @@ paths:
                 data: {"messageId":"5b1e2b2a-df3a-4e9a-9a11-1a2b3c4d5e6f"}
             application/json:
               schema:
-                $ref: '#/components/schemas/Message'
+                $ref: '#/components/schemas/MessageApiResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -203,9 +199,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Model'
+                $ref: '#/components/schemas/ModelsListApiResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -225,7 +219,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Model'
+                $ref: '#/components/schemas/ModelApiResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -265,7 +259,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Model'
+                $ref: '#/components/schemas/ModelApiResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -475,10 +469,96 @@ components:
 
     Error:
       type: object
+      required: [success, message, data]
       properties:
-        statusCode:
-          type: integer
+        success:
+          type: boolean
+          example: false
         message:
           type: string
+          example: "Invalid email or password"
+        data:
+          nullable: true
+          example: null
+        statusCode:
+          type: integer
+          example: 400
         error:
           type: string
+          example: "Bad Request"
+
+    ApiResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Operation successful"
+        data:
+          nullable: true
+          description: Response payload
+
+    AuthApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthResponse'
+
+    ConversationApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Conversation'
+
+    ConversationsListApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Conversation'
+
+    MessageApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Message'
+
+    MessagesListApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Message'
+
+    ModelApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Model'
+
+    ModelsListApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Model'

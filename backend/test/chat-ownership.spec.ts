@@ -163,9 +163,10 @@ describe('Chat ownership invariants', () => {
         .set('Accept', 'application/json')
         .send({ content: 'hi' });
       expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('id');
-      expect(res.body).toHaveProperty('role', 'assistant');
-      expect(res.body).toHaveProperty('content', 'Echo: hi');
+      expect(res.body).toHaveProperty('success', true);
+      expect(res.body.data).toHaveProperty('id');
+      expect(res.body.data).toHaveProperty('role', 'assistant');
+      expect(res.body.data).toHaveProperty('content', 'Echo: hi');
     } finally {
       await app.close();
     }

@@ -86,11 +86,19 @@ export interface CreateModelRequest {
 }
 
 // ========================
-// Error Schemas
+// API Envelope & Error Schemas
 // ========================
 
-export interface ApiErrorResponse {
-  statusCode: number
+export interface ApiResponse<T = any> {
+  success: boolean
   message: string
+  data: T
+}
+
+export interface ApiErrorResponse {
+  success?: boolean
+  message: string
+  data?: any
+  statusCode?: number
   error?: string
 }

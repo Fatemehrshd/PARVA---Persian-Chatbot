@@ -48,3 +48,11 @@
 - Standardized error handling, automatic JWT Bearer injection, and response parsing in `api.ts`.
 - Added unit test suites for all API services in `tests/services/` (total 38 tests passing across 10 test suites).
 - Created dedicated frontend documentation in `docs/frontend/README.md` and `docs/frontend/services-architecture.md`.
+
+## Task 9: Standardized API Response Envelope `{ success, message, data }`
+- Updated OpenAPI contract (`api-contract.yaml`) to standardize all endpoint responses inside an envelope: `{ success: boolean, message: string, data: any }`.
+- Built `ResponseEnvelopeInterceptor` in NestJS backend (`backend/src/shared/response-envelope.interceptor.ts`) registered globally and in `AppModule`.
+- Updated `HttpExceptionFilter` to format errors with `success: false` and `data: null`.
+- Enhanced frontend `api.ts` base client to unwrap `data` automatically when an envelope is detected.
+- Verified test suite: 100% passing tests (38 backend tests across 8 suites, 39 frontend tests across 10 suites).
+- Both frontend and backend production builds compile with 0 errors.

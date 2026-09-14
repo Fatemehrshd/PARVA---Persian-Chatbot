@@ -56,12 +56,20 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
     return {} as T
   }
 
-  const data = await response.json().catch(() => ({}))
+  const json = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    const message = data.message || (Array.isArray(data.message) ? data.message.join(', ') : 'An unexpected error occurred')
-    throw new ApiError(response.status, message, data.error)
+    const message = json.message || (Array.isArray(json.message) ? json.message.join(', ') : 'An unexpected error occurred')
+    throw new ApiError(response.status, message, json.error)
   }
 
-  return data as T
+  // Handle standard { success, message, data } API response envelope
+  if (json && typeof json === 'object' && 'success' in json && 'data' in json) {
+    if (json.success === false) {
+      throw new ApiError(response.status, json.message || 'Operation failed', json.error)
+    }
+    return json.data as T
+  }
+
+  return json as T
 }

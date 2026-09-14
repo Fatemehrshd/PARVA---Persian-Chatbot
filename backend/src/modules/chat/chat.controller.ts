@@ -50,7 +50,13 @@ export class ChatController {
   ) {
     const { reply, saved } = await this.chat.answer(req.user.sub, id, d.content);
     const accept = (req.headers['accept'] as string) ?? '';
-    if (accept.includes('application/json')) return res.json(saved);
+    if (accept.includes('application/json')) {
+      return res.json({
+        success: true,
+        message: 'Operation successful',
+        data: saved,
+      });
+    }
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     const words = reply.split(/(\s+)/);

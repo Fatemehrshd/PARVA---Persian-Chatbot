@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './shared/http-exception.filter';
+import { ResponseEnvelopeInterceptor } from './shared/response-envelope.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -11,6 +12,8 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1', { exclude: ['/'] });
   // Contract-shaped error envelope: {statusCode, message, error}.
   app.useGlobalFilters(new HttpExceptionFilter());
+  // Contract-shaped standard envelope: {success, message, data}.
+  app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.enableCors({
     origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',

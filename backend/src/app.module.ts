@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -10,6 +11,8 @@ import { User } from './modules/users/user.entity';
 import { Conversation } from './modules/chat/conversation.entity';
 import { Message } from './modules/chat/message.entity';
 import { AiModel } from './modules/models-admin/ai-model.entity';
+import { ResponseEnvelopeInterceptor } from './shared/response-envelope.interceptor';
+
 @Module({
   imports: [
     TypeOrmModule.forRoot({
@@ -28,6 +31,12 @@ import { AiModel } from './modules/models-admin/ai-model.entity';
     ModelsAdminModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: ResponseEnvelopeInterceptor,
+    },
+  ],
 })
 export class AppModule {}

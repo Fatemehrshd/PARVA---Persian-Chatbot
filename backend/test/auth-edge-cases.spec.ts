@@ -8,6 +8,7 @@ import { UsersService } from '../src/modules/users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { HttpExceptionFilter } from '../src/shared/http-exception.filter';
 import { JwtAuthGuard } from '../src/shared/jwt-auth.guard';
+import { ResponseEnvelopeInterceptor } from '../src/shared/response-envelope.interceptor';
 
 /**
  * Auth invariants and edge-case e2e tests.
@@ -71,6 +72,7 @@ describe('POST /auth/signup + /auth/login — contract invariants & edge cases',
     }).compile();
     app = mod.createNestApplication();
     app.useGlobalFilters(new HttpExceptionFilter());
+    app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
     await app.init();
   });
@@ -83,9 +85,10 @@ describe('POST /auth/signup + /auth/login — contract invariants & edge cases',
       .post('/auth/signup')
       .send({ email: 'new@example.com', password: 'password123', displayName: 'New' });
     expect(res.status).toBe(201);
-    expect(res.body).toHaveProperty('user');
-    expect(res.body).toHaveProperty('accessToken');
-    expect(res.body).toHaveProperty('refreshToken');
+    expect(res.body).toHaveProperty('success', true);
+    expect(res.body.data).toHaveProperty('user');
+    expect(res.body.data).toHaveProperty('accessToken');
+    expect(res.body.data).toHaveProperty('refreshToken');
   });
 
   it('login with valid credentials returns 200 with user + both tokens', async () => {
@@ -93,9 +96,10 @@ describe('POST /auth/signup + /auth/login — contract invariants & edge cases',
       .post('/auth/login')
       .send({ email: 'alice@example.com', password: 'password123' });
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('user');
-    expect(res.body).toHaveProperty('accessToken');
-    expect(res.body).toHaveProperty('refreshToken');
+    expect(res.body).toHaveProperty('success', true);
+    expect(res.body.data).toHaveProperty('user');
+    expect(res.body.data).toHaveProperty('accessToken');
+    expect(res.body.data).toHaveProperty('refreshToken');
   });
 
   // ---- invariant: response never leaks passwordHash ----
@@ -115,8 +119,8 @@ describe('POST /auth/signup + /auth/login — contract invariants & edge cases',
       .post('/auth/signup')
       .send({ email: 'carol@example.com', password: 'password123' });
     expect(res.status).toBe(201);
-    const access = JSON.parse(res.body.accessToken);
-    const refresh = JSON.parse(res.body.refreshToken);
+    const access = JSON.parse(res.body.data.accessToken);
+    const refresh = JSON.parse(res.body.data.refreshToken);
     expect(access).toEqual(
       expect.objectContaining({
         sub: expect.any(String),

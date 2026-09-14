@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { useUiStore } from '../../stores/ui'
 
-const props = defineProps<{
+defineProps<{
   isOpen: boolean
 }>()
 

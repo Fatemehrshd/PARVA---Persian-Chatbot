@@ -59,7 +59,9 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   const json = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    const message = json.message || (Array.isArray(json.message) ? json.message.join(', ') : 'An unexpected error occurred')
+    const message = Array.isArray(json.message)
+      ? json.message.join(', ')
+      : (typeof json.message === 'string' && json.message ? json.message : 'An unexpected error occurred')
 
     // Global 401 Unauthorized handling (session expired or invalid token)
     if (response.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/signup')) {

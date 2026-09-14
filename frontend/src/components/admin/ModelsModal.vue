@@ -176,6 +176,26 @@ async function handleDelete(id: string) {
               placeholder="e.g. gemini-1.5-pro-latest"
             />
           </div>
+          <div class="form-group">
+            <label class="form-label">Base URL (Optional)</label>
+            <input
+              v-model="newBaseUrl"
+              type="text"
+              :disabled="isRegisteringModel"
+              class="form-input font-mono text-xs"
+              placeholder="https://api.openai.com/v1"
+            />
+          </div>
+          <div class="form-group">
+            <label class="form-label">API Key (Optional)</label>
+            <input
+              v-model="newApiKey"
+              type="password"
+              :disabled="isRegisteringModel"
+              class="form-input font-mono text-xs"
+              placeholder="sk-..."
+            />
+          </div>
         </div>
         <div class="form-actions flex items-center justify-between w-full">
           <template v-if="uiStore.direction === 'rtl'">

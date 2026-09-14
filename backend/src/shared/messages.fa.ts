@@ -19,6 +19,7 @@ export const FA = {
   passwordMin: 'رمز عبور باید حداقل ۸ کاراکتر باشد',
   passwordRequired: 'رمز عبور الزامی است',
   displayNameString: 'نام نمایشی باید متن باشد',
+  invalidCredentials: 'ایمیل یا رمز عبور اشتباه است',
 
   // ---- chat ----
   contentMin: 'پیام نمی‌تواند خالی باشد',

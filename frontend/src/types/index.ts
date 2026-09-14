@@ -53,7 +53,8 @@ export interface CreateConversationRequest {
 }
 
 export interface UpdateConversationRequest {
-  title: string
+  title?: string
+  modelId?: string
 }
 
 export interface Message {
@@ -62,6 +63,7 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   createdAt: string
+  isInterrupted?: boolean
 }
 
 export interface SendMessageRequest {
@@ -69,16 +71,45 @@ export interface SendMessageRequest {
 }
 
 // ========================
-// Model Schemas (Admin)
+// Provider Schemas (Admin)
+// ========================
+
+export interface Provider {
+  id: string
+  name: string
+  baseUrl?: string | null
+  apiKey?: string | null
+  isActive: boolean
+  defaultModelId?: string | null
+  createdAt?: string
+}
+
+export interface CreateProviderRequest {
+  name: string
+  baseUrl?: string
+  apiKey?: string
+  isActive?: boolean
+}
+
+export interface UpdateProviderRequest {
+  name?: string
+  baseUrl?: string
+  apiKey?: string
+  isActive?: boolean
+}
+
+// ========================
+// Model Schemas (Admin & Chat)
 // ========================
 
 export interface Model {
   id: string
   name: string
   provider: string
+  providerId?: string | null
   apiIdentifier: string
-  apiKey?: string
-  baseUrl?: string
+  apiKey?: string | null
+  baseUrl?: string | null
   isActive: boolean
   isDefault: boolean
   createdAt?: string
@@ -87,6 +118,7 @@ export interface Model {
 export interface CreateModelRequest {
   name: string
   provider: string
+  providerId?: string
   apiIdentifier: string
   apiKey?: string
   baseUrl?: string

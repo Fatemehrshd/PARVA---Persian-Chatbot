@@ -1,10 +1,47 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import ChatView from '../src/views/ChatView.vue'
 import AppSidebar from '../src/components/layout/AppSidebar.vue'
 import { useChatStore } from '../src/stores/chat'
+
+vi.mock('../src/services/models.service', () => ({
+  modelsService: {
+    listModels: vi.fn().mockResolvedValue({ models: [] })
+  }
+}))
+
+vi.mock('../src/services/chat.service', () => ({
+  chatService: {
+    listConversations: vi.fn().mockResolvedValue({
+      conversations: [
+        {
+          id: 'conv-1',
+          title: 'Conversation 1',
+          modelId: 'm1',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        },
+        {
+          id: 'conv-2',
+          title: 'Conversation 2',
+          modelId: 'm1',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      ]
+    }),
+    getMessages: vi.fn().mockResolvedValue({ messages: [] }),
+    createConversation: vi.fn().mockResolvedValue({
+      id: 'conv-mock-new',
+      title: 'New Chat',
+      modelId: 'm1',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    })
+  }
+}))
 
 describe('Chat Routing and Refresh Persistence', () => {
   let router: any
@@ -34,22 +71,6 @@ describe('Chat Routing and Refresh Persistence', () => {
 
   it('happy path: loads and activates specific conversation on page refresh / direct hit at /chat/:id', async () => {
     const chatStore = useChatStore()
-    chatStore.conversations = [
-      {
-        id: 'conv-1',
-        title: 'Conversation 1',
-        modelId: 'm1',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      {
-        id: 'conv-2',
-        title: 'Conversation 2',
-        modelId: 'm1',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-    ]
 
     // Simulate direct navigation / browser refresh at /chat/conv-2
     await router.push('/chat/conv-2')
@@ -61,8 +82,7 @@ describe('Chat Routing and Refresh Persistence', () => {
       }
     })
 
-    // Wait for onMounted and async initialization
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await flushPromises()
 
     expect(chatStore.currentConversationId).toBe('conv-2')
     expect(router.currentRoute.value.path).toBe('/chat/conv-2')
@@ -103,6 +123,7 @@ describe('Chat Routing and Refresh Persistence', () => {
     expect(chatItems.length).toBe(2)
 
     await chatItems[1].trigger('click')
+    await flushPromises()
 
     expect(chatStore.currentConversationId).toBe('conv-beta')
     expect(router.currentRoute.value.path).toBe('/chat/conv-beta')
@@ -124,7 +145,7 @@ describe('Chat Routing and Refresh Persistence', () => {
     expect(newChatBtn.exists()).toBe(true)
 
     await newChatBtn.trigger('click')
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await flushPromises()
 
     const activeId = chatStore.currentConversationId
     expect(activeId).toBeDefined()

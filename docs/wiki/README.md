@@ -4,9 +4,12 @@ Welcome to the project documentation wiki.
 
 ## Navigation
 - [Getting Started](getting-started.md)
-- [Architecture](architecture.md)
-- [Features](features.md)
-- [Decisions](decisions.md)
+- [Architecture Overview](architecture.md)
+- [API Architecture & Technical Reference](api-reference.md)
+- [Chat System & Streaming Architecture](chat-system.md)
+- [Streaming Comprehensive Guide (README)](../STREAMING_README.md)
+- [Features History](features.md)
+- [Architectural Decisions (ADRs)](decisions.md)
 
 ## Development Workflow & Testing
 

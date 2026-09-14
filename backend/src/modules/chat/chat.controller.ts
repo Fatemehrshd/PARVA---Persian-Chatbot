@@ -73,20 +73,46 @@ export class ChatController {
         data: saved,
       });
     }
-    // Pull the FIRST chunk before committing to SSE: a provider/ownership
-    // error that happens before any token is still a plain JSON response.
+    let clientDisconnected = false;
+    req.on('close', () => {
+      clientDisconnected = true;
+    });
+
     const first = await gen.next();
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
-    const writeToken = (t: string) =>
-      res.write(`event: token\ndata: ${JSON.stringify({ content: t })}\n\n`);
+    const writeToken = (t: string) => {
+      if (!clientDisconnected && !res.writableEnded) {
+        try {
+          res.write(`event: token\ndata: ${JSON.stringify({ content: t })}\n\n`);
+        } catch {
+          clientDisconnected = true;
+        }
+      }
+    };
     if (!first.done && first.value?.token) writeToken(first.value.token);
-    for await (const chunk of gen) {
-      if (chunk.token) writeToken(chunk.token);
-      if (chunk.saved) {
-        res.write(`event: done\ndata: ${JSON.stringify({ messageId: chunk.saved.id })}\n\n`);
+    try {
+      for await (const chunk of gen) {
+        if (clientDisconnected) break;
+        if (chunk.token) writeToken(chunk.token);
+        if (chunk.saved && !clientDisconnected && !res.writableEnded) {
+          try {
+            res.write(`event: done\ndata: ${JSON.stringify({ messageId: chunk.saved.id })}\n\n`);
+          } catch {
+            clientDisconnected = true;
+          }
+        }
+      }
+    } catch {
+      // Stream error or client aborted
+    } finally {
+      if (!res.writableEnded) {
+        try {
+          res.end();
+        } catch {
+          // ignore
+        }
       }
     }
-    res.end();
   }
 }

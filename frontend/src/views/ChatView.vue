@@ -8,13 +8,16 @@ import ChatComposer from '../components/chat/ChatComposer.vue'
 import ModelsModal from '../components/admin/ModelsModal.vue'
 import SettingsModal from '../components/layout/SettingsModal.vue'
 import GrokAurora from '../components/ui/GrokAurora.vue'
+import NetworkStatusBanner from '../components/chat/NetworkStatusBanner.vue'
 import { useChatStore } from '../stores/chat'
 import { useModelsStore } from '../stores/models'
+import { useUiStore } from '../stores/ui'
 
 const route = useRoute()
 const router = useRouter()
 const chatStore = useChatStore()
 const modelsStore = useModelsStore()
+const uiStore = useUiStore()
 const isEntering = ref(true)
 
 async function initChat() {
@@ -32,6 +35,7 @@ async function initChat() {
 }
 
 onMounted(async () => {
+  uiStore.initNetworkListeners()
   await initChat()
   setTimeout(() => {
     isEntering.value = false
@@ -66,6 +70,9 @@ watch(
 
     <!-- Top Bar -->
     <AppHeader class="relative z-10" />
+
+    <!-- Network Status Indicator -->
+    <NetworkStatusBanner class="relative z-10" />
 
     <!-- Main Workspace Container -->
     <div class="workspace-body relative z-10">

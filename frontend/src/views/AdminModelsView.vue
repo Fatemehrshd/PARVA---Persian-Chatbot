@@ -33,7 +33,7 @@ const searchQuery = ref('')
 const selectedProviderFilter = ref('all')
 
 onMounted(async () => {
-  await modelsStore.fetchModels()
+  await modelsStore.fetchModels(true)
   await chatStore.loadConversations()
 })
 

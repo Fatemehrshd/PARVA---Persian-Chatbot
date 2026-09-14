@@ -2,8 +2,11 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Model, CreateModelRequest } from '../types'
 import { modelsService } from '../services/models.service'
+import { useAuthStore } from './auth'
 
 export const useModelsStore = defineStore('models', () => {
+  const authStore = useAuthStore()
+
   const initialModels: Model[] = [
     {
       id: 'm-1',
@@ -39,22 +42,42 @@ export const useModelsStore = defineStore('models', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
+  const activeModels = computed(() => models.value.filter((m) => m.isActive))
   const defaultModel = computed(() => models.value.find((m) => m.isDefault) || models.value[0])
   const selectedModel = computed(() => models.value.find((m) => m.id === selectedModelId.value) || defaultModel.value)
 
-  async function fetchModels() {
+  async function fetchModels(forAdmin = false) {
     loading.value = true
+    error.value = null
     try {
-      const data = await modelsService.listModels()
+      let data: Model[]
+      if (forAdmin || authStore.isAdmin) {
+        try {
+          data = await modelsService.listModels()
+        } catch (err: any) {
+          if (err?.statusCode === 403) {
+            data = await modelsService.listActiveModels()
+          } else {
+            throw err
+          }
+        }
+      } else {
+        data = await modelsService.listActiveModels()
+      }
+
       if (Array.isArray(data) && data.length > 0) {
         models.value = data
-        const def = data.find((m) => m.isDefault)
-        if (def && !selectedModelId.value) {
-          selectedModelId.value = def.id
+        const currentValid = data.some((m) => m.id === selectedModelId.value)
+        if (!currentValid || selectedModelId.value.startsWith('m-')) {
+          const def = data.find((m) => m.isDefault) || data[0]
+          if (def) {
+            selectedModelId.value = def.id
+          }
         }
       }
-    } catch {
-      // Keep initial sample models if backend is not yet populated
+    } catch (err: any) {
+      error.value = err?.message || 'Failed to fetch models'
+      // Keep initial fallback models for offline/unauthenticated views
     } finally {
       loading.value = false
     }
@@ -113,6 +136,7 @@ export const useModelsStore = defineStore('models', () => {
 
   return {
     models,
+    activeModels,
     selectedModelId,
     selectedModel,
     defaultModel,

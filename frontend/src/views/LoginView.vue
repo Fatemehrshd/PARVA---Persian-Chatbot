@@ -24,6 +24,11 @@ const displayName = ref('')
 const showPassword = ref(false)
 const formError = ref<string | null>(null)
 
+function switchMode(signup: boolean) {
+  isSignup.value = signup
+  formError.value = null
+}
+
 const { isSubmitting: isLoading, submit: submitAuth } = useFormSubmit(async () => {
   let success = false
   if (isSignup.value) {
@@ -40,21 +45,33 @@ const { isSubmitting: isLoading, submit: submitAuth } = useFormSubmit(async () =
       'success'
     )
     router.push('/')
-  } else if (authStore.error) {
-    formError.value = authStore.error
+  } else {
+    const fallbackMsg = uiStore.direction === 'rtl'
+      ? (isSignup.value ? 'ثبت‌نام با خطا مواجه شد.' : 'ایمیل یا رمز عبور اشتباه است.')
+      : (isSignup.value ? 'Sign up failed.' : 'Invalid email or password.')
+    const errorMsg = authStore.error || fallbackMsg
+    formError.value = errorMsg
   }
 })
 
 async function handleSubmit() {
   formError.value = null
 
+  if (isSignup.value && !displayName.value.trim()) {
+    const msg = uiStore.direction === 'rtl' ? 'لطفاً نام خود را وارد کنید.' : 'Please enter your name.'
+    formError.value = msg
+    return
+  }
+
   if (!email.value.includes('@')) {
-    formError.value = uiStore.direction === 'rtl' ? 'لطفاً یک ایمیل معتبر وارد کنید.' : 'Please enter a valid email address.'
+    const msg = uiStore.direction === 'rtl' ? 'لطفاً یک ایمیل معتبر وارد کنید.' : 'Please enter a valid email address.'
+    formError.value = msg
     return
   }
 
   if (isSignup.value && password.value.length < 8) {
-    formError.value = uiStore.direction === 'rtl' ? 'رمز عبور باید حداقل ۸ کاراکتر باشد.' : 'Password must be at least 8 characters.'
+    const msg = uiStore.direction === 'rtl' ? 'رمز عبور باید حداقل ۸ کاراکتر باشد.' : 'Password must be at least 8 characters.'
+    formError.value = msg
     return
   }
 
@@ -95,7 +112,7 @@ async function handleSubmit() {
                 ? 'bg-background text-foreground shadow-md border border-border/40 font-bold' 
                 : 'text-muted-foreground hover:text-foreground'
             ]" 
-            @click="isSignup = false"
+            @click="switchMode(false)"
             :disabled="isLoading"
             type="button"
           >
@@ -108,7 +125,7 @@ async function handleSubmit() {
                 ? 'bg-background text-foreground shadow-md border border-border/40 font-bold' 
                 : 'text-muted-foreground hover:text-foreground'
             ]" 
-            @click="isSignup = true"
+            @click="switchMode(true)"
             :disabled="isLoading"
             type="button"
           >
@@ -132,10 +149,10 @@ async function handleSubmit() {
           </p>
         </div>
 
-        <!-- Error Alert Banner -->
+        <!-- Error Alert Banner (Single Borderless Message) -->
         <div 
           v-if="formError" 
-          class="flex items-center gap-2.5 bg-destructive/15 border border-destructive/35 text-destructive px-4 py-3 rounded-xl text-xs mb-5 text-start leading-relaxed"
+          class="flex items-center gap-2.5 bg-destructive/15 text-destructive px-4 py-3 rounded-xl text-xs mb-5 text-start leading-relaxed border-none"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="flex-shrink-0">
             <circle cx="12" cy="12" r="10"></circle>
@@ -168,6 +185,7 @@ async function handleSubmit() {
                 :loading="isLoading"
                 class="ps-9 h-11 text-sm bg-secondary/40 border-border/60 focus-visible:ring-primary/40 focus-visible:border-primary transition-all"
                 :placeholder="uiStore.direction === 'rtl' ? 'نام شما' : 'Your name'" 
+                @input="formError = null"
               />
             </div>
           </div>
@@ -193,6 +211,7 @@ async function handleSubmit() {
                 :loading="isLoading"
                 class="ps-9 h-11 text-sm bg-secondary/40 border-border/60 focus-visible:ring-primary/40 focus-visible:border-primary transition-all font-mono text-[13px]"
                 placeholder="user@example.com" 
+                @input="formError = null"
               />
             </div>
           </div>
@@ -223,6 +242,7 @@ async function handleSubmit() {
                 :loading="isLoading"
                 class="ps-9 pe-10 h-11 text-sm bg-secondary/40 border-border/60 focus-visible:ring-primary/40 focus-visible:border-primary transition-all font-mono"
                 placeholder="••••••••" 
+                @input="formError = null"
               />
               <button 
                 type="button" 

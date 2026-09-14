@@ -108,6 +108,19 @@ export const useUiStore = defineStore('ui', () => {
     theme.value = theme.value === 'dark' ? 'light' : 'dark'
   }
 
+  const isOnline = ref(typeof navigator !== 'undefined' ? navigator.onLine : true)
+
+  function setOnline(online: boolean) {
+    isOnline.value = online
+  }
+
+  function initNetworkListeners() {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', () => setOnline(true))
+      window.addEventListener('offline', () => setOnline(false))
+    }
+  }
+
   return {
     sidebarOpen,
     direction,
@@ -117,6 +130,7 @@ export const useUiStore = defineStore('ui', () => {
     settingsModalOpen,
     toasts,
     theme,
+    isOnline,
     toggleSidebar,
     toggleDirection,
     openAuth,
@@ -128,6 +142,8 @@ export const useUiStore = defineStore('ui', () => {
     showToast,
     removeToast,
     setTheme,
-    toggleTheme
+    toggleTheme,
+    setOnline,
+    initNetworkListeners
   }
 })

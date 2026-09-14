@@ -31,7 +31,16 @@ export const useAuthStore = defineStore('auth', () => {
       setSession(response.user, response.accessToken, response.refreshToken)
       return true
     } catch (err: any) {
-      error.value = err.message || 'ورود با خطا مواجه شد.'
+      let msg = err?.message || 'ورود با خطا مواجه شد.'
+      if (
+        typeof msg === 'string' &&
+        (msg.toLowerCase().includes('invalid email or password') ||
+         msg.toLowerCase().includes('unauthorized') ||
+         err?.statusCode === 401)
+      ) {
+        msg = 'ایمیل یا رمز عبور اشتباه است.'
+      }
+      error.value = msg
       return false
     } finally {
       loading.value = false
@@ -46,7 +55,14 @@ export const useAuthStore = defineStore('auth', () => {
       setSession(response.user, response.accessToken, response.refreshToken)
       return true
     } catch (err: any) {
-      error.value = err.message || 'ثبت‌نام با خطا مواجه شد.'
+      let msg = err?.message || 'ثبت‌نام با خطا مواجه شد.'
+      if (
+        typeof msg === 'string' &&
+        msg.toLowerCase().includes('already registered')
+      ) {
+        msg = 'این نشانی ایمیل قبلاً در سامانه ثبت شده است.'
+      }
+      error.value = msg
       return false
     } finally {
       loading.value = false

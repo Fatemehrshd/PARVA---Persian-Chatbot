@@ -107,5 +107,32 @@ describe('LoginView.vue', () => {
 
     expect(pushMock).toHaveBeenCalledWith('/')
   })
+
+  it('displays error message banner when password or username is incorrect', async () => {
+    const wrapper = mount(LoginView, {
+      global: {
+        stubs: {
+          'router-link': true,
+        },
+      },
+    })
+
+    const authStore = useAuthStore()
+    vi.spyOn(authStore, 'login').mockImplementation(async () => {
+      authStore.error = 'ایمیل یا رمز عبور اشتباه است.'
+      return false
+    })
+
+    const emailInput = wrapper.find('input[type="email"]')
+    const passwordInput = wrapper.find('input[type="password"]')
+    await emailInput.setValue('user@example.com')
+    await passwordInput.setValue('wrongpassword')
+
+    await wrapper.find('form').trigger('submit.prevent')
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('ایمیل یا رمز عبور اشتباه است.')
+  })
 })
 

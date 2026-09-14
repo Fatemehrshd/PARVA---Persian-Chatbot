@@ -63,11 +63,22 @@
    - **بدنه ارسالی:** `{ modelId, title }`
    - **پاسخ:** گفتگوی ایجاد شده (`Conversation`)
 
-3. `getMessages(conversationId)`:
+3. `updateConversation(conversationId, dataOrTitle)`:
+   - **مسیر:** `PATCH /chat/conversations/{conversationId}`
+   - **بدنه ارسالی:** `{ title?: string, modelId?: string }`
+   - **پاسخ:** گفتگوی به‌روزرسانی‌شده (`Conversation`)
+
+4. `setModel(conversationId, modelId)`:
+   - **مسیر:** `PATCH /chat/conversations/{conversationId}`
+   - **بدنه ارسالی:** `{ modelId }`
+   - **کاربرد:** تغییر زنده مدل هوش مصنوعی در حین یک گفتگوی فعال (Mid-conversation Model Switching).
+   - **پاسخ:** گفتگوی به‌روزرسانی‌شده (`Conversation`)
+
+5. `getMessages(conversationId)`:
    - **مسیر:** `GET /chat/conversations/{conversationId}/messages`
    - **پاسخ:** تاریخچه پیام‌های گفتگو به ترتیب زمان (`Message[]`)
 
-4. `sendMessageStream(conversationId, content, onToken, onDone, onError)`:
+6. `sendMessageStream(conversationId, content, onToken, onDone, onError)`:
    - **مسیر:** `POST /chat/conversations/{conversationId}/messages`
    - **هدر:** `Accept: text/event-stream`
    - **پروتکل ارتباطی:**
@@ -75,34 +86,51 @@
      - رویدادهای `event: token` بلافاصله محتوای متن تولیدشده (`{"content": "..."}`) را به کال‌بک `onToken` ارسال می‌کنند تا کاربر به صورت کلمه‌به‌کلمه و بدون تأخیر پاسخ هوش مصنوعی را در صفحه مشاهده کند.
      - رویداد `event: done` شناسه پیام ذخیره‌شده را به کال‌بک `onDone` تحویل می‌دهد تا استریم با موفقیت خاتمه یابد.
 
-5. `sendMessage(conversationId, content)`:
+7. `sendMessage(conversationId, content)`:
    - **مسیر:** `POST /chat/conversations/{conversationId}/messages`
    - **هدر:** `Accept: application/json`
    - **پاسخ:** دریافت یک‌باره کل پیام پاسخ در قالب JSON (`Message`)
 
 ---
 
-## ۴. سرویس مدیریت مدل‌ها (`models.service.ts`)
+## ۴. سرویس مدیریت مدل‌ها و ارائه‌دهنده‌ها (`models.service.ts`)
 
-این سرویس دسترسی پنل ادمین به مدل‌های زبانی هوش مصنوعی را پیاده‌سازی می‌کند:
+این سرویس دسترسی به مدل‌های زبانی هوش مصنوعی (عمومی برای کاربران و مدیریتی برای ادمین) را پیاده‌سازی می‌کند:
 
-### متدها:
-1. `listModels()`:
+### متدهای عمومی مدل‌ها (کاربران عادی و صفحه چت):
+1. `listActiveModels()`:
+   - **مسیر:** `GET /models`
+   - **سطح دسترسی:** تمامی کاربران احراز هویت‌شده (نیازی به نقش ادمین ندارد)
+   - **کاربرد:** لیست مدل‌های فعال که ارائه‌دهنده آن‌ها نیز فعال است، با کلیدهای ماسک‌شده (`sk-...****`). برای سوییچر دراپ‌داون در چت (`ChatComposer`).
+
+### متدهای مدیریتی مدل‌ها (پنل ادمین):
+2. `listModels()`:
    - **مسیر:** `GET /admin/models`
-   - **پاسخ:** لیست تمامی مدل‌های پیکربندی شده در سامانه (`Model[]`)
+   - **پاسخ:** لیست کامل تمامی مدل‌های سیستم (شامل فعال و غیرفعال).
 
-2. `createModel(data)`:
+3. `createModel(data)`:
    - **مسیر:** `POST /admin/models`
-   - **بدنه ارسالی:** `{ name, provider, apiIdentifier, isActive }`
-   - **پاسخ:** مدل ذخیره‌شده (`Model`)
+   - **بدنه ارسالی:** `{ name, provider, apiIdentifier, apiKey?, baseUrl?, isActive?, providerId? }`
+   - **پاسخ:** مدل ثبت‌شده (`Model`)
 
-3. `deleteModel(modelId)`:
+4. `updateModelStatus(modelId, isActive)`:
+   - **مسیر:** `PATCH /admin/models/{modelId}/status`
+   - **بدنه ارسالی:** `{ isActive: boolean }`
+   - **کاربرد:** سوییچ آنی فعال/غیرفعال‌سازی مدل در پنل ادمین.
+
+5. `deleteModel(modelId)`:
    - **مسیر:** `DELETE /admin/models/{modelId}`
    - **پاسخ:** `204 No Content`
 
-4. `setDefaultModel(modelId)`:
+6. `setDefaultModel(modelId)`:
    - **مسیر:** `PATCH /admin/models/{modelId}/default`
    - **پاسخ:** مدل بروزرسانی‌شده به عنوان پیش‌فرض پلتفرم (`Model`)
+
+### متدهای مدیریتی ارائه‌دهنده‌ها (Providers Admin):
+7. `listProviders()`: `GET /admin/providers`
+8. `createProvider(data)`: `POST /admin/providers`
+9. `updateProviderStatus(id, isActive)`: `PATCH /admin/providers/{id}/status`
+10. `deleteProvider(id)`: `DELETE /admin/providers/{id}` (حذف آبشاری تمام مدل‌های متصل به آن)
 
 ---
 

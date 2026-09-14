@@ -81,7 +81,7 @@ const authStore = useAuthStore()
   height: var(--header-height);
   width: 100%;
   background-color: var(--background);
-  border-bottom: 1px solid var(--border);
+  border-bottom: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -109,6 +109,10 @@ const authStore = useAuthStore()
   justify-content: center;
   border-radius: var(--radius-sm);
   color: var(--secondary-foreground);
+  cursor: pointer;
+  border: none;
+  background-color: transparent;
+  transition: all 150ms ease;
 }
 
 .icon-button:hover {
@@ -122,15 +126,17 @@ const authStore = useAuthStore()
   gap: 6px;
   padding: 5px 10px;
   background-color: var(--secondary);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius-sm);
   font-size: 12px;
   color: var(--secondary-foreground);
+  cursor: pointer;
+  transition: all 150ms ease;
 }
 
 .icon-text-btn:hover {
+  background-color: var(--secondary);
   color: var(--foreground);
-  border-color: var(--muted-foreground);
 }
 
 .user-pill {
@@ -140,7 +146,7 @@ const authStore = useAuthStore()
   background-color: var(--secondary);
   padding: 3px 8px 3px 4px;
   border-radius: 20px;
-  border: 1px solid var(--border);
+  border: none;
 }
 
 .header-avatar {
@@ -156,7 +162,9 @@ const authStore = useAuthStore()
   justify-content: center;
 }
 
-
+.user-name-header {
+  color: var(--foreground);
+}
 
 .login-trigger-btn {
   padding: 5px 12px;
@@ -165,9 +173,6 @@ const authStore = useAuthStore()
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
-}
-
-.login-trigger-btn:hover {
-  opacity: 0.9;
+  border: none;
 }
 </style>

@@ -41,6 +41,18 @@ describe('Chat Service (chat.service.ts)', () => {
     expect(result).toEqual(mockUpdated)
   })
 
+  it('sets conversation model via PATCH /chat/conversations/:id with modelId', async () => {
+    const mockUpdated = { id: 'c-2', title: 'Renamed Topic', modelId: 'm-new', createdAt: '2026-01-01', updatedAt: '2026-01-01' }
+    const requestSpy = vi.spyOn(apiModule, 'request').mockResolvedValue(mockUpdated as any)
+
+    const result = await chatService.setModel('c-2', 'm-new')
+    expect(requestSpy).toHaveBeenCalledWith('/chat/conversations/c-2', {
+      method: 'PATCH',
+      body: JSON.stringify({ modelId: 'm-new' })
+    })
+    expect(result.modelId).toBe('m-new')
+  })
+
   it('deletes conversation via DELETE /chat/conversations/:id', async () => {
     const requestSpy = vi.spyOn(apiModule, 'request').mockResolvedValue(undefined as any)
 

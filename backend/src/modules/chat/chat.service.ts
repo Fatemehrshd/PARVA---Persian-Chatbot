@@ -147,24 +147,32 @@ export class ChatService {
     ];
 
     let full = '';
+    let savedAssistant: Message | null = null;
     try {
-      for await (const token of this.forwarder.stream(target, messages)) {
-        full += token;
-        yield { token };
+      try {
+        for await (const token of this.forwarder.stream(target, messages)) {
+          full += token;
+          yield { token };
+        }
+      } catch (err) {
+        if (!full) throw err; // failed before the first token -> plain 502 upstream
+        this.logger.warn(
+          `Provider "${target.apiIdentifier}" failed mid-stream, persisting partial reply: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
       }
-    } catch (err) {
-      if (!full) throw err; // failed before the first token -> plain 502 upstream
-      this.logger.warn(
-        `Provider "${target.apiIdentifier}" failed mid-stream, persisting partial reply: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
+    } finally {
+      if (full && !savedAssistant) {
+        savedAssistant = await this.msg.save(
+          this.msg.create({ conversationId: id, role: 'assistant', content: full }),
+        );
+        await this.conv.update(id, {});
+      }
     }
 
-    const saved = await this.msg.save(
-      this.msg.create({ conversationId: id, role: 'assistant', content: full }),
-    );
-    await this.conv.update(id, {});
-    yield { saved };
+    if (savedAssistant) {
+      yield { saved: savedAssistant };
+    }
   }
 }

@@ -30,15 +30,27 @@ export const chatService = {
   },
 
   /**
-   * Update conversation title.
+   * Update conversation details (title and/or AI model).
    * PATCH /chat/conversations/{conversationId}
    */
-  async updateConversation(conversationId: string, title: string): Promise<Conversation> {
-    const payload: UpdateConversationRequest = { title }
+  async updateConversation(
+    conversationId: string,
+    dataOrTitle: string | UpdateConversationRequest
+  ): Promise<Conversation> {
+    const payload: UpdateConversationRequest =
+      typeof dataOrTitle === 'string' ? { title: dataOrTitle } : dataOrTitle
     return request<Conversation>(`/chat/conversations/${conversationId}`, {
       method: 'PATCH',
       body: JSON.stringify(payload)
     })
+  },
+
+  /**
+   * Switch the model that answers this conversation from now on.
+   * PATCH /chat/conversations/{conversationId} with { modelId }
+   */
+  async setModel(conversationId: string, modelId: string): Promise<Conversation> {
+    return this.updateConversation(conversationId, { modelId })
   },
 
   /**
@@ -89,7 +101,8 @@ export const chatService = {
     content: string,
     onToken: (token: string) => void,
     onDone: (messageId: string) => void,
-    onError: (err: any) => void
+    onError: (err: any) => void,
+    signal?: AbortSignal
   ): Promise<void> {
     const token = localStorage.getItem('token')
     const headers: Record<string, string> = {
@@ -106,12 +119,29 @@ export const chatService = {
       const response = await fetch(url, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ content })
+        body: JSON.stringify({ content }),
+        signal
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        const message = errorData.message || `Server responded with status ${response.status}`
+        let message = `Server responded with status ${response.status}`
+        try {
+          const text = await response.text()
+          try {
+            const errorData = JSON.parse(text)
+            if (Array.isArray(errorData.message)) {
+              message = errorData.message.join(', ')
+            } else if (errorData.message) {
+              message = errorData.message
+            } else if (errorData.error) {
+              message = errorData.error
+            }
+          } catch {
+            if (text && text.trim()) message = text.trim()
+          }
+        } catch {
+          // ignore
+        }
         throw new Error(message)
       }
 
@@ -156,7 +186,11 @@ export const chatService = {
           }
         }
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'AbortError' || signal?.aborted) {
+        // Stream explicitly stopped by user
+        return
+      }
       onError(error)
     }
   }

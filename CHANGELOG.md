@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+Backend-only release (the frontend was not touched in this task).
+
+### Added
+- **Providers as first-class entities.** New `ai_providers` table (`name` unique, `baseUrl`, `apiKey` — write-only/masked, `isActive`, `defaultModelId`). `AiModel` gains `providerId` (FK, `ON DELETE CASCADE`).
+  - `GET/POST /admin/providers`, `PATCH /admin/providers/:id` (metadata + key rotation — an empty `apiKey` leaves the stored key untouched), `PATCH /admin/providers/:id/status`, `PATCH /admin/providers/:id/default` (per-provider default model), `DELETE /admin/providers/:id`.
+  - **Cascade delete:** deleting a provider deletes all its models; if the platform-wide default model was among them, the oldest remaining active model (of an active provider) is auto-promoted so the platform is never default-less.
+  - **Per-provider default vs. model deletion:** removing a provider's default model never fails; it clears `defaultModelId` (null) and the admin can point it at another model via `PATCH /admin/providers/:id/default`.
+  - Backward compatibility: `POST /admin/models` still accepts the free-text `provider` label and auto-upserts the provider row, so the existing admin UI keeps working; an optional `providerId` is honored when provided.
+- **Real streaming chat (no more silent mock).** `ChatService.answer()` became `generate()` (async generator): the upstream OpenAI-compatible `/chat/completions` is called with `stream: true` and its SSE deltas are relayed token-by-token (Node 18+ global `fetch`, no new dependency). Credential/baseUrl resolution: `model.* → provider.* → OPENAI_API_KEY / OPENAI_BASE_URL env → openai.com`. The offline `Echo:` path now runs **only when no key exists anywhere** and logs a WARN.
+- **Mid-conversation model switching for users.** `PATCH /chat/conversations/:id` now also accepts `{ modelId }` (title became optional; at least one of the two is required). The target must be an active model of an active provider (400 otherwise).
+- **User-facing model listing.** `GET /models` (any authenticated user, not admin-only): active models of active providers, credentials masked — powers the chat model switcher.
+- **Provider-aware availability:** a disabled provider makes its models invisible in `GET /models` and chat answers with 400 `Provider "x" is disabled`.
+- `npm run seed:providers` — idempotent backfill that materializes provider rows from the legacy free-text `provider` labels, links models, copies per-model credentials up to their provider (only when the provider has none), and seeds each provider's `defaultModelId` from the platform default.
+
+### Changed (behavior changes to previously released surfaces)
+- **`/v1/models` and `/v1/chat/completions` now require a bearer token** (they were open). Rationale: `/v1/chat/completions` now forwards to real, paid upstream models instead of only echoing. An unknown `model` name returns 404 (previously echoed any name). The undocumented bare `/models` & `/chat/completions` aliases (registered via the `''` base path) were dropped — the compat surface is `/v1/*` only, freeing `GET /models` for the new user-facing listing.
+- **Chat provider failures are no longer swallowed into an Echo reply.** Failure before the first token → HTTP 502 error envelope (SSE not started); failure mid-stream → the partial reply is persisted and the stream completes with `event: done` (keeps the released frontend working). `POST /chat/conversations/:id/messages` is buffered/pulled-one-chunk-early accordingly; the `event: token` / `event: done` wire format is unchanged.
+- `api-contract.yaml` 0.4.0 → 0.5.0 (provider endpoints, `GET /models`, extended `UpdateConversationRequest`/`CreateModelRequest`/`Model` schemas, bearer required on `/v1/*`).
+
+---
+
 ## [1.0.0] - 2026-09-14
 
 ### Added

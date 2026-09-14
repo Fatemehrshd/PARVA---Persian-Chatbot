@@ -9,7 +9,7 @@ describe('Base API Client (api.ts)', () => {
 
   it('buildUrl handles relative endpoints and respects base URL', () => {
     const url = buildUrl('/auth/login')
-    expect(url).toBe('http://localhost:3000/auth/login')
+    expect(url).toBe(`${getApiBaseUrl()}/auth/login`)
 
     const absolute = buildUrl('https://custom.api/v1/auth/login')
     expect(absolute).toBe('https://custom.api/v1/auth/login')
@@ -59,3 +59,4 @@ describe('Base API Client (api.ts)', () => {
     await expect(request('/auth/signup', { method: 'POST' })).rejects.toThrow('Email is already registered')
   })
 })
+

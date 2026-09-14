@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import AppHeader from '../components/layout/AppHeader.vue'
 import AppSidebar from '../components/layout/AppSidebar.vue'
 import MessageList from '../components/chat/MessageList.vue'
@@ -10,17 +11,52 @@ import GrokAurora from '../components/ui/GrokAurora.vue'
 import { useChatStore } from '../stores/chat'
 import { useModelsStore } from '../stores/models'
 
+const route = useRoute()
+const router = useRouter()
 const chatStore = useChatStore()
 const modelsStore = useModelsStore()
 const isEntering = ref(true)
 
-onMounted(async () => {
+async function initChat() {
+  const routeId = route.params.id as string | undefined
   await modelsStore.fetchModels()
-  await chatStore.loadConversations()
+  await chatStore.loadConversations(routeId)
+
+  if (routeId) {
+    if (chatStore.currentConversationId !== routeId) {
+      await chatStore.selectConversation(routeId)
+    }
+  } else if (chatStore.currentConversationId) {
+    router.replace(`/chat/${chatStore.currentConversationId}`)
+  }
+}
+
+onMounted(async () => {
+  await initChat()
   setTimeout(() => {
     isEntering.value = false
   }, 3500)
 })
+
+// Sync conversation when route param ID changes (e.g. browser back/forward or direct navigation)
+watch(
+  () => route.params.id,
+  async (newId) => {
+    if (newId && typeof newId === 'string' && newId !== chatStore.currentConversationId) {
+      await chatStore.selectConversation(newId)
+    }
+  }
+)
+
+// Sync route when store conversation ID changes (e.g. conversation created or clicked)
+watch(
+  () => chatStore.currentConversationId,
+  (newId) => {
+    if (newId && route.params.id !== newId) {
+      router.push(`/chat/${newId}`)
+    }
+  }
+)
 </script>
 
 <template>

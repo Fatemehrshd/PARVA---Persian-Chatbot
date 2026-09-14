@@ -32,6 +32,8 @@ tags:
     description: Conversations and messages with an AI model
   - name: Admin - Models
     description: Manage AI providers and models (admin only)
+  - name: Users
+    description: Profile, preferences, credentials and avatar of the current user
   - name: OpenAI Compatibility
     description: Standard OpenAI-compatible endpoints for listing active models and completions
 
@@ -110,6 +112,240 @@ paths:
           description: Logged out successfully
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Get the current user's full profile
+      responses:
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    patch:
+      tags: [Users]
+      summary: Update profile fields (displayName / username / bio)
+      description: >
+        Username is normalized to lowercase and must be unique (409 when
+        taken). Avatar upload has its own endpoint (multipart).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileApiResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Username already taken
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/me/preferences:
+    get:
+      tags: [Users]
+      summary: Get the current user's profile (preferences included)
+      responses:
+        '200':
+          description: Profile with preferences
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    put:
+      tags: [Users]
+      summary: Replace user preferences (language, theme, timezone, default model)
+      description: >
+        language: fa|en, theme: light|dark, timezone must be a valid IANA zone,
+        defaultModelId must reference an ACTIVE model. The user's default
+        model is used when starting a conversation without an explicit modelId
+        (resolution chain: explicit -> user default -> platform default).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserPreferencesRequest'
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileApiResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users/me/email:
+    post:
+      tags: [Users]
+      summary: Change email (requires the current password; applies immediately)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeEmailRequest'
+      responses:
+        '200':
+          description: Email changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileApiResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Missing token or wrong current password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Email already in use
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/me/password:
+    post:
+      tags: [Users]
+      summary: Change password (requires the current password)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '201':
+          description: Password changed
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Wrong current password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/me/avatar:
+    post:
+      tags: [Users]
+      summary: Upload/replace avatar (multipart image file, max 2 MB)
+      description: >
+        Field name `file`. Allowed types: image/png, image/jpeg, image/webp.
+        Stored on MinIO; the previous object is deleted. Returns 503 when
+        object storage (MINIO_*) is not configured.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Avatar stored; profile returned with new avatarUrl
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileApiResponse'
+        '400':
+          description: Missing/invalid file (type or size under the limit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: File exceeds the 2 MB limit (rejected by multer before the handler; localized message)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          description: Object storage not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Users]
+      summary: Remove avatar (deletes the stored object)
+      responses:
+        '200':
+          description: Avatar removed; profile returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /static/avatars/{userId}/{filename}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: filename
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Users]
+      summary: Serve a stored avatar from MinIO
+      description: >
+        Public (opaque random-key URLs), streamed image bytes with an
+        immutable-style cache header. Unknown/invalid paths return 404.
+      security: []
+      responses:
+        '200':
+          description: Image bytes
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /chat/conversations:
     get:
@@ -694,6 +930,114 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+          nullable: true
+        username:
+          type: string
+          nullable: true
+          description: Unique lowercase handle ([a-z0-9_]{3,30}).
+        bio:
+          type: string
+          nullable: true
+          maxLength: 500
+        avatarUrl:
+          type: string
+          nullable: true
+          description: Public URL served by GET /static/avatars/{userId}/{file}.
+        role:
+          type: string
+          enum: [user, admin]
+        language:
+          type: string
+          enum: [fa, en]
+        theme:
+          type: string
+          enum: [light, dark]
+        timezone:
+          type: string
+          nullable: true
+          description: IANA timezone name, e.g. Asia/Tehran.
+        defaultModelId:
+          type: string
+          nullable: true
+          description: Preferred chat model (UUID or apiIdentifier); overrides the platform default.
+        createdAt:
+          type: string
+          format: date-time
+
+    UserProfileApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UserProfile'
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        displayName:
+          type: string
+          maxLength: 60
+        username:
+          type: string
+          pattern: "^[a-zA-Z0-9_]{3,30}$"
+          description: Normalized to lowercase server-side; empty string removes it.
+        bio:
+          type: string
+          maxLength: 500
+
+    UserPreferencesRequest:
+      type: object
+      properties:
+        language:
+          type: string
+          enum: [fa, en]
+        theme:
+          type: string
+          enum: [light, dark]
+        timezone:
+          type: string
+          description: IANA zone validated by Intl on the server.
+        defaultModelId:
+          type: string
+          nullable: true
+          description: Model UUID or apiIdentifier of an ACTIVE model; null to clear.
+
+    ChangeEmailRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          description: Current password (re-authentication).
+
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
 
     CreateConversationRequest:
       type: object

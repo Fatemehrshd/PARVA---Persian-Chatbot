@@ -9,9 +9,15 @@ export class UsersService {
     return this.repo.findOne({ where: { email } });
   }
   findById(id: string) {
-    return this.repo.findOne({ where: { id } });
+    return this.repo.findOne({ where: { id } }).catch(() => null);
+  }
+  findByUsername(username: string) {
+    return this.repo.findOne({ where: { username } }).catch(() => null);
   }
   create(data: Partial<User>) {
     return this.repo.save(this.repo.create(data));
+  }
+  save(user: User) {
+    return this.repo.save(user);
   }
 }

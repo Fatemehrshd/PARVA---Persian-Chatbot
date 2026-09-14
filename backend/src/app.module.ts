@@ -7,6 +7,7 @@ import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { ModelsAdminModule } from './modules/models-admin/models-admin.module';
+import { StorageModule } from './modules/storage/storage.module';
 import { User } from './modules/users/user.entity';
 import { Conversation } from './modules/chat/conversation.entity';
 import { Message } from './modules/chat/message.entity';
@@ -24,12 +25,14 @@ import { ResponseEnvelopeInterceptor } from './shared/response-envelope.intercep
       password: process.env.DB_PASS || 'postgres',
       database: process.env.DB_NAME || 'codeless',
       entities: [User, Conversation, Message, AiModel, AiProvider],
+      migrations: [__dirname + '/migrations/*{.ts,.js}'],
       synchronize: (process.env.DB_SYNC ?? 'true') === 'true',
     }),
     UsersModule,
     AuthModule,
     ChatModule,
     ModelsAdminModule,
+    StorageModule,
   ],
   controllers: [AppController],
   providers: [

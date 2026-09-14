@@ -86,3 +86,17 @@
   - Adding a provider is a DB insert with a masked key — no server restart needed (unlike the earlier env-only proposal, superseded here).
   - Two "default" concepts coexist: platform-wide (`AiModel.isDefault`, used by the released frontend) and per-provider (`AiProvider.defaultModelId`). The platform default drives the chat fallback chain.
   - The SSE success wire format (`event: token` / `event: done`) is unchanged; only the failure path and internal chunking differ from v1.0.0.
+
+## ADR-006: User Profile on MinIO, Re-auth Credential Changes, Preference Model (Task 15)
+- **Status**: Accepted
+- **Context**: The product spec asked for a full profile (username/bio/avatar on MinIO), email change with re-verification, password change, a forgot/reset flow, per-user preferences (language/theme/timezone/default model) and a per-user personalization system-prompt layer. During planning the owner decided: **forgot-password/reset is out of scope** (no email infrastructure exists), and **the personalization/prompt-builder layer is deferred** (explicitly "no changes" for now). Personalization endpoints therefore do NOT exist yet; profile/preferences/credentials do.
+- **Decision**:
+  - One `User` row carries profile + preference fields (`username, bio, avatarUrl, avatarKey, language, theme, timezone, defaultModelId`) — no separate entity until personalization lands. Shipped as a hand-written TypeORM **migration** (first one in the repo; `src/data-source.ts` + `migration:run/generate/revert` scripts), while dev continues with `DB_SYNC=true`.
+  - Avatars go **only** to MinIO through a global `StorageService` (`MINIO_*` env). Deliberately **no disk fallback**: if storage is unconfigured, avatar endpoints return 503 — silent disk writes would diverge dev/prod behavior. Replacements/deletes remove the old object (`avatarKey`).
+  - Upload validation before touching storage: mimetype allowlist (png/jpeg/webp) + 2 MB cap (multer limit AND service-level re-check).
+  - Avatar bytes are served by `GET /static/avatars/{userId}/{file}` (public, streamed from MinIO, path-segment regex guard).
+  - Email change: current-password re-auth inside the request + 409 on conflict; applies immediately (no verification link — no mailer exists). Password change: current-password re-auth, bcrypt re-hash. Wrong re-auth → 401.
+  - Preferences: `language∈{fa,en}`, `theme∈{light,dark}`, IANA `timezone` validated via `Intl.DateTimeFormat`, `defaultModelId` must exist AND be active. Chat model resolution becomes **explicit → user default → platform default → echo sentinel**.
+- **Consequences**:
+  - Profile endpoints are JWT-gated by the existing `JwtAuthGuard` via `@CurrentUser()`; the frontend gained nothing yet (all new routes are additive).
+  - When forgot/reset or personalization is later approved, they land as new modules/migrations — nothing here blocks them.

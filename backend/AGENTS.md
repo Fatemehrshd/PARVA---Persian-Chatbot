@@ -13,15 +13,18 @@ This file is specific to working inside `backend/`. Project-wide rules live in [
 backend/
 ├── src/
 │   ├── modules/
-│   │   ├── auth/        ← sign-up, login, JWT
-│   │   ├── chat/        ← conversations, messages, streaming response
-│   │   ├── models/      ← AI model management, setting the default model
-│   │   ├── users/
-│   │   └── ...          ← every new feature = a new, independent module
-│   ├── shared/          ← shared guards, pipes, filters, decorators
-│   ├── config/          ← env configuration
+│   │   ├── auth/          ← sign-up, login, JWT
+│   │   ├── chat/          ← conversations, messages, streaming response (+ /v1 OpenAI-compat facade)
+│   │   ├── ai/            ← OpenAI-compatible forwarder (real provider streaming)
+│   │   ├── models-admin/  ← AI providers + models CRUD, defaults, public GET /models
+│   │   ├── users/         ← profile, preferences, credentials, avatar endpoints
+│   │   ├── storage/       ← MinIO object storage (avatars; MINIO_* env)
+│   │   └── ...            ← every new feature = a new, independent module
+│   ├── migrations/        ← TypeORM migrations (production schema path; dev uses DB_SYNC)
+│   ├── data-source.ts     ← DataSource for the typeorm CLI (migration:run/generate)
+│   ├── shared/            ← shared guards, pipes, filters, decorators, FA messages
 │   └── main.ts
-├── test/                ← e2e tests
+├── test/                  ← jest specs (fakes at repo/service boundaries)
 ├── .env.example
 └── package.json
 ```
@@ -30,7 +33,10 @@ Every module should be **self-contained** (controller + service + entity + dto +
 
 ## Conventions
 
-- Sensitive config (DB connection, JWT secret) comes only from env — never hardcoded.
+- Sensitive config (DB connection, JWT secret, MinIO credentials) comes only from env — never hardcoded. Provider **API keys for chat** are stored in the database (masked on every read); the only env-level AI fallback is `OPENAI_API_KEY`/`OPENAI_BASE_URL`.
+- User-uploaded files go to **MinIO** via `StorageService` (`MINIO_*` env). No disk fallback: unconfigured storage must answer **503** honestly. Enforce type/size limits before touching storage; delete replaced/removed objects.
+- All DTO validation errors use the centralized Persian messages in `src/shared/messages.fa.ts`.
+- Schema changes: update the entity AND add a file under `src/migrations/` (`npm run migration:generate -d src/data-source.ts`, or hand-write SQL like the existing ones so dev `DB_SYNC=true` and prod migrations stay in sync).
 - The chat response must be designed for **streaming** (SSE or chunked HTTP) from the start, not patched onto a synchronous response later.
 
 ## Testing

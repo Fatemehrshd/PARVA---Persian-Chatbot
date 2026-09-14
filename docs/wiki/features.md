@@ -121,50 +121,9 @@
 - **Hardening**: `/v1/models` + `/v1/chat/completions` now require a bearer token (they can spend real credits) and forward to real models (unknown model → 404).
 - **Contract**: `api-contract.yaml` → 0.5.0. **Tests**: 74 backend tests passing (44 pre-existing kept green + 30 new).
 
-## Task 15: Dynamic Text Direction & Language Detection (RTL/LTR)
-- **Dedicated Text Direction Utility (`getTextDirection`)**:
-  - Implemented in `src/utils/textDirection.ts` and re-exported in `src/lib/utils.ts`.
-  - Automatically identifies Persian/Arabic unicode ranges (`\u0600-\u06FF`, `\u0750-\u077F`, `\u08A0-\u08FF`, `\uFB50-\uFDFF`, `\uFE70-\uFEFF`, including specific Persian glyphs `گ`, `چ`, `پ`, `ژ`, `ک`, `ی`).
-  - Filters out punctuation, numbers, emojis, and Markdown prefixes (`-`, `*`, `1.`, `>`, backticks) to inspect the primary character stream.
-  - Returns `'rtl'` for Persian messages and `'ltr'` for English/Latin messages.
-- **Message Bubble Dynamic Direction**:
-  - `MessageBubble.vue`: Evaluates `textDirection` and binds `:dir="textDirection"` and `:class="textDirection"` to the message bubble, applying `text-align: right; direction: rtl;` for Persian and `text-align: left; direction: ltr;` for English.
-  - `MessageList.vue`: The live streaming bubble evaluates `streamingDirection` based on incoming tokens, ensuring real-time alignment according to the response language.
-  - `ChatComposer.vue`: The message input textarea adapts direction on the fly as the user types in Persian or English.
-- **Verification**:
-  - 100% test pass rate: 61 frontend unit tests passing across 13 test suites (`npm run test:unit`).
-  - Production build verified with zero errors (`npm run build`).
-
-## Task 16: Field-Level Validation Feedback & Minimalist Navigation & Sidebar UI
-- **Field-Level Form Validation Errors**:
-  - `LoginView.vue`: Displays field-specific error messages directly beneath the corresponding input fields (`displayName`, `email`, `password`) with alert icons, red borders, and error focus rings.
-  - Errors clear dynamically as the user modifies the respective input field (`@input`), and reset upon switching authentication tabs (Sign In / Register).
-  - Maintained global toast notifications and top error banners for overall submission feedback.
-- **Minimalist UI Refinement for Header & Sidebar**:
-  - **AppHeader.vue**: Softened bottom border to a subtle hairline divider (`1px solid rgba(140, 140, 160, 0.12)`), converted admin panel link and icon buttons to sleek ghost buttons, and upgraded user profile display to a clean pill badge.
-  - **AppSidebar.vue**: Reduced visual clutter and nested boxes:
-    - Softened sidebar border to hairline divider.
-    - Updated `.new-chat-btn` and `.chat-item` to clean, modern rounded elements with smooth hover effects.
-    - Removed heavy boxes and borders from `.action-chat-btn` (edit/delete) and `.user-card`.
-    - Transformed `.logout-footer-btn` into a sleek ghost button with soft destructive hover highlights.
-- **Verification**:
-  - 100% test pass rate: 84 backend tests and 62 frontend tests passing (146 total).
-
-## Task 17: Pragmatic Connection Resilience, Online/Offline Monitoring, and Stream Recovery
-- **Backend Mid-Stream & Disconnect Persistence**:
-  - `chat.service.ts`: Implemented a `try ... finally` persistence guarantee in `generate()`, ensuring that any accumulated assistant reply is saved to PostgreSQL even if the stream is aborted or the browser client closes/refreshes the tab.
-  - `chat.controller.ts`: Added safe socket disconnect handling (`req.on('close')` and write-guarding) so client drops do not crash the stream process and allow partial persistence.
-- **Click-to-Stop & Network Abort**:
-  - `useChatStore`: Integrated browser-native `AbortController` to immediately terminate the ongoing `fetch` stream upon user cancellation, conversation switching, or new conversation creation.
-  - `ChatComposer.vue` & `MessageList.vue`: Added borderless, sleek stop controls (`.btn-stop` and `.stop-stream-btn`) with smooth hover states, halting AI token generation instantly without wasting bandwidth or tokens.
-- **Frontend Network Resilience**:
-  - `uiStore`: Added reactive `isOnline` state and `initNetworkListeners()` for browser `online`/`offline` events.
-  - `NetworkStatusBanner.vue`: Clean, minimal warning banner rendered at the top of the chat during internet disconnects, featuring an interactive "تلاش مجدد" (Retry) button that reconnects and refreshes the active conversation.
-- **Stream Interruption Recovery**:
-  - `chatStore`: Added `lastUserPrompt` tracking, `retryLastMessage()`, and `continueLastMessage()`.
-  - `MessageBubble.vue`: Renders compact "تلاش مجدد" (Retry) and "ادامه پاسخ" (Continue) action buttons underneath interrupted or error assistant messages.
-- **Verification**:
-  - 100% test pass rate: 84 backend tests and 64 frontend tests passing cleanly (148/148 total).
-  - 100% test pass rate: 84 backend tests and 65 frontend tests passing cleanly (149/149 total).
-
-
+## Task 15: User Profile, MinIO Avatars, Credentials & Preferences (backend only)
+- **Profile endpoints**: `GET/PATCH /users/me` — `displayName`, unique lowercased `username` (409 on conflict), `bio`. The `User` entity gained `username, bio, avatarUrl, avatarKey, language, theme, timezone, defaultModelId`, shipped via a dedicated TypeORM migration (`src/migrations/…AddUserProfileAndPreferences.ts`, run with `npm run migration:run`; local dev still auto-syncs with `DB_SYNC=true`).
+- **Avatars on MinIO** (new `StorageModule` + `minio` dependency): `POST /users/me/avatar` (multipart field `file`; only `image/png|jpeg|webp`; ≤ 2 MB; replaces + deletes the previous object), `DELETE /users/me/avatar`. Files are served publicly at `GET /static/avatars/{userId}/{file}` (opaque random keys, streamed from MinIO). Without `MINIO_*` env, upload endpoints return **503** — no silent disk fallback.
+- **Credential changes with re-auth**: `POST /users/me/email` (requires the current password → 401 if wrong; 409 if the email exists; applies immediately) and `POST /users/me/password` (requires current password; bcrypt re-hash). No forgot-password/reset flow (product decision).
+- **Preferences**: `GET/PUT /users/me/preferences` — `language` (fa/en), `theme` (light|dark), IANA `timezone` (validated via `Intl`), and `defaultModelId` (must be an active model). Chat now resolves the model as **explicit → user default → platform default → echo sentinel**.
+- **Contract**: new `Users` tag + 7 paths in `api-contract.yaml`. **Tests**: 95 backend tests passing (11 new in `profile.spec.ts`; all previous green). Frontend untouched.

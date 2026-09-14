@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Conversation } from './conversation.entity';
 import { Message } from './message.entity';
 import { ModelsAdminService } from '../models-admin/models-admin.service';
+import { UsersService } from '../users/users.service';
 import { OpenAiCompatForwarder, ChatMessage } from '../ai/openai-compat.forwarder';
 
 export interface ChatChunk {
@@ -22,6 +23,7 @@ export class ChatService {
     @InjectRepository(Conversation) private conv: Repository<Conversation>,
     @InjectRepository(Message) private msg: Repository<Message>,
     private models: ModelsAdminService,
+    private users: UsersService,
     private forwarder: OpenAiCompatForwarder,
   ) {}
 
@@ -37,7 +39,14 @@ export class ChatService {
         throw new BadRequestException('Selected AI model is currently disabled');
       }
     } else {
-      mid = (await this.models.getDefault())?.id ?? 'default-model';
+      // Resolution chain: the user's preferred default model, then the
+      // platform default, then the legacy sentinel (offline echo path).
+      const userDefault = (await this.users.findById(userId))?.defaultModelId;
+      if (userDefault) {
+        const m = await this.models.getRawById(userDefault);
+        if (m && m.isActive !== false) mid = m.id;
+      }
+      mid = mid ?? (await this.models.getDefault())?.id ?? 'default-model';
     }
     const c = await this.conv.save(
       this.conv.create({ userId, modelId: mid, title: title ?? 'New conversation' }),

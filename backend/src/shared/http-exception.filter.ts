@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { FA } from './messages.fa';
 
 /**
  * Global exception filter that produces the contract-shaped error envelope:
@@ -37,6 +38,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
         message = (obj.message as string | string[]) ?? exception.message;
         error = (obj.error as string) ?? HttpStatus[status] ?? 'Error';
       }
+      // multer's raw English message is localized centrally:
+      if (status === HttpStatus.PAYLOAD_TOO_LARGE) message = FA.fileTooLarge;
     } else if ((exception as any)?.code === '22P02') {
       status = HttpStatus.NOT_FOUND;
       message = 'Resource not found';

@@ -19,9 +19,9 @@ describe('OpenAiCompatForwarder.resolveTarget', () => {
     expect(f.resolveTarget(null, null)).toBeNull(); // nothing -> offline echo path
 
     expect(f.resolveTarget({ apiKey: 'model-key' } as any, null)!.apiKey).toBe('model-key');
-    expect(
-      f.resolveTarget({} as any, { apiKey: 'provider-key' } as any)!.apiKey,
-    ).toBe('provider-key');
+    expect(f.resolveTarget({} as any, { apiKey: 'provider-key' } as any)!.apiKey).toBe(
+      'provider-key',
+    );
 
     process.env.OPENAI_API_KEY = 'global-key';
     expect(f.resolveTarget({} as any, {} as any)!.apiKey).toBe('global-key');
@@ -33,9 +33,12 @@ describe('OpenAiCompatForwarder.resolveTarget', () => {
     process.env.OPENAI_API_KEY = 'k';
     expect(f.resolveTarget({} as any, {} as any)!.baseUrl).toBe('https://api.openai.com/v1');
     expect(
-      f.resolveTarget({ baseUrl: 'http://model/' } as any, { baseUrl: 'http://prov/' } as any)!.baseUrl,
+      f.resolveTarget({ baseUrl: 'http://model/' } as any, { baseUrl: 'http://prov/' } as any)!
+        .baseUrl,
     ).toBe('http://model');
-    expect(f.resolveTarget({} as any, { baseUrl: 'http://prov' } as any)!.baseUrl).toBe('http://prov');
+    expect(f.resolveTarget({} as any, { baseUrl: 'http://prov' } as any)!.baseUrl).toBe(
+      'http://prov',
+    );
     process.env.OPENAI_BASE_URL = 'http://env-base';
     expect(f.resolveTarget({} as any, {} as any)!.baseUrl).toBe('http://env-base');
   });
@@ -90,7 +93,11 @@ describe('OpenAiCompatForwarder.stream', () => {
   });
 
   it('rejects with BadGateway on a non-2xx upstream response', async () => {
-    global.fetch = (async () => ({ ok: false, status: 429, text: async () => 'rate limited' })) as any;
+    global.fetch = (async () => ({
+      ok: false,
+      status: 429,
+      text: async () => 'rate limited',
+    })) as any;
     const f = new OpenAiCompatForwarder();
     await expect(
       collect(f.stream({ apiIdentifier: 'gpt-4o', apiKey: 'sk-1', baseUrl: 'http://x' }, [])),

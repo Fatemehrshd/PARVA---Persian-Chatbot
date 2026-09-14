@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  NestInterceptor,
-  ExecutionContext,
-  CallHandler,
-} from '@nestjs/common';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import type { Response, Request } from 'express';
@@ -15,13 +10,11 @@ export interface ApiResponseEnvelope<T = any> {
 }
 
 @Injectable()
-export class ResponseEnvelopeInterceptor<T>
-  implements NestInterceptor<T, ApiResponseEnvelope<T> | T>
-{
-  intercept(
-    context: ExecutionContext,
-    next: CallHandler,
-  ): Observable<ApiResponseEnvelope<T> | T> {
+export class ResponseEnvelopeInterceptor<T> implements NestInterceptor<
+  T,
+  ApiResponseEnvelope<T> | T
+> {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<ApiResponseEnvelope<T> | T> {
     const http = context.switchToHttp();
     const res = http.getResponse<Response>();
     const req = http.getRequest<Request>();
@@ -42,7 +35,13 @@ export class ResponseEnvelopeInterceptor<T>
     return next.handle().pipe(
       map((data) => {
         // Skip modifying 204 No Content responses
-        if (res.statusCode === 204 || (data === undefined && res.statusCode >= 200 && res.statusCode < 300 && req.method === 'DELETE')) {
+        if (
+          res.statusCode === 204 ||
+          (data === undefined &&
+            res.statusCode >= 200 &&
+            res.statusCode < 300 &&
+            req.method === 'DELETE')
+        ) {
           return data;
         }
 
@@ -66,4 +65,3 @@ export class ResponseEnvelopeInterceptor<T>
     );
   }
 }
-

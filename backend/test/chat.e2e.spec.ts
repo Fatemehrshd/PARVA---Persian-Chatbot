@@ -33,12 +33,7 @@ describe('Chat (behavior)', () => {
   });
   it('history of unknown conversation -> 404', async () => {
     const conv: any = { findOne: async () => null };
-    const s = new ChatService(
-      conv,
-      { find: async () => [] } as any,
-      {} as any,
-      {} as any,
-    );
+    const s = new ChatService(conv, { find: async () => [] } as any, {} as any, {} as any);
     await expect(s.history('u1', 'nope')).rejects.toThrow('Resource not found');
   });
 });

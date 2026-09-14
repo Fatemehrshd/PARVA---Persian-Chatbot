@@ -14,21 +14,10 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { IsString, IsOptional, MinLength } from 'class-validator';
 import type { Response, Request } from 'express';
 import { ChatService } from './chat.service';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
-class CreateConvDto {
-  @IsOptional() @IsString() modelId?: string;
-  @IsOptional() @IsString() title?: string;
-}
-class UpdateConvDto {
-  @IsOptional() @IsString() @MinLength(1) title?: string;
-  @IsOptional() @IsString() @MinLength(1) modelId?: string;
-}
-class SendMsgDto {
-  @IsString() @MinLength(1) content: string;
-}
+import { CreateConvDto, UpdateConvDto, SendMsgDto } from './dto';
 @UseGuards(JwtAuthGuard)
 @Controller('chat/conversations')
 export class ChatController {
@@ -44,13 +33,9 @@ export class ChatController {
   }
   @Patch(':id')
   @UsePipes(new ValidationPipe({ whitelist: true }))
-  async update(
-    @Req() req: any,
-    @Param('id') id: string,
-    @Body() d: UpdateConvDto,
-  ) {
+  async update(@Req() req: any, @Param('id') id: string, @Body() d: UpdateConvDto) {
     if (!d.title && !d.modelId) {
-      throw new BadRequestException('At least one of title or modelId is required');
+      throw new BadRequestException('حداقل یکی از عنوان یا شناسه مدل باید ارسال شود');
     }
     let result;
     if (d.title) result = await this.chat.updateTitle(req.user.sub, id, d.title);

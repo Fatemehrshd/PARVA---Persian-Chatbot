@@ -7,6 +7,7 @@ import { ModelsAdminService } from '../models-admin/models-admin.service';
 import { OpenAiCompatForwarder, ChatMessage } from '../ai/openai-compat.forwarder';
 import { SettingsService } from '../admin/settings.service';
 import { UsersService } from '../users/users.service';
+import { ActiveStreamService, ActiveStreamStatus } from './active-stream.service';
 
 export interface ChatChunk {
   token?: string;
@@ -29,6 +30,7 @@ export class ChatService {
     private forwarder: OpenAiCompatForwarder,
     @Optional() private settings?: SettingsService,
     @Optional() private users?: UsersService,
+    @Optional() private activeStream?: ActiveStreamService,
   ) {}
 
   list(userId: string) {

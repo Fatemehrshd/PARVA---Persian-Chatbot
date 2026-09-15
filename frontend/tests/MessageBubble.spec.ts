@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import MessageBubble from '../src/components/chat/MessageBubble.vue'
+import { useAuthStore } from '../src/stores/auth'
 import type { Message } from '../src/types'
 
 describe('MessageBubble.vue', () => {
@@ -44,6 +45,28 @@ describe('MessageBubble.vue', () => {
     expect(wrapper.find('.bubble-assistant').exists()).toBe(true)
     expect(wrapper.find('.copy-button').exists()).toBe(true)
     expect(wrapper.text()).toContain('Yes, absolutely!')
+  })
+
+  it('renders the saved user avatar beside a user message', () => {
+    const authStore = useAuthStore()
+    authStore.user = {
+      id: 'u-1',
+      email: 'user@example.com',
+      displayName: 'User',
+      avatarUrl: 'https://cdn.example/avatar.png',
+      role: 'user',
+    }
+    const userMessage: Message = {
+      id: 'm-user-avatar',
+      conversationId: 'c-1',
+      role: 'user',
+      content: 'With avatar',
+      createdAt: new Date().toISOString(),
+    }
+
+    const wrapper = mount(MessageBubble, { props: { message: userMessage } })
+
+    expect(wrapper.find('.user-avatar-image').attributes('src')).toBe('https://cdn.example/avatar.png')
   })
 
   it('applies rtl class and dir="rtl" for Persian message content', () => {

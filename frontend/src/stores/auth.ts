@@ -23,11 +23,16 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('refreshToken', newRefreshToken)
   }
 
+  function updateUser(updatedUser: User) {
+    user.value = updatedUser
+    localStorage.setItem('user', JSON.stringify(updatedUser))
+  }
+
   async function login(email: string, password: string): Promise<boolean> {
     loading.value = true
     error.value = null
     try {
-      const response = await authService.login(email, password)
+      const response = await authService.login(email.trim().toLowerCase(), password)
       setSession(response.user, response.accessToken, response.refreshToken)
       return true
     } catch (err: any) {
@@ -93,6 +98,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAdmin,
     login,
     signup,
-    logout
+    logout,
+    updateUser,
   }
 })

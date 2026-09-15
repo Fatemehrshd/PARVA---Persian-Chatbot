@@ -76,12 +76,13 @@ export class ProfileService {
   /** Email change requires re-authentication with the CURRENT password; applies immediately. */
   async changeEmail(userId: string, d: ChangeEmailDto) {
     const u = await this.mustFind(userId);
+    const normalizedEmail = d.email.trim().toLowerCase();
     if (!(await bcrypt.compare(d.password, u.passwordHash)))
       throw new UnauthorizedException('رمز عبور فعلی نادرست است');
-    const taken = await this.users.findByEmail(d.email);
+    const taken = await this.users.findByEmail(normalizedEmail);
     if (taken && taken.id !== u.id)
       throw new ConflictException('Email is already registered');
-    u.email = d.email;
+    u.email = normalizedEmail;
     await this.users.save(u);
     return this.toProfileJson(u);
   }

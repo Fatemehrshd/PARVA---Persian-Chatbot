@@ -67,7 +67,8 @@ function copyContent() {
       ]"
     >
       <template v-if="isUser">
-        {{ userInitial }}
+        <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="user-avatar-image" />
+        <span v-else>{{ userInitial }}</span>
       </template>
       <template v-else>
         <!-- AI Icon -->
@@ -165,6 +166,13 @@ function copyContent() {
 .avatar-user {
   background: linear-gradient(135deg, var(--primary), #818cf8);
   color: #ffffff;
+}
+
+.user-avatar-image {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .avatar-assistant {

@@ -14,6 +14,7 @@ const uiStore = useUiStore()
 
 const emit = defineEmits<{
   close: []
+  openProfile: []
   openSettings: []
   openAdminPanel: []
   openLogout: []
@@ -26,7 +27,7 @@ const isRtl = () => uiStore.direction === 'rtl'
   <Transition name="profile-menu">
     <div class="profile-menu-panel" role="menu" aria-label="Profile menu">
       <!-- Profile -->
-      <button class="menu-item" role="menuitem" @click="emit('close')">
+      <button class="menu-item" role="menuitem" @click="emit('openProfile')">
         <User :size="15" class="menu-icon" />
         <span>{{ isRtl() ? 'نمایه' : 'Profile' }}</span>
       </button>

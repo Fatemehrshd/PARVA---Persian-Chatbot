@@ -24,6 +24,7 @@ import EditConversationModal from '../chat/EditConversationModal.vue'
 import DeleteConversationModal from '../chat/DeleteConversationModal.vue'
 import LogoutModal from '../auth/LogoutModal.vue'
 import SearchModal from '../chat/SearchModal.vue'
+import ProfileModal from './ProfileModal.vue'
 import type { Conversation } from '../../types'
 
 const router = useRouter()
@@ -41,6 +42,7 @@ const isDeleteModalOpen = ref(false)
 
 const isLogoutModalOpen = ref(false)
 const isSearchModalOpen = ref(false)
+const isProfileModalOpen = ref(false)
 const profileMenuOpen = ref(false)
 
 const isRtl = computed(() => uiStore.direction === 'rtl')
@@ -136,6 +138,11 @@ onBeforeUnmount(() => document.removeEventListener('click', handleDocumentClick,
 
 function openSettings() {
   uiStore.openSettings()
+  profileMenuOpen.value = false
+}
+
+function openProfile() {
+  isProfileModalOpen.value = true
   profileMenuOpen.value = false
 }
 
@@ -273,6 +280,7 @@ const userInitial = computed(() => {
           <ProfileMenu
             v-if="profileMenuOpen"
             @close="profileMenuOpen = false"
+            @open-profile="openProfile"
             @open-settings="openSettings"
             @open-admin-panel="openAdminPanel"
             @open-logout="openLogoutModal"
@@ -284,7 +292,8 @@ const userInitial = computed(() => {
             :class="{ 'is-open': profileMenuOpen }"
             @click="toggleProfileMenu"
           >
-            <div class="sb-avatar">{{ userInitial }}</div>
+            <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="sb-avatar sb-avatar-image" />
+            <div v-else class="sb-avatar">{{ userInitial }}</div>
             <div class="sb-user-info">
               <span class="sb-user-name">{{ authStore.user?.displayName || authStore.user?.email }}</span>
               <span v-if="authStore.isAdmin" class="sb-user-role">Admin</span>
@@ -365,6 +374,7 @@ const userInitial = computed(() => {
         <div v-if="profileMenuOpen" class="sb-collapsed-menu-wrapper">
           <ProfileMenu
             @close="profileMenuOpen = false"
+            @open-profile="openProfile"
             @open-settings="openSettings"
             @open-admin-panel="openAdminPanel"
             @open-logout="openLogoutModal"
@@ -376,7 +386,8 @@ const userInitial = computed(() => {
           @click="toggleProfileMenu"
           :title="authStore.user?.displayName || 'Profile'"
         >
-          <div class="sb-avatar">{{ userInitial }}</div>
+          <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="sb-avatar sb-avatar-image" />
+          <div v-else class="sb-avatar">{{ userInitial }}</div>
         </button>
       </div>
     </div>
@@ -404,6 +415,10 @@ const userInitial = computed(() => {
   <SearchModal
     :is-open="isSearchModalOpen"
     @close="isSearchModalOpen = false"
+  />
+  <ProfileModal
+    :is-open="isProfileModalOpen"
+    @close="isProfileModalOpen = false"
   />
 </template>
 
@@ -755,6 +770,10 @@ const userInitial = computed(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+.sb-avatar-image {
+  object-fit: cover;
 }
 
 .sb-user-info {

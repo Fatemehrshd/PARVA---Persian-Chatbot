@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed (backend)
+- **User profile slimmed down (product decision).** The `users` table columns `language`, `theme`, `timezone`, `defaultModelId` and `bio` are dropped (migration `1761000000000-DropUserProfileAndPreferences`), and `GET/PUT /users/me/preferences` is removed. `GET/PATCH /users/me` now cover only `displayName` + `username`; avatars on MinIO, email/password change with current-password re-auth, and the unique-lowercase username logic are unchanged. Chat model resolution reverts to **explicit → platform default** (no per-user default). `api-contract.yaml` updated accordingly (Users tag without preferences paths).
+
 ### Added
 - **ChatGPT-Style Chat Layout Refactoring**:
   - Refactored message layout to a linear turn-based format: user prompt anchored cleanly at the top of each turn with user avatar; assistant response positioned directly underneath the user prompt across the full reading width (`max-w-3xl` / `max-w-4xl`).

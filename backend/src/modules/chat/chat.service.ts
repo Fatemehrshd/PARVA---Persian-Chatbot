@@ -4,7 +4,6 @@ import { Repository } from 'typeorm';
 import { Conversation } from './conversation.entity';
 import { Message } from './message.entity';
 import { ModelsAdminService } from '../models-admin/models-admin.service';
-import { UsersService } from '../users/users.service';
 import { OpenAiCompatForwarder, ChatMessage } from '../ai/openai-compat.forwarder';
 import { ActiveStreamService, ActiveStreamStatus } from './active-stream.service';
 
@@ -26,7 +25,6 @@ export class ChatService {
     @InjectRepository(Conversation) private conv: Repository<Conversation>,
     @InjectRepository(Message) private msg: Repository<Message>,
     private models: ModelsAdminService,
-    private users: UsersService,
     private forwarder: OpenAiCompatForwarder,
     @Optional() private activeStream?: ActiveStreamService,
   ) {
@@ -66,14 +64,9 @@ export class ChatService {
         throw new BadRequestException('Selected AI model is currently disabled');
       }
     } else {
-      // Resolution chain: the user's preferred default model, then the
-      // platform default, then the legacy sentinel (offline echo path).
-      const userDefault = (await this.users.findById(userId))?.defaultModelId;
-      if (userDefault) {
-        const m = await this.models.getRawById(userDefault);
-        if (m && m.isActive !== false) mid = m.id;
-      }
-      mid = mid ?? (await this.models.getDefault())?.id ?? 'default-model';
+      // Resolution chain: platform default, then the legacy sentinel
+      // (offline echo path).
+      mid = (await this.models.getDefault())?.id ?? 'default-model';
     }
     const c = await this.conv.save(
       this.conv.create({ userId, modelId: mid, title: title ?? 'New conversation' }),
@@ -236,6 +229,11 @@ export class ChatService {
           stoppedByUser: false,
         }),
       );
+      const consumedTokens = Math.ceil((content.length + full.length) / 4);
+      if (typeof this.users?.incrementUsedTokens === 'function') {
+        await this.users.incrementUsedTokens(userId, consumedTokens);
+      }
+
       if (titlePromise) {
         const genTitle = await titlePromise;
         if (genTitle) {
@@ -256,8 +254,11 @@ export class ChatService {
       order: { createdAt: 'ASC' },
       take: HISTORY_LIMIT,
     });
+    const activeSystemPrompt = this.settings
+      ? await this.settings.getSystemPrompt()
+      : SYSTEM_PROMPT;
     const messages: ChatMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: activeSystemPrompt },
       ...history.map((m) => ({ role: m.role, content: m.content })),
     ];
 

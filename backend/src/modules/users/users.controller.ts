@@ -8,7 +8,6 @@ import {
   Param,
   Patch,
   Post,
-  Put,
   Res,
   UploadedFile,
   UseGuards,
@@ -22,12 +21,7 @@ import { MAX_AVATAR_BYTES } from './profile.service';
 import { StorageService } from '../storage/storage.service';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { CurrentUser } from '../../shared/current-user.decorator';
-import {
-  UpdateProfileDto,
-  UpdatePreferencesDto,
-  ChangeEmailDto,
-  ChangePasswordDto,
-} from './dto';
+import { UpdateProfileDto, ChangeEmailDto, ChangePasswordDto } from './dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('users/me')
@@ -42,16 +36,6 @@ export class UsersController {
   @Patch()
   updateProfile(@CurrentUser() user: any, @Body() d: UpdateProfileDto) {
     return this.profile.updateProfile(user.sub, d);
-  }
-
-  @Get('preferences')
-  getPreferences(@CurrentUser() user: any) {
-    return this.profile.getProfile(user.sub);
-  }
-
-  @Put('preferences')
-  updatePreferences(@CurrentUser() user: any, @Body() d: UpdatePreferencesDto) {
-    return this.profile.updatePreferences(user.sub, d);
   }
 
   @Post('email')
@@ -89,7 +73,6 @@ export class UsersController {
 @Controller('static/avatars')
 export class AvatarsStaticController {
   constructor(private storage: StorageService) {}
-
   @Get(':userId/:file')
   async serve(@Param('userId') userId: string, @Param('file') file: string, @Res() res: Response) {
     // path-traversal guard: only clean single path segments are accepted

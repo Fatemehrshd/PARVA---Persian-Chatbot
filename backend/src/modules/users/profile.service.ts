@@ -9,10 +9,8 @@ import bcrypt from 'bcryptjs';
 import { User } from './user.entity';
 import { UsersService } from './users.service';
 import { StorageService } from '../storage/storage.service';
-import { ModelsAdminService } from '../models-admin/models-admin.service';
 import {
   UpdateProfileDto,
-  UpdatePreferencesDto,
   ChangeEmailDto,
   ChangePasswordDto,
 } from './dto';
@@ -31,7 +29,6 @@ export class ProfileService {
   constructor(
     private users: UsersService,
     private storage: StorageService,
-    private models: ModelsAdminService,
   ) {}
 
   private async mustFind(id: string): Promise<User> {
@@ -46,13 +43,8 @@ export class ProfileService {
       email: u.email,
       displayName: u.displayName ?? null,
       username: u.username ?? null,
-      bio: u.bio ?? null,
       avatarUrl: u.avatarUrl ?? null,
       role: u.role,
-      language: u.language,
-      theme: u.theme,
-      timezone: u.timezone ?? null,
-      defaultModelId: u.defaultModelId ?? null,
       createdAt: u.createdAt,
     };
   }
@@ -64,7 +56,6 @@ export class ProfileService {
   async updateProfile(userId: string, d: UpdateProfileDto) {
     const u = await this.mustFind(userId);
     if (d.displayName !== undefined) u.displayName = d.displayName || null;
-    if (d.bio !== undefined) u.bio = d.bio || null;
     if (d.username !== undefined) {
       const uname = (d.username || '').toLowerCase();
       if (uname) {
@@ -78,28 +69,6 @@ export class ProfileService {
       }
       u.username = uname || null;
     }
-    await this.users.save(u);
-    return this.toProfileJson(u);
-  }
-
-  async updatePreferences(userId: string, d: UpdatePreferencesDto) {
-    const u = await this.mustFind(userId);
-    if (d.timezone) {
-      try {
-        new Intl.DateTimeFormat('en', { timeZone: d.timezone });
-      } catch {
-        throw new BadRequestException('منطقه زمانی نامعتبر است (مثال: Asia/Tehran)');
-      }
-    }
-    if (d.defaultModelId) {
-      const m = await this.models.getRawById(d.defaultModelId);
-      if (!m || m.isActive === false)
-        throw new BadRequestException('مدل پیش‌فرض انتخابی موجود یا فعال نیست');
-    }
-    if (d.language !== undefined) u.language = d.language;
-    if (d.theme !== undefined) u.theme = d.theme;
-    if (d.timezone !== undefined) u.timezone = d.timezone || null;
-    if (d.defaultModelId !== undefined) u.defaultModelId = d.defaultModelId || null;
     await this.users.save(u);
     return this.toProfileJson(u);
   }

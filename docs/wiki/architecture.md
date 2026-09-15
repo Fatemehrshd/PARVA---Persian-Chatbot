@@ -40,7 +40,7 @@ backend/src/
 └── modules/
     ├── auth/                      ← signup/login/logout
     ├── users/                     ← User entity + UsersService + ProfileService/Controller
-    │                                 (GET/PATCH /users/me, preferences, email/password change, avatar)
+    │                                 (GET/PATCH /users/me, email/password change, avatar)
     ├── storage/                   ← StorageService: MinIO put/get/remove (global module)
     ├── chat/                      ← Conversation, Message, ChatService.generate (streaming),
     │                                 ChatController (SSE + JSON), OpenAiCompatController (/v1/*, JWT-protected)

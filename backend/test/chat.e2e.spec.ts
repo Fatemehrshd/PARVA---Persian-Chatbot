@@ -18,10 +18,9 @@ describe('Chat (behavior)', () => {
       getDefault: async () => ({ id: 'model1' }),
       resolveProvider: async () => null,
     };
-    const users: any = { findById: async () => null };
     // No credential anywhere -> offline echo fallback path.
     const forwarder: OpenAiCompatForwarder = { resolveTarget: () => null } as any;
-    const s = new ChatService(conv, msg, models, users, forwarder);
+    const s = new ChatService(conv, msg, models, forwarder);
     let reply = '';
     let m: any;
     for await (const c of s.generate('u1', 'c1', 'hello')) {
@@ -34,13 +33,7 @@ describe('Chat (behavior)', () => {
   });
   it('history of unknown conversation -> 404', async () => {
     const conv: any = { findOne: async () => null };
-    const s = new ChatService(
-      conv,
-      { find: async () => [] } as any,
-      {} as any,
-      {} as any,
-      {} as any,
-    );
+    const s = new ChatService(conv, { find: async () => [] } as any, {} as any, {} as any);
     await expect(s.history('u1', 'nope')).rejects.toThrow('Resource not found');
   });
 
@@ -60,7 +53,7 @@ describe('Chat (behavior)', () => {
         return 5;
       },
     };
-    const s = new ChatService(conv, msg, { getDefault: async () => ({ id: 'm1' }) } as any, { findById: async () => null } as any, {} as any);
+    const s = new ChatService(conv, msg, { getDefault: async () => ({ id: 'm1' }) } as any, {} as any);
     const result = await s.create('u1');
     expect(result.id).toBe('conv-empty-1');
     expect(conv.create).not.toHaveBeenCalled();
@@ -98,7 +91,7 @@ describe('Chat (behavior)', () => {
     const msg: any = {
       createQueryBuilder: jest.fn(() => mockQueryBuilderMsg),
     };
-    const s = new ChatService(conv, msg, {} as any, {} as any, {} as any);
+    const s = new ChatService(conv, msg, {} as any, {} as any);
     const results = await s.search('u1', 'hooks');
     expect(results).toHaveLength(2);
     expect(results[0].id).toBe('c1');
@@ -131,7 +124,6 @@ describe('Chat (behavior)', () => {
       getDefault: async () => ({ id: 'model1' }),
       resolveProvider: async () => null,
     };
-    const users: any = { findById: async () => null };
     const forwarder: any = {
       resolveTarget: () => ({ apiIdentifier: 'gpt-4o', apiKey: 'test', baseUrl: 'http://ai' }),
       stream: async function* () {
@@ -141,7 +133,7 @@ describe('Chat (behavior)', () => {
       complete: async () => 'راهنمای برنامه‌نویسی پایتون',
     };
 
-    const s = new ChatService(conv, msg, models, users, forwarder);
+    const s = new ChatService(conv, msg, models, forwarder);
     let titleEmitted = '';
     for await (const chunk of s.generate('u1', 'c-new', 'چگونه پایتون یاد بگیرم؟')) {
       if (chunk.title) titleEmitted = chunk.title;

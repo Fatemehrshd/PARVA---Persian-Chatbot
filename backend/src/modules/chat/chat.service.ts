@@ -6,6 +6,7 @@ import { Message } from './message.entity';
 import { ModelsAdminService } from '../models-admin/models-admin.service';
 import { OpenAiCompatForwarder, ChatMessage } from '../ai/openai-compat.forwarder';
 import { SettingsService } from '../admin/settings.service';
+import { UsersService } from '../users/users.service';
 
 export interface ChatChunk {
   token?: string;
@@ -26,6 +27,7 @@ export class ChatService {
     private models: ModelsAdminService,
     private forwarder: OpenAiCompatForwarder,
     @Optional() private settings?: SettingsService,
+    @Optional() private users?: UsersService,
   ) {}
 
   list(userId: string) {

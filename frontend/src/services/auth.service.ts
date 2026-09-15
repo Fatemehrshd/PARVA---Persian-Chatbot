@@ -27,7 +27,7 @@ export const authService = {
    * POST /auth/login
    */
   async login(email: string, password: string): Promise<AuthResponse> {
-    const payload: LoginRequest = { email, password }
+    const payload: LoginRequest = { email: email.trim().toLowerCase(), password }
     return request<AuthResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload)

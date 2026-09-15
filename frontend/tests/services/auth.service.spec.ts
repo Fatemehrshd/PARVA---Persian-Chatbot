@@ -39,6 +39,21 @@ describe('Auth Service (auth.service.ts)', () => {
     expect(res.accessToken).toBe('token-123')
   })
 
+  it('normalizes the email before login so changed emails remain discoverable', async () => {
+    const requestSpy = vi.spyOn(apiModule, 'request').mockResolvedValue({
+      user: { id: 'u-1', email: 'new@example.com', role: 'user' },
+      accessToken: 'token-123',
+      refreshToken: 'ref-123'
+    } as any)
+
+    await authService.login(' New@Example.COM ', 'secret123')
+
+    expect(requestSpy).toHaveBeenCalledWith('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'new@example.com', password: 'secret123' })
+    })
+  })
+
   it('calls POST /auth/logout with refreshToken', async () => {
     const requestSpy = vi.spyOn(apiModule, 'request').mockResolvedValue({} as any)
 

@@ -35,7 +35,7 @@ export class AuthService {
     return { user: this.toUserJson(u), ...this.tokens(u) };
   }
   async login(email: string, password: string) {
-    const u = await this.users.findByEmail(email);
+    const u = await this.users.findByEmail(email.trim().toLowerCase());
     if (!u || !(await bcrypt.compare(password, u.passwordHash)))
       throw new UnauthorizedException(FA.invalidCredentials);
     return { user: this.toUserJson(u), ...this.tokens(u) };

@@ -45,7 +45,8 @@ function copyContent() {
     <!-- Avatar -->
     <div :class="['avatar', isUser ? 'avatar-user' : 'avatar-assistant']">
       <template v-if="isUser">
-        {{ userInitial }}
+        <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="user-avatar-image" />
+        <span v-else>{{ userInitial }}</span>
       </template>
       <template v-else>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -209,6 +210,13 @@ html[dir="ltr"] .row-assistant {
 .avatar-user {
   background: linear-gradient(135deg, var(--primary), #a78bfa);
   color: #ffffff;
+}
+
+.user-avatar-image {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .avatar-assistant {

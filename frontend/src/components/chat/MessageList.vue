@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useChatStore } from '../../stores/chat'
-import { useUiStore } from '../../stores/ui'
 import { getTextDirection } from '../../utils/textDirection'
 import MessageBubble from './MessageBubble.vue'
 import EmptyState from './EmptyState.vue'
 import ThinkingIndicator from './ThinkingIndicator.vue'
 
 const chatStore = useChatStore()
-const uiStore = useUiStore()
 const containerRef = ref<HTMLElement | null>(null)
 const streamingDirection = computed(() => getTextDirection(chatStore.currentStreamingText))
 

@@ -94,9 +94,11 @@ html.dark .bubble-user,
 .dark .bubble-assistant,
 html.dark .bubble-assistant,
 [data-theme="dark"] .bubble-assistant {
-  background-color: #171825 !important;
+  background-color: transparent !important;
   color: #E8E8F0 !important;
-  border-color: rgba(106, 143, 255, 0.15) !important;
+  border-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 .dark .bubble,
@@ -114,9 +116,11 @@ html:not(.dark) .bubble-user,
 
 html:not(.dark) .bubble-assistant,
 [data-theme="light"] .bubble-assistant {
-  background-color: #ffffff;
+  background-color: transparent !important;
   color: #1A1A2E;
-  border-color: rgba(27, 47, 110, 0.14);
+  border-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 * {

@@ -1,0 +1,230 @@
+import { Injectable, Logger } from '@nestjs/common';
+
+export type StreamStatus = 'thinking' | 'streaming' | 'completed' | 'error';
+
+export type StreamEvent =
+  | { type: 'token'; content: string }
+  | { type: 'sync'; content: string }
+  | { type: 'title'; title: string }
+  | { type: 'done'; messageId: string }
+  | { type: 'error'; message: string };
+
+export interface ActiveStreamSession {
+  conversationId: string;
+  userId: string;
+  userPrompt: string;
+  accumulatedText: string;
+  chunks: string[];
+  status: StreamStatus;
+  error?: string;
+  savedMessageId?: string;
+  title?: string;
+  abortController: AbortController;
+  subscribers: Set<(event: StreamEvent) => void>;
+  startedAt: number;
+  cleanupTimer?: any;
+}
+
+export interface ActiveStreamStatus {
+  active: boolean;
+  status: StreamStatus;
+  accumulatedText: string;
+  title?: string;
+  messageId?: string;
+}
+
+/**
+ * Manages active LLM generation sessions in-memory, decoupled from HTTP client sockets.
+ * If the user refreshes their browser or experiences a network drop, the generation
+ * continues uninterrupted, allowing reconnecting clients to resume receiving tokens.
+ */
+@Injectable()
+export class ActiveStreamService {
+  private readonly logger = new Logger(ActiveStreamService.name);
+  private readonly sessions = new Map<string, ActiveStreamSession>();
+
+  /**
+   * Starts or retrieves an active stream session for a conversation.
+   */
+  startSession(
+    conversationId: string,
+    userId: string,
+    userPrompt: string,
+  ): ActiveStreamSession {
+    const existing = this.sessions.get(conversationId);
+    if (existing && (existing.status === 'thinking' || existing.status === 'streaming')) {
+      return existing;
+    }
+
+    if (existing?.cleanupTimer) {
+      clearTimeout(existing.cleanupTimer);
+    }
+
+    const session: ActiveStreamSession = {
+      conversationId,
+      userId,
+      userPrompt,
+      accumulatedText: '',
+      chunks: [],
+      status: 'thinking',
+      abortController: new AbortController(),
+      subscribers: new Set(),
+      startedAt: Date.now(),
+    };
+
+    this.sessions.set(conversationId, session);
+    return session;
+  }
+
+  getSession(conversationId: string): ActiveStreamSession | undefined {
+    return this.sessions.get(conversationId);
+  }
+
+  appendToken(conversationId: string, token: string): void {
+    const session = this.sessions.get(conversationId);
+    if (!session || session.status === 'completed' || session.status === 'error') return;
+
+    session.status = 'streaming';
+    session.accumulatedText += token;
+    session.chunks.push(token);
+
+    const event: StreamEvent = { type: 'token', content: token };
+    for (const sub of session.subscribers) {
+      try {
+        sub(event);
+      } catch (err) {
+        this.logger.warn(`Subscriber error on token emit: ${err}`);
+      }
+    }
+  }
+
+  setTitle(conversationId: string, title: string): void {
+    const session = this.sessions.get(conversationId);
+    if (!session) return;
+
+    session.title = title;
+    const event: StreamEvent = { type: 'title', title };
+    for (const sub of session.subscribers) {
+      try {
+        sub(event);
+      } catch (err) {
+        this.logger.warn(`Subscriber error on title emit: ${err}`);
+      }
+    }
+  }
+
+  completeSession(conversationId: string, messageId: string): void {
+    const session = this.sessions.get(conversationId);
+    if (!session) return;
+
+    session.status = 'completed';
+    session.savedMessageId = messageId;
+
+    const event: StreamEvent = { type: 'done', messageId };
+    for (const sub of session.subscribers) {
+      try {
+        sub(event);
+      } catch (err) {
+        this.logger.warn(`Subscriber error on done emit: ${err}`);
+      }
+    }
+
+    this.scheduleCleanup(conversationId, 60000);
+  }
+
+  failSession(conversationId: string, error: string): void {
+    const session = this.sessions.get(conversationId);
+    if (!session) return;
+
+    session.status = 'error';
+    session.error = error;
+
+    const event: StreamEvent = { type: 'error', message: error };
+    for (const sub of session.subscribers) {
+      try {
+        sub(event);
+      } catch (err) {
+        this.logger.warn(`Subscriber error on error emit: ${err}`);
+      }
+    }
+
+    this.scheduleCleanup(conversationId, 30000);
+  }
+
+  abortSession(conversationId: string): boolean {
+    const session = this.sessions.get(conversationId);
+    if (!session || session.status === 'completed' || session.status === 'error') {
+      return false;
+    }
+
+    session.abortController.abort();
+    session.status = 'completed';
+
+    const event: StreamEvent = {
+      type: 'done',
+      messageId: session.savedMessageId || `aborted-${Date.now()}`,
+    };
+    for (const sub of session.subscribers) {
+      try {
+        sub(event);
+      } catch (err) {
+        this.logger.warn(`Subscriber error on abort emit: ${err}`);
+      }
+    }
+
+    this.scheduleCleanup(conversationId, 15000);
+    return true;
+  }
+
+  /**
+   * Subscribes to an active session. Returns an unsubscribe function.
+   */
+  subscribe(
+    conversationId: string,
+    listener: (event: StreamEvent) => void,
+  ): (() => void) | null {
+    const session = this.sessions.get(conversationId);
+    if (!session) return null;
+
+    session.subscribers.add(listener);
+    return () => {
+      session.subscribers.delete(listener);
+    };
+  }
+
+  /**
+   * Retrieves high-level status for client reconnection / page refresh.
+   */
+  getActiveStatus(conversationId: string): ActiveStreamStatus {
+    const session = this.sessions.get(conversationId);
+    if (!session) {
+      return {
+        active: false,
+        status: 'completed',
+        accumulatedText: '',
+      };
+    }
+
+    const isActive = session.status === 'thinking' || session.status === 'streaming';
+    return {
+      active: isActive,
+      status: session.status,
+      accumulatedText: session.accumulatedText,
+      title: session.title,
+      messageId: session.savedMessageId,
+    };
+  }
+
+  private scheduleCleanup(conversationId: string, delayMs: number) {
+    const session = this.sessions.get(conversationId);
+    if (!session) return;
+
+    if (session.cleanupTimer) clearTimeout(session.cleanupTimer);
+    session.cleanupTimer = setTimeout(() => {
+      this.sessions.delete(conversationId);
+    }, delayMs);
+    if (session.cleanupTimer && typeof session.cleanupTimer.unref === 'function') {
+      session.cleanupTimer.unref();
+    }
+  }
+}

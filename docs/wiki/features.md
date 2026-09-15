@@ -142,22 +142,52 @@
 
   ## Task 17: Chat Resilience Audit
   - Added [Chat Resilience documentation](chat-resilience.md) covering the current handling of Offline/Online state, retry, URL-based conversation restoration, persisted history, and partial Streaming replies.
-  - Recorded the remaining gap explicitly: the current implementation persists partial text but does not yet support a durable generation state or true resume from a cursor after reconnect.
+  - Recorded the previous gap explicitly: the previous implementation persisted partial text but did not support durable generation state or true resume from a cursor after reconnect.
 
-## Task 18: Admin Panel Backend - Global Token Quota, Dynamic System Prompt, User Management, Model Lifecycle & Dashboard Analytics
-- **Global Token Quota per User**: Admin can configure a global token consumption cap (`PUT /admin/settings` with `globalTokenLimit`). When `globalTokenLimit > 0`, any user who reaches or exceeds this limit is blocked from sending chat messages with an explicit, localized error: `سقف مجاز مصرف توکن به پایان رسیده است`.
-- **Dynamic Platform System Prompt**: Admin can update the platform system prompt (`PUT /admin/settings` with `systemPrompt`). The chat generation engine automatically prepends this custom prompt to message histories sent to upstream AI forwarders.
-- **Token Accounting**: Track total tokens used by each user (`usedTokens` column on `User` entity, initialized via TypeORM migration `1760100000000-AddAdminSettingsAndTokenUsage.ts`). Token consumption is calculated after streaming or mock reply (`Math.ceil((content.length + full.length) / 4)`) and atomically incremented.
-- **Admin User Management & Analytics**: `GET /admin/users` lists all registered users with their conversation count (`conversationsCount`) and consumed tokens (`usedTokens`). `PATCH /admin/users/:userId` updates user details (role `user` or `admin`, `displayName`, `email`, resets/sets `usedTokens`). `DELETE /admin/users/:userId` deletes the user and cascades their conversations and messages (with self-deletion guard preventing admin accidental lockout).
-- **Admin Dashboard KPI Metrics**: `GET /admin/dashboard/stats` aggregates essential platform statistics: `totalUsers`, `totalModels`, `activeModels`, `totalProviders`, `activeProviders`, `totalConversations`, `totalMessages`, `totalTokensUsed`, `globalTokenLimit`, and `systemPrompt`.
-- **Full Model Lifecycle (Edit / Update)**: `PATCH /admin/models/:modelId` enables updating model properties (`name`, `provider`, `providerId`, `apiIdentifier`, `apiKey`, `baseUrl`, `isActive`).
-- **Contract & Tests**: OpenAPI contract updated to `0.6.0` with new tags `Admin - Dashboard & Settings` and `Admin - Users`. 100% test pass rate: **111 backend tests passing across 15 test suites** (15 new tests in `admin-panel.spec.ts`).
+## Task 18: Resumable & Persistent Streaming Across Refreshes + AI Auto-Title Generation
+- **Resilient & Resumable Streaming (Full-Stack)**:
+  - **Backend Decoupled Stream Architecture (`ActiveStreamService`)**:
+    - Background LLM generation sessions are maintained independently of individual client HTTP connections.
+    - If the user refreshes the page or experiences a network interruption, the generation continues uninterrupted in the background instead of aborting upstream.
+    - `ActiveStreamSession` maintains buffered tokens (`accumulatedText`), status (`thinking` / `streaming` / `completed`), subscribers, and abort controllers.
+    - `GET /chat/conversations/:id/active-stream`: Returns current generation status, accumulated tokens, and title.
+    - `GET /chat/conversations/:id/stream`: Server-Sent Events (SSE) reconnection endpoint. Dispatches `event: sync` with accumulated text and continues streaming incoming tokens in real time.
+    - `POST /chat/conversations/:id/messages/:messageId/resume`: Continues interrupted assistant responses directly from where they stopped with prior context and continuation prompt.
+    - `POST /chat/conversations/:id/stop` & `POST /chat/conversations/:id/messages/:messageId/stop`: Allows explicit user-initiated stream cancellation.
+  - **Frontend Stream Reconnection & Persistence (`chatService`, `useChatStore`)**:
+    - On page refresh or conversation selection, `chatStore` checks for active background streams via `chatService.getActiveStream`.
+    - If active, the UI immediately restores `isStreaming = true`, populates `currentStreamingText` with accumulated content, renders the typing animation, and attaches to the live stream via `subscribeActiveStream`.
+    - Automatic retry with exponential backoff on transport disconnects.
+    - Streamed content never vanishes or jumps abruptly on refresh.
+- **AI-Powered Automatic Conversation Titling (Auto-Title)**:
+  - `OpenAiCompatForwarder.complete`: Lightweight non-streaming method for fast one-turn completions.
+  - Upon receiving the first user message in a new conversation, triggers a concurrent, non-blocking AI prompt to generate a 3-5 word concise title in the same language.
+  - Persists title to PostgreSQL (`conversations.title`) and emits `event: title` over SSE stream.
+  - Frontend updates the active conversation title in the sidebar in real time without requiring a page reload.
+  - Includes offline heuristic fallback (clean keyword boundary trimming up to 35 chars) if the AI provider is unreachable or unconfigured.
+- **Verification**:
+  - 100% test pass rate across both projects: 109 backend tests (15 test suites) and 77 frontend tests (16 test suites) — 186/186 total passing tests.
 
-## Task 19: Frontend User Profile Modal
-- Added a profile modal opened from the sidebar profile menu using accessible `reka-ui` dialog primitives.
-- Added fixed modal dimensions and a scrollable body so switching between account, email, and password tabs does not resize the modal.
-- Added typed frontend service calls for `GET/PATCH /users/me`, `POST /users/me/email`, `POST /users/me/password`, and `POST /users/me/avatar` according to `api-contract.yaml`.
-- Added shadcn-style `Skeleton` loading state, reusable `Button` loading/disabled behavior, and toast feedback for profile form success and errors.
-- Updated the auth store after profile changes and added frontend behavior tests for menu opening, stable modal layout, profile submission, and success toast feedback.
-
-
+## Task 19: ChatGPT-Style Chat Layout Refactor & Rich Markdown Engine (Code, Tables, Readme)
+- **ChatGPT-Style Layout Refactoring**:
+  - Refactored chat presentation to modern turn-based layout:
+    - User prompt anchored cleanly at the top of each turn with user avatar, name badge, and timestamp.
+    - Assistant response positioned directly underneath the user prompt, unfolding across the full width of the central reading container (`max-w-3xl` / `max-w-4xl`).
+    - Clean visual rhythm with Tailwind CSS utility classes, smooth spacing (`gap-3.5`, `py-6`), and seamless responsiveness across desktop and mobile.
+    - Obsidian Dark theme and Warm Cream Light theme full compatibility.
+  - Assistant response box has zero border and completely transparent background color, integrating seamlessly with the page surface.
+  - Removed sender/chatbot name text ("شما" / "دستیار هوشمند پروا") for a decluttered, authentic conversation flow.
+  - Replaced "در حال نوشتن..." textual label with a minimal 3-dot bouncing pulse indicator.
+  - Localized timestamps to Persian digits with explicit «قبل‌ازظهر» / «بعدازظهر» indicators.
+  - Added copy button to user messages as well, allowing users to copy their own prompts instantly.
+  - Arranged login view with brand artwork on the left pane and authentication form on the right pane.
+- **Rich Markdown Engine (`MarkdownContent.vue`)**:
+  - Powered by `marked` with custom GFM renderers:
+    - **Code Blocks**: Formatted in `dir="ltr"` with JetBrains Mono, language header badge (e.g. `TYPESCRIPT`, `PYTHON`, `SQL`), and an interactive copy button with instant feedback («کپی» -> «کپی شد ✓»).
+    - **Responsive Tables**: Full GFM markdown tables wrapped in an overflow container (`table-responsive`) with zebra rows, themed borders, and horizontal scrolling on mobile.
+    - **README & Typography**: Headers (`h1`-`h6`), nested ordered/unordered lists (`ul`, `ol`), blockquotes with accent left border, inline code pills (`code`), links opening in safe new tabs, and task checkboxes.
+    - **Bidirectional Support (BiDi)**: Automatic text direction detection via `getTextDirection` — Persian paragraphs rendered in RTL, while code blocks and tables strictly maintain LTR formatting.
+    - **Streaming-Friendly**: Dynamically closes unclosed fences during active stream generation.
+- **Verification**:
+  - 100% test pass rate: **109 backend tests** (15 test suites) + **82 frontend tests** (17 test suites, including new unit tests in `MarkdownContent.spec.ts`) — 191/191 total passing tests.
+  - Production build (`vue-tsc -b && vite build`) compiles with zero errors.

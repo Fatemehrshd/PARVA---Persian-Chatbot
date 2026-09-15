@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { Conversation } from './conversation.entity';
 import { Message } from './message.entity';
 import { ChatService } from './chat.service';
+import { ActiveStreamService } from './active-stream.service';
 import { ChatController } from './chat.controller';
 import { OpenAiCompatController } from './openai-compat.controller';
 import { ModelsAdminModule } from '../models-admin/models-admin.module';
@@ -19,6 +20,7 @@ import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
     JwtModule.register({ secret: process.env.JWT_SECRET ?? 'dev-secret' }),
   ],
   controllers: [ChatController, OpenAiCompatController],
-  providers: [ChatService, JwtAuthGuard],
+  providers: [ChatService, ActiveStreamService, JwtAuthGuard],
+  exports: [ChatService, ActiveStreamService],
 })
 export class ChatModule {}

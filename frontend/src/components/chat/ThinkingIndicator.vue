@@ -1,5 +1,5 @@
 <template>
-  <div class="thinking-container" aria-label="Thinking...">
+  <div class="thinking-container" role="status" aria-label="Thinking...">
     <span class="dot"></span>
     <span class="dot"></span>
     <span class="dot"></span>
@@ -10,16 +10,20 @@
 .thinking-container {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 14px;
+  gap: 5px;
+  min-height: 28px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
 }
 
 .dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background-color: var(--primary);
-  animation: pulse 1.4s infinite ease-in-out both;
+  animation: pulse 1.2s infinite ease-in-out both;
 }
 
 .dot:nth-child(1) {
@@ -42,6 +46,13 @@
   40% {
     opacity: 0.9;
     transform: scale(1.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot {
+    animation: none;
+    opacity: 0.65;
   }
 }
 </style>

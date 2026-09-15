@@ -116,5 +116,60 @@ describe('Chat Service (chat.service.ts)', () => {
     expect(tokens).toEqual(['Hello', ' world'])
     expect(doneId).toBe('msg-done-1')
   })
+
+  it('checks active stream status via GET /chat/conversations/:id/active-stream', async () => {
+    const mockStatus = { active: true, status: 'streaming', accumulatedText: 'Hello' }
+    const requestSpy = vi.spyOn(apiModule, 'request').mockResolvedValue(mockStatus as any)
+
+    const result = await chatService.getActiveStream('c-1')
+    expect(requestSpy).toHaveBeenCalledWith('/chat/conversations/c-1/active-stream')
+    expect(result).toEqual(mockStatus)
+  })
+
+  it('stops active stream via POST /chat/conversations/:id/stop', async () => {
+    const requestSpy = vi.spyOn(apiModule, 'request').mockResolvedValue(undefined as any)
+
+    await chatService.stopActiveStream('c-1')
+    expect(requestSpy).toHaveBeenCalledWith('/chat/conversations/c-1/stop', {
+      method: 'POST'
+    })
+  })
+
+  it('reconnects and streams chunks via subscribeActiveStream', async () => {
+    let synced = ''
+    const tokens: string[] = []
+    let receivedTitle = ''
+    let doneId = ''
+
+    const ssePayload =
+      'event: sync\ndata: {"content":"Initial text"}\n\nevent: token\ndata: {"content":" continuation"}\n\nevent: title\ndata: {"title":"Auto Title"}\n\nevent: done\ndata: {"messageId":"msg-done-2"}\n\n'
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(ssePayload))
+        controller.close()
+      }
+    })
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      body: stream
+    } as any)
+
+    await chatService.subscribeActiveStream(
+      'c-1',
+      (sync) => { synced = sync },
+      (token) => tokens.push(token),
+      (id) => { doneId = id },
+      () => {},
+      undefined,
+      (t) => { receivedTitle = t }
+    )
+
+    expect(synced).toBe('Initial text')
+    expect(tokens).toEqual([' continuation'])
+    expect(receivedTitle).toBe('Auto Title')
+    expect(doneId).toBe('msg-done-2')
+  })
 })
 

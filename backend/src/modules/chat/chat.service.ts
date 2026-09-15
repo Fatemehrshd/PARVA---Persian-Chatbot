@@ -5,7 +5,8 @@ import { Conversation } from './conversation.entity';
 import { Message } from './message.entity';
 import { ModelsAdminService } from '../models-admin/models-admin.service';
 import { OpenAiCompatForwarder, ChatMessage } from '../ai/openai-compat.forwarder';
-import { ActiveStreamService, ActiveStreamStatus } from './active-stream.service';
+import { SettingsService } from '../admin/settings.service';
+import { UsersService } from '../users/users.service';
 
 export interface ChatChunk {
   token?: string;
@@ -26,12 +27,9 @@ export class ChatService {
     @InjectRepository(Message) private msg: Repository<Message>,
     private models: ModelsAdminService,
     private forwarder: OpenAiCompatForwarder,
-    @Optional() private activeStream?: ActiveStreamService,
-  ) {
-    if (!this.activeStream) {
-      this.activeStream = new ActiveStreamService();
-    }
-  }
+    @Optional() private settings?: SettingsService,
+    @Optional() private users?: UsersService,
+  ) {}
 
   list(userId: string) {
     return this.conv.find({ where: { userId }, order: { updatedAt: 'DESC' } });

@@ -27,8 +27,6 @@ async function makeProfile(password = 'current123') {
       email: 'a@b.co',
       passwordHash: '',
       displayName: 'A',
-      language: 'fa',
-      theme: 'dark',
       role: 'user',
     },
   };
@@ -52,12 +50,8 @@ async function makeProfile(password = 'current123') {
     },
     publicUrl: (key: string) => `http://base/static/${key}`,
   };
-  const models: any = {
-    getRawById: async (id: string) =>
-      id === 'model-ok' ? { id, isActive: true } : id === 'model-off' ? { id, isActive: false } : null,
-  };
   stored.user.passwordHash = await bcrypt.hash(password, 4);
-  const svc = new ProfileService(users, storage, models);
+  const svc = new ProfileService(users, storage);
   return { svc, stored, users, storage, puts, removes };
 }
 
@@ -68,27 +62,6 @@ it('username: lowercased on save; format error 400; taken 409', async () => {
   await expect(svc.updateProfile('u1', { username: 'ab' })).rejects.toBeInstanceOf(BadRequestException);
   await expect(svc.updateProfile('u1', { username: 'taken' })).rejects.toBeInstanceOf(ConflictException);
   expect(stored.user.username).toBe('ali_9');
-});
-
-it('preferences: invalid timezone 400; valid saved; missing/inactive default model 400', async () => {
-  const { svc, stored } = await makeProfile();
-  await expect(svc.updatePreferences('u1', { timezone: 'Mars/Olympus' } as any)).rejects.toBeInstanceOf(
-    BadRequestException,
-  );
-  await expect(svc.updatePreferences('u1', { defaultModelId: 'nope' } as any)).rejects.toBeInstanceOf(
-    BadRequestException,
-  );
-  await expect(svc.updatePreferences('u1', { defaultModelId: 'model-off' } as any)).rejects.toBeInstanceOf(
-    BadRequestException,
-  );
-  const r: any = await svc.updatePreferences('u1', {
-    timezone: 'Asia/Tehran',
-    defaultModelId: 'model-ok',
-    language: 'en',
-    theme: 'light',
-  } as any);
-  expect(r).toMatchObject({ timezone: 'Asia/Tehran', defaultModelId: 'model-ok', language: 'en', theme: 'light' });
-  expect(stored.user.language).toBe('en');
 });
 
 it('changeEmail: wrong current password 401; taken email 409; success applies immediately', async () => {
@@ -164,9 +137,9 @@ it('StorageService: unconfigured env => configured=false and put() throws 503; p
   Object.assign(process.env, saved);
 });
 
-/** ---------- Chat: user default-model resolution chain ---------- */
+/** ---------- Chat: modelId resolution chain ---------- */
 
-it('create(): no modelId uses user defaultModelId, else platform default', async () => {
+it('create(): no modelId falls back to platform default', async () => {
   let storedConv: any;
   const conv: any = {
     create: (o: any) => o,
@@ -177,19 +150,30 @@ it('create(): no modelId uses user defaultModelId, else platform default', async
   };
   const models: any = {
     getDefault: async () => ({ id: 'platform' }),
-    getRawById: async (id: string) => ({ id, isActive: id === 'udef' }),
   };
-  const usersWith: (d: any) => any = (defaultModelId) => ({ findById: async () => ({ defaultModelId }) });
-  const mk = (users: any) => new ChatService(conv, {} as any, models, users, {} as any);
+  const svc = new ChatService(conv, {} as any, models, {} as any);
 
-  await mk(usersWith('udef')).create('u1', undefined, 't');
-  expect(storedConv.modelId).toBe('udef');
-
-  await mk(usersWith('gone')).create('u1', undefined, 't');
+  await svc.create('u1', undefined, 't');
   expect(storedConv.modelId).toBe('platform');
+});
 
-  await mk(usersWith(null)).create('u1', undefined, 't');
-  expect(storedConv.modelId).toBe('platform');
+it('create(): explicit modelId is honored', async () => {
+  let storedConv: any;
+  const conv: any = {
+    create: (o: any) => o,
+    save: async (o: any) => {
+      storedConv = o;
+      return o;
+    },
+  };
+  const models: any = {
+    getDefault: async () => ({ id: 'platform' }),
+    getRawById: async (id: string) => ({ id, isActive: true }),
+  };
+  const svc = new ChatService(conv, {} as any, models, {} as any);
+
+  await svc.create('u1', 'explicit', 't');
+  expect(storedConv.modelId).toBe('explicit');
 });
 
 /** ---------- HTTP wiring (controller-level, fake ProfileService) ---------- */

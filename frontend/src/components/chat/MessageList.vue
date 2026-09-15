@@ -5,6 +5,7 @@ import { getTextDirection } from '../../utils/textDirection'
 import MessageBubble from './MessageBubble.vue'
 import MarkdownContent from './MarkdownContent.vue'
 import EmptyState from './EmptyState.vue'
+import ThinkingIndicator from './ThinkingIndicator.vue'
 
 const chatStore = useChatStore()
 const containerRef = ref<HTMLElement | null>(null)
@@ -13,25 +14,23 @@ const streamingDirection = computed(() => getTextDirection(chatStore.currentStre
 function scrollToBottom(smooth = true) {
   nextTick(() => {
     if (containerRef.value) {
-      if (typeof containerRef.value.scrollTo === 'function') {
-        containerRef.value.scrollTo({
-          top: containerRef.value.scrollHeight,
-          behavior: smooth ? 'smooth' : 'auto'
-        })
-      } else {
+      if (!smooth) {
         containerRef.value.scrollTop = containerRef.value.scrollHeight
+        return
       }
+
+      containerRef.value.scrollTo({
+        top: containerRef.value.scrollHeight,
+        behavior: 'smooth'
+      })
     }
   })
 }
 
-// Watch for new messages or incoming stream tokens
 watch(
-  () => [chatStore.messages.length, chatStore.currentStreamingText],
-  () => {
-    scrollToBottom()
-  },
-  { deep: true }
+  () => [chatStore.messages.length, chatStore.isStreaming],
+  () => scrollToBottom(false),
+  { flush: 'post' }
 )
 
 onMounted(() => {
@@ -55,7 +54,15 @@ onMounted(() => {
         />
 
         <!-- Active Streaming Bubble (Positioned directly under user's prompt) -->
-        <div v-if="chatStore.isStreaming" class="message-row row-assistant w-full flex gap-3.5 mb-6 animate-in fade-in duration-200">
+        <div
+          v-if="chatStore.isStreaming"
+          :class="[
+            'message-row',
+            'row-assistant',
+            'streaming-row',
+            { 'streaming-row-thinking': chatStore.isThinking }
+          ]"
+        >
           <!-- Assistant Avatar -->
           <div class="avatar avatar-assistant w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-xs shadow-sm select-none mt-0.5">
             <svg class="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -76,12 +83,7 @@ onMounted(() => {
                 <MarkdownContent :content="chatStore.currentStreamingText" :streaming="true" />
                 <span class="streaming-cursor"></span>
               </div>
-              <!-- Minimal Loading Indicator (No textual label, just clean dots) -->
-              <div v-else class="minimal-loader flex items-center gap-1.5 py-2">
-                <span class="w-2 h-2 rounded-full bg-primary/70 animate-bounce [animation-delay:-0.3s]"></span>
-                <span class="w-2 h-2 rounded-full bg-primary/70 animate-bounce [animation-delay:-0.15s]"></span>
-                <span class="w-2 h-2 rounded-full bg-primary/70 animate-bounce"></span>
-              </div>
+              <ThinkingIndicator v-else />
             </div>
           </div>
         </div>
@@ -98,12 +100,26 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   padding: 24px 0 16px;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 .message-list-content {
   width: 100%;
   margin: 0 auto;
+  min-height: 100%;
+  padding-bottom: 48px;
+}
+
+.streaming-row {
+  display: flex;
+  width: 100%;
+  gap: 14px;
+  margin-bottom: 24px;
+  animation: stream-enter 200ms ease-out;
+}
+
+.streaming-row-thinking {
+  margin-top: auto;
 }
 
 @media (max-width: 767px) {
@@ -142,5 +158,22 @@ onMounted(() => {
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
+}
+
+@keyframes stream-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streaming-row {
+    animation: none;
+  }
 }
 </style>

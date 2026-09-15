@@ -100,3 +100,4 @@
 - **Consequences**:
   - Profile endpoints are JWT-gated by the existing `JwtAuthGuard` via `@CurrentUser()`; the frontend gained nothing yet (all new routes are additive).
   - When forgot/reset or personalization is later approved, they land as new modules/migrations — nothing here blocks them.
+- **Amendment (follow-up, same task branch)**: the owner later decided to slim the schema — `bio`, `language`, `theme`, `timezone` and `defaultModelId` columns and the whole `/users/me/preferences` surface were **removed** (drop migration `1761000000000-DropUserProfileAndPreferences`); chat model resolution reverted to **explicit → platform default → echo sentinel**. Retained from this ADR: `username` (unique/lowercase), avatar-on-MinIO with 503-honesty, and current-password re-auth for email/password changes.

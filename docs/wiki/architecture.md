@@ -40,7 +40,7 @@ backend/src/
 └── modules/
     ├── auth/                      ← signup/login/logout
     ├── users/                     ← User entity + UsersService + ProfileService/Controller
-    │                                 (GET/PATCH /users/me, preferences, email/password change, avatar)
+    │                                 (GET/PATCH /users/me, email/password change, avatar)
     ├── storage/                   ← StorageService: MinIO put/get/remove (global module)
     ├── chat/                      ← Conversation, Message, ChatService.generate (streaming),
     │                                 ChatController (SSE + JSON), OpenAiCompatController (/v1/*, JWT-protected)
@@ -51,4 +51,4 @@ backend/src/
 ```
 
 ### Chat resolution chain
-`conversation.modelId → user default (preferences.defaultModelId) → platform default` (400 if the resolved model is inactive or its provider is inactive) → credential chain `model.apiKey → provider.apiKey → env` → real OpenAI-compatible streaming; echo fallback only when nothing is configured. Mid-conversation switching: `PATCH /chat/conversations/:id { modelId }`.
+`conversation.modelId → platform default` (400 if the resolved model is inactive or its provider is inactive) → credential chain `model.apiKey → provider.apiKey → env` → real OpenAI-compatible streaming; echo fallback only when nothing is configured. Mid-conversation switching: `PATCH /chat/conversations/:id { modelId }`.

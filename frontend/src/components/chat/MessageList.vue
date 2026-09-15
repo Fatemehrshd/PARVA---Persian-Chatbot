@@ -50,9 +50,10 @@ onMounted(() => {
       <!-- Render Existing Messages -->
       <template v-else>
         <MessageBubble
-          v-for="msg in chatStore.messages"
+          v-for="(msg, index) in chatStore.messages"
           :key="msg.id"
           :message="msg"
+          :is-last="index === chatStore.messages.length - 1"
         />
 
         <!-- Active Streaming Bubble -->
@@ -76,16 +77,6 @@ onMounted(() => {
               </div>
               <ThinkingIndicator v-else-if="chatStore.isThinking" />
             </div>
-
-            <button
-              type="button"
-              class="stop-stream-btn"
-              @click="chatStore.stopStreaming"
-              :title="uiStore.direction === 'rtl' ? 'توقف تولید پاسخ' : 'Stop generating'"
-            >
-              <span class="stop-icon"></span>
-              <span>{{ uiStore.direction === 'rtl' ? 'توقف تولید پاسخ' : 'Stop generating' }}</span>
-            </button>
           </div>
         </div>
       </template>
@@ -108,9 +99,15 @@ onMounted(() => {
   width: 100%;
   max-width: 672px;
   margin: 0 auto;
-  padding: 0 16px;
+  padding: 24px 16px 20px;
   display: flex;
   flex-direction: column;
+}
+
+@media (max-width: 767px) {
+  .message-list-content {
+    padding-top: 58px; /* Clearance for floating mobile hamburger button */
+  }
 }
 
 .message-row {
@@ -190,32 +187,5 @@ html[dir="ltr"] .bubble-container {
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
-}
-
-.stop-stream-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  padding: 4px 10px;
-  background-color: var(--secondary);
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--muted-foreground);
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 150ms ease;
-}
-
-.stop-stream-btn:hover {
-  background-color: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
-}
-
-.stop-icon {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  background-color: currentColor;
 }
 </style>

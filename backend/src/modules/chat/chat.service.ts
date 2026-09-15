@@ -32,6 +32,22 @@ export class ChatService {
   }
 
   async create(userId: string, modelId?: string, title?: string) {
+    // If user's latest conversation is empty (has 0 messages), reuse it instead of creating a duplicate
+    const latest = await this.conv.findOne({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+    });
+    if (latest) {
+      const messageCount = await this.msg.count({ where: { conversationId: latest.id } });
+      if (messageCount === 0) {
+        if (modelId && latest.modelId !== modelId) {
+          latest.modelId = modelId;
+          return this.conv.save(latest);
+        }
+        return latest;
+      }
+    }
+
     let mid = modelId;
     if (mid) {
       const targetModel = await this.models.getRawById(mid);
@@ -183,5 +199,76 @@ export class ChatService {
     if (savedAssistant) {
       yield { saved: savedAssistant };
     }
+  }
+
+  /**
+   * Search through conversations by title and message contents.
+   */
+  async search(userId: string, query: string) {
+    if (!query || !query.trim()) return [];
+    const q = query.trim();
+
+    // 1. Matches in conversation titles
+    const titleMatches = await this.conv
+      .createQueryBuilder('c')
+      .where('c.userId = :userId', { userId })
+      .andWhere('c.title ILIKE :q', { q: `%${q}%` })
+      .orderBy('c.updatedAt', 'DESC')
+      .take(20)
+      .getMany();
+
+    // 2. Matches in message contents
+    const messageMatches = await this.msg
+      .createQueryBuilder('m')
+      .innerJoin(Conversation, 'c', 'c.id = m.conversationId')
+      .where('c.userId = :userId', { userId })
+      .andWhere('m.content ILIKE :q', { q: `%${q}%` })
+      .select([
+        'm.id AS "msgId"',
+        'm.conversationId AS "conversationId"',
+        'm.content AS "content"',
+        'm.createdAt AS "msgCreatedAt"',
+        'c.title AS "convTitle"',
+        'c.updatedAt AS "convUpdatedAt"',
+      ])
+      .orderBy('m.createdAt', 'DESC')
+      .take(30)
+      .getRawMany();
+
+    const resultMap = new Map<string, any>();
+
+    for (const c of titleMatches) {
+      resultMap.set(c.id, {
+        id: c.id,
+        title: c.title,
+        updatedAt: c.updatedAt,
+        matchedIn: 'title',
+        snippet: c.title,
+      });
+    }
+
+    for (const row of messageMatches) {
+      const convId = row.conversationId;
+      if (!resultMap.has(convId)) {
+        const content: string = row.content || '';
+        const idx = content.toLowerCase().indexOf(q.toLowerCase());
+        const start = Math.max(0, idx - 40);
+        const end = Math.min(content.length, idx + q.length + 40);
+        const snippet =
+          (start > 0 ? '...' : '') +
+          content.substring(start, end) +
+          (end < content.length ? '...' : '');
+
+        resultMap.set(convId, {
+          id: convId,
+          title: row.convTitle,
+          updatedAt: row.convUpdatedAt,
+          matchedIn: 'message',
+          snippet,
+        });
+      }
+    }
+
+    return Array.from(resultMap.values());
   }
 }

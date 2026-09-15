@@ -20,7 +20,24 @@ import ProfileMenu from './ProfileMenu.vue'
 import EditConversationModal from '../chat/EditConversationModal.vue'
 import DeleteConversationModal from '../chat/DeleteConversationModal.vue'
 import LogoutModal from '../auth/LogoutModal.vue'
+import SearchModal from '../chat/SearchModal.vue'
+import logoImg from '../../assets/logo.jpg'
 import type { Conversation } from '../../types'
+
+// Dynamic detection of any dark logo variant (e.g. logo-dark.jpg)
+const darkLogos = import.meta.glob('@/assets/*-dark.{jpg,jpeg,png,webp,svg}', {
+  eager: true,
+  query: '?url',
+  import: 'default'
+})
+const darkLogoUrl = Object.values(darkLogos)[0] as string | undefined
+
+const activeLogo = computed(() => {
+  if (uiStore.theme === 'dark' && darkLogoUrl) {
+    return darkLogoUrl
+  }
+  return logoImg
+})
 
 const router = useRouter()
 const uiStore = useUiStore()
@@ -34,14 +51,21 @@ const deletingConversation = ref<Conversation | null>(null)
 const isDeleteModalOpen = ref(false)
 
 const isLogoutModalOpen = ref(false)
+const isSearchModalOpen = ref(false)
 const profileMenuOpen = ref(false)
 
 const isRtl = computed(() => uiStore.direction === 'rtl')
+
+// Disable "New Chat" when user is already on an empty (fresh) conversation
+const isOnEmptyChat = computed(() =>
+  chatStore.currentConversationId !== null && chatStore.messages.length === 0 && !chatStore.isStreaming
+)
 
 // ──────────────────────────────────────────
 // Navigation actions
 // ──────────────────────────────────────────
 async function handleNewChat() {
+  if (isOnEmptyChat.value) return
   const newId = await chatStore.createNewConversation()
   if (newId) router.push(`/chat/${newId}`)
 }
@@ -170,9 +194,9 @@ const userInitial = computed(() => {
       <div class="sb-top-row">
         <div class="sb-brand">
           <div class="sb-brand-logo">
-            <span class="sb-brand-initial">N</span>
+            <img :src="activeLogo" alt="پروا" class="sb-brand-logo-img" />
           </div>
-          <span class="sb-brand-name">NeuralChat</span>
+          <span class="sb-brand-name">پروا</span>
         </div>
         <button
           class="sb-icon-btn"
@@ -185,12 +209,18 @@ const userInitial = computed(() => {
 
       <!-- Actions: Search / New Chat / Temp Chat — stacked vertically -->
       <nav class="sb-actions">
-        <button class="sb-action-row" :title="isRtl ? 'جستجو' : 'Search chats'">
+        <button class="sb-action-row" @click="isSearchModalOpen = true" :title="isRtl ? 'جستجو (Ctrl+K)' : 'Search chats (Ctrl+K)'">
           <Search :size="16" class="sb-action-icon" />
           <span class="sb-action-label">{{ isRtl ? 'جستجو' : 'Search' }}</span>
         </button>
 
-        <button class="sb-action-row sb-action-row--primary" @click="handleNewChat" :title="isRtl ? 'گفتگوی جدید' : 'New chat'">
+        <button
+          class="sb-action-row sb-action-row--primary new-chat-btn"
+          :class="{ 'sb-action-row--disabled': isOnEmptyChat }"
+          :disabled="isOnEmptyChat"
+          @click="handleNewChat"
+          :title="isRtl ? 'گفتگوی جدید' : 'New chat'"
+        >
           <SquarePen :size="16" class="sb-action-icon" />
           <span class="sb-action-label">{{ isRtl ? 'گفتگوی جدید' : 'New chat' }}</span>
         </button>
@@ -281,6 +311,11 @@ const userInitial = computed(() => {
     ═══════════════════════════════════ -->
     <div v-else class="sidebar-collapsed">
 
+      <!-- Logo in collapsed state -->
+      <div class="sb-collapsed-logo" :title="isRtl ? 'پروا' : 'Parva'">
+        <img :src="activeLogo" alt="پروا" class="sb-brand-logo-img" />
+      </div>
+
       <!-- Expand button -->
       <button
         class="sb-icon-btn sb-icon-btn--lg"
@@ -291,13 +326,15 @@ const userInitial = computed(() => {
       </button>
 
       <!-- Search -->
-      <button class="sb-icon-btn sb-icon-btn--lg" :title="isRtl ? 'جستجو' : 'Search'">
+      <button class="sb-icon-btn sb-icon-btn--lg" @click="isSearchModalOpen = true" :title="isRtl ? 'جستجو (Ctrl+K)' : 'Search (Ctrl+K)'">
         <Search :size="17" />
       </button>
 
       <!-- New Chat -->
       <button
         class="sb-icon-btn sb-icon-btn--lg sb-icon-btn--primary"
+        :class="{ 'sb-icon-btn--disabled': isOnEmptyChat }"
+        :disabled="isOnEmptyChat"
         @click="handleNewChat"
         :title="isRtl ? 'گفتگوی جدید' : 'New chat'"
       >
@@ -308,6 +345,22 @@ const userInitial = computed(() => {
       <button class="sb-icon-btn sb-icon-btn--lg" :title="isRtl ? 'گفتگوی موقت' : 'Temporary'">
         <MessageCircleDashed :size="17" />
       </button>
+
+      <div class="sb-divider-mini" />
+
+      <!-- Collapsed Chat List (shows icons with tooltips so sidebar is not empty) -->
+      <div class="sb-collapsed-chats" v-if="chatStore.conversations.length > 0">
+        <button
+          v-for="conv in chatStore.conversations"
+          :key="conv.id"
+          class="sb-icon-btn sb-icon-btn--conv"
+          :class="{ 'is-active': conv.id === chatStore.currentConversationId }"
+          @click="handleSelect(conv.id)"
+          :title="conv.title"
+        >
+          <MessageSquare :size="14" />
+        </button>
+      </div>
 
       <!-- Spacer -->
       <div class="sb-spacer" />
@@ -354,6 +407,10 @@ const userInitial = computed(() => {
     @close="isLogoutModalOpen = false"
     @confirm="handleConfirmLogout"
   />
+  <SearchModal
+    :is-open="isSearchModalOpen"
+    @close="isSearchModalOpen = false"
+  />
 </template>
 
 <style scoped>
@@ -379,21 +436,53 @@ const userInitial = computed(() => {
   flex-direction: column;
   background-color: var(--background);
   border-inline-end: 1px solid var(--border);
-  transition: width 280ms cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
   overflow: hidden;
-  position: absolute;
-  inset-block: 0;
-  inset-inline-start: 0;
-  z-index: 40;
 }
 
+/* Mobile drawer behavior (< 768px) */
+@media (max-width: 767px) {
+  .app-sidebar {
+    position: fixed !important;
+    top: 0;
+    bottom: 0;
+    inset-inline-start: 0;
+    width: min(76vw, 235px) !important;
+    z-index: 50;
+    transform: translateX(-100%) !important;
+    transition: transform 280ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+    box-shadow: none;
+  }
+
+  .sidebar-expanded {
+    width: 100% !important;
+  }
+
+  html[dir="rtl"] .app-sidebar {
+    transform: translateX(100%) !important;
+  }
+
+  /* When open on mobile — slide in */
+  .app-sidebar:not(.is-collapsed),
+  html[dir="rtl"] .app-sidebar:not(.is-collapsed) {
+    transform: translateX(0) !important;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.7) !important;
+  }
+}
+
+/* Desktop layout (>= 768px): part of normal layout flow, no transform */
 @media (min-width: 768px) {
-  .app-sidebar { position: relative; z-index: 20; }
-}
+  .app-sidebar {
+    position: relative;
+    z-index: 20;
+    transform: none !important;
+    transition: width 280ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
 
-.app-sidebar.is-collapsed {
-  width: var(--sidebar-collapsed-width, 56px);
+  /* Desktop collapsed: shrink width to icon-only */
+  .app-sidebar.is-collapsed {
+    width: var(--sidebar-collapsed-width, 56px);
+  }
 }
 
 /* ════════════════════════════════════════
@@ -427,18 +516,19 @@ const userInitial = computed(() => {
   width: 28px;
   height: 28px;
   border-radius: var(--radius-sm, 8px);
-  background: var(--primary);
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
-.sb-brand-initial {
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1;
+.sb-brand-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
 }
 
 .sb-brand-name {
@@ -507,6 +597,15 @@ const userInitial = computed(() => {
 
 .sb-action-label {
   flex: 1;
+}
+
+/* Disabled state */
+.sb-action-row--disabled,
+.sb-action-row--disabled:hover,
+.sb-icon-btn--disabled,
+.sb-icon-btn--disabled:hover {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 /* ────────────── Divider ────────────── */
@@ -733,6 +832,58 @@ const userInitial = computed(() => {
   gap: 4px;
 }
 
+.sb-collapsed-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm, 8px);
+  overflow: hidden;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.sb-divider-mini {
+  width: 24px;
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+  flex-shrink: 0;
+}
+
+.sb-collapsed-chats {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  max-height: 40vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px 0;
+}
+
+.sb-collapsed-chats::-webkit-scrollbar {
+  width: 2px;
+}
+.sb-collapsed-chats::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.sb-icon-btn--conv {
+  color: var(--muted-foreground);
+}
+
+.sb-icon-btn--conv:hover {
+  color: var(--foreground);
+}
+
+.sb-icon-btn--conv.is-active {
+  background-color: var(--surface-alt, var(--secondary));
+  color: var(--primary);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
 .sb-spacer { flex: 1; }
 
 /* Icon buttons */
@@ -800,15 +951,17 @@ const userInitial = computed(() => {
   box-shadow: 0 0 0 2px var(--ring);
 }
 
-/* Collapsed profile menu wrapper — slides out to the right of the sidebar */
+/* Collapsed profile menu wrapper — appears to the right of the sidebar (outside of it) */
 .sb-collapsed-menu-wrapper {
-  position: absolute;
-  bottom: 0;
-  inset-inline-end: calc(-1 * (180px + 12px));
-  width: 200px;
+  position: fixed;
+  bottom: 60px;
+  /* LTR: right of sidebar at 56px + 8px gap */
+  inset-inline-start: calc(var(--sidebar-collapsed-width, 56px) + 8px);
+  width: 210px;
+  z-index: 200;
 }
 
-.sb-collapsed-menu-wrapper :deep(.profile-menu-panel) {
+.sb-collapsed-menu-wrapper .profile-menu-panel {
   position: static;
   box-shadow:
     0 4px 24px rgba(0, 0, 0, 0.35),

@@ -173,8 +173,8 @@ onUnmounted(() => {
 
       <p class="disclaimer">
         {{ uiStore.direction === 'rtl'
-          ? 'سامانه NeuralChat ممکن است خطا داشته باشد. اطلاعات مهم را ارزیابی کنید.'
-          : 'NeuralChat can make mistakes. Verify important information.'
+          ? 'سامانه پروا ممکن است خطا داشته باشد. اطلاعات مهم را ارزیابی کنید.'
+          : 'Parva can make mistakes. Verify important information.'
         }}
       </p>
     </div>

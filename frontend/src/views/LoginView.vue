@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
@@ -11,7 +11,22 @@ import { Label } from '@/components/ui/label'
 
 import { useFormSubmit } from '../composables/useFormSubmit'
 import GrokAurora from '@/components/ui/GrokAurora.vue'
-import loginArtwork from '@/assets/login-artwork.jpg'
+import logoArtwork from '@/assets/logo.jpg'
+
+// Dynamic detection of any dark logo variant (e.g. logo-dark.jpg)
+const darkLogos = import.meta.glob('@/assets/*-dark.{jpg,jpeg,png,webp,svg}', {
+  eager: true,
+  query: '?url',
+  import: 'default'
+})
+const darkLogoUrl = Object.values(darkLogos)[0] as string | undefined
+
+const activeLogo = computed(() => {
+  if (uiStore.theme === 'dark' && darkLogoUrl) {
+    return darkLogoUrl
+  }
+  return logoArtwork
+})
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -91,15 +106,12 @@ async function handleSubmit() {
         
         <!-- Brand Logo & Name Header -->
         <div class="flex items-center gap-3 mb-8">
-          <div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/25 flex-shrink-0">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2C6.477 2 2 6.477 2 12C2 17.523 6.477 22 12 22C17.523 22 22 17.523 22 12C22 6.477 17.523 2 12 2Z" fill="currentColor" fill-opacity="0.2"/>
-              <path d="M12 6V18M6 12H18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-            </svg>
+          <div class="w-11 h-11 rounded-xl overflow-hidden shadow-md flex-shrink-0 border border-border/40">
+            <img :src="activeLogo" alt="پروا" class="w-full h-full object-cover" />
           </div>
           <div class="text-start">
-            <span class="text-2xl font-bold tracking-tight text-foreground block leading-tight">NeuralChat</span>
-            <span class="text-[11px] font-mono text-muted-foreground">AI Multi-Model Platform</span>
+            <span class="text-2xl font-bold tracking-tight text-foreground block leading-tight">پروا</span>
+            <span class="text-[11px] font-mono text-muted-foreground">سامانه هوش مصنوعی پروا • NeuralChat</span>
           </div>
         </div>
 
@@ -288,35 +300,13 @@ async function handleSubmit() {
       </div>
     </div>
 
-    <!-- RIGHT HALF: Image Pane (Strictly 50% on the right side) -->
-    <div class="image-half">
+    <!-- RIGHT HALF: Logo Pane (Strictly 50% on the right side) - No text, No background -->
+    <div class="image-half flex items-center justify-center">
       <img 
-        :src="loginArtwork" 
-        alt="Neural Network Intelligence" 
-        class="split-artwork-img"
+        :src="activeLogo" 
+        alt="لوگو سامانه پروا" 
+        class="login-clean-logo"
       />
-      <!-- Ambient dark gradient over the image -->
-      <div class="split-artwork-gradient"></div>
-
-      <!-- Overlay Tagline & Engine Badge on Image -->
-      <div class="split-artwork-overlay" :dir="uiStore.direction">
-        <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/60 border border-white/15 text-xs font-mono text-purple-300 backdrop-blur-md mb-3 w-fit shadow-lg">
-          <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
-          <span>NEURAL ENGINE • v2.0</span>
-        </div>
-        <h2 class="text-2xl lg:text-3xl font-extrabold text-white leading-tight drop-shadow-lg">
-          {{ uiStore.direction === 'rtl' 
-            ? 'سامانه یکپارچه پردازش هوش مصنوعی' 
-            : 'Next-Generation Multi-Model AI Workspace' 
-          }}
-        </h2>
-        <p class="text-xs sm:text-sm text-neutral-300 mt-2.5 max-w-md drop-shadow leading-relaxed">
-          {{ uiStore.direction === 'rtl'
-            ? 'ارتباط مستقیم و پرسرعت با موتورهای Claude 3.5 Sonnet، GPT-4o و Llama 3 به همراه استریم بلادرنگ و امنیت بالا.'
-            : 'Real-time low-latency streaming connection to Claude 3.5 Sonnet, GPT-4o, and Llama 3 with end-to-end security.'
-          }}
-        </p>
-      </div>
     </div>
 
   </div>
@@ -352,49 +342,32 @@ async function handleSubmit() {
   max-width: 420px;
 }
 
-/* Right Half: Image Pane (Takes exactly 50% on md/desktop) */
+/* Right Half: Logo Pane (Takes exactly 50% on md/desktop) */
 .image-half {
   display: none;
 }
 
 @media (min-width: 768px) {
   .image-half {
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     flex: 1;
     min-height: 100vh;
     position: relative;
-    overflow: hidden;
-    background-color: #060708;
+    background: transparent !important;
     border-inline-start: 1px solid var(--border);
+    padding: 40px;
   }
 }
 
-.split-artwork-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-}
-
-.split-artwork-gradient {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    to top,
-    rgba(14, 15, 17, 0.95) 0%,
-    rgba(14, 15, 17, 0.4) 50%,
-    transparent 100%
-  );
-  pointer-events: none;
-}
-
-.split-artwork-overlay {
-  position: absolute;
-  bottom: 0;
-  inset-inline-start: 0;
-  inset-inline-end: 0;
-  padding: 48px 40px;
-  z-index: 10;
-  text-align: start;
+.login-clean-logo {
+  max-width: 320px;
+  max-height: 320px;
+  width: 70%;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.18));
+  transition: opacity 300ms ease, transform 300ms ease;
 }
 </style>

@@ -7,6 +7,7 @@ import {
   Patch,
   Body,
   Param,
+  Query,
   HttpCode,
   UseGuards,
   Res,
@@ -24,6 +25,9 @@ export class ChatController {
   constructor(private chat: ChatService) {}
   @Get() list(@Req() req: any) {
     return this.chat.list(req.user.sub);
+  }
+  @Get('search') search(@Req() req: any, @Query('q') query: string) {
+    return this.chat.search(req.user.sub, query);
   }
   @Post() @UsePipes(new ValidationPipe({ whitelist: true })) create(
     @Req() req: any,

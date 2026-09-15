@@ -67,6 +67,20 @@ watch(
     <!-- Grok Fluid Aurora Animated Background on Entrance -->
     <GrokAurora :intensity="isEntering ? 'vibrant' : 'subtle'" class="transition-opacity duration-1000 z-0" />
 
+    <!-- Floating hamburger (mobile only, shown when sidebar is closed) -->
+    <button
+      v-if="!uiStore.sidebarOpen"
+      class="mobile-menu-btn md:hidden"
+      @click="uiStore.toggleSidebar"
+      :title="uiStore.direction === 'rtl' ? 'باز کردن منو' : 'Open menu'"
+    >
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+
     <!-- Network Status Indicator -->
     <NetworkStatusBanner class="relative z-10" />
 
@@ -119,5 +133,41 @@ watch(
   position: relative;
   overflow: hidden;
   background-color: transparent;
+}
+
+/* Floating hamburger — mobile only, on top of everything, themed background */
+.mobile-menu-btn {
+  position: fixed;
+  top: 12px;
+  inset-inline-start: 12px;
+  z-index: 60;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(8px);
+  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.mobile-menu-btn:hover {
+  background-color: var(--secondary);
+  transform: scale(1.04);
+}
+
+.mobile-menu-btn:active {
+  transform: scale(0.96);
+}
+
+@media (min-width: 768px) {
+  .mobile-menu-btn {
+    display: none !important;
+  }
 }
 </style>

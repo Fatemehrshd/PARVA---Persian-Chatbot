@@ -9,7 +9,9 @@ export interface Toast {
 }
 
 export const useUiStore = defineStore('ui', () => {
-  const sidebarOpen = ref(localStorage.getItem('sidebarOpen') !== 'false')
+  // On mobile (< 768px) sidebar is always hidden by default regardless of localStorage
+  const isMobileDefault = typeof window !== 'undefined' && window.innerWidth < 768
+  const sidebarOpen = ref(isMobileDefault ? false : localStorage.getItem('sidebarOpen') !== 'false')
   const direction = ref<'rtl' | 'ltr'>((localStorage.getItem('direction') as 'rtl' | 'ltr') || 'rtl')
   const authModalOpen = ref(false)
   const authMode = ref<'login' | 'signup'>('login')

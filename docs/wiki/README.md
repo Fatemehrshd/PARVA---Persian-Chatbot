@@ -7,6 +7,7 @@ Welcome to the project documentation wiki.
 - [Architecture Overview](architecture.md)
 - [API Architecture & Technical Reference](api-reference.md)
 - [Chat System & Streaming Architecture](chat-system.md)
+- [Chat Resilience: Offline, Refresh & Interrupted Streaming](chat-resilience.md)
 - [Streaming Comprehensive Guide (README)](../STREAMING_README.md)
 - [Features History](features.md)
 - [Architectural Decisions (ADRs)](decisions.md)

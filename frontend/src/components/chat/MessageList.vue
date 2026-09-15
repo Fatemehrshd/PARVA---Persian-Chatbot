@@ -39,8 +39,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div ref="containerRef" class="message-list-viewport flex-1 overflow-y-auto overflow-x-hidden flex flex-col py-6 scroll-smooth">
-    <div class="chat-content-wrapper message-list-content px-4 sm:px-6 md:px-8 flex flex-col">
+  <div ref="containerRef" class="message-list-viewport flex-1 overflow-y-auto overflow-x-hidden flex flex-col scroll-smooth">
+    <div class="chat-content-wrapper message-list-content flex flex-col">
       <!-- Empty State -->
       <EmptyState v-if="chatStore.messages.length === 0 && !chatStore.isStreaming" />
 
@@ -99,13 +99,12 @@ onMounted(() => {
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  padding: 24px 0 16px;
+  padding-block: clamp(1rem, 3vw, 1.5rem) 1rem;
   scroll-behavior: auto;
 }
 
 .message-list-content {
   width: 100%;
-  margin: 0 auto;
   min-height: 100%;
   padding-bottom: 48px;
 }
@@ -113,18 +112,18 @@ onMounted(() => {
 .streaming-row {
   display: flex;
   width: 100%;
-  gap: 14px;
-  margin-bottom: 24px;
+  gap: clamp(0.625rem, 2vw, 0.875rem);
+  margin-bottom: clamp(1rem, 3vw, 1.5rem);
   animation: stream-enter 200ms ease-out;
 }
 
 .streaming-row-thinking {
-  margin-top: auto;
+  margin-top: 0;
 }
 
 @media (max-width: 767px) {
   .message-list-content {
-    padding-top: 58px; /* Clearance for floating mobile hamburger button */
+    padding-top: clamp(3.5rem, 12vw, 4.5rem); /* Keep messages below the hamburger */
   }
 }
 

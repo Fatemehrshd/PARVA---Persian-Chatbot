@@ -184,7 +184,7 @@ onUnmounted(() => {
 <style scoped>
 .composer-outer {
   width: 100%;
-  padding: 0 16px 16px;
+  padding: 0 0 16px;
   background: linear-gradient(180deg, transparent 0%, var(--background) 25%);
 }
 

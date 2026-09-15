@@ -17,7 +17,7 @@ backend/
 │   │   ├── chat/          ← conversations, messages, streaming response (+ /v1 OpenAI-compat facade)
 │   │   ├── ai/            ← OpenAI-compatible forwarder (real provider streaming)
 │   │   ├── models-admin/  ← AI providers + models CRUD, defaults, public GET /models
-│   │   ├── users/         ← profile, preferences, credentials, avatar endpoints
+│   │   ├── users/         ← profile, credentials, avatar endpoints
 │   │   ├── storage/       ← MinIO object storage (avatars; MINIO_* env)
 │   │   └── ...            ← every new feature = a new, independent module
 │   ├── migrations/        ← TypeORM migrations (production schema path; dev uses DB_SYNC)

@@ -51,8 +51,7 @@ function svcWith(opts: {
     stream: (t: any, m: any[]) =>
       opts.streamImpl ? opts.streamImpl(t, m) : (async function* () {})(),
   };
-  const users: any = { findById: async () => null };
-  const svc = new ChatService(conv, msg, models, users, forwarder);
+  const svc = new ChatService(conv, msg, models, forwarder);
   return { svc, savedMsgs };
 }
 

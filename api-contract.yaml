@@ -38,7 +38,7 @@ tags:
   - name: Admin - Users
     description: List all registered users with chat & token consumption stats, edit user details and delete users
   - name: Users
-    description: Profile, preferences, credentials and avatar of the current user
+    description: Profile, credentials and avatar of the current user
   - name: OpenAI Compatibility
     description: Standard OpenAI-compatible endpoints for listing active models and completions
 
@@ -133,7 +133,7 @@ paths:
           $ref: '#/components/responses/Unauthorized'
     patch:
       tags: [Users]
-      summary: Update profile fields (displayName / username / bio)
+      summary: Update profile fields (displayName / username)
       description: >
         Username is normalized to lowercase and must be unique (409 when
         taken). Avatar upload has its own endpoint (multipart).
@@ -160,45 +160,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-
-  /users/me/preferences:
-    get:
-      tags: [Users]
-      summary: Get the current user's profile (preferences included)
-      responses:
-        '200':
-          description: Profile with preferences
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserProfileApiResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-    put:
-      tags: [Users]
-      summary: Replace user preferences (language, theme, timezone, default model)
-      description: >
-        language: fa|en, theme: light|dark, timezone must be a valid IANA zone,
-        defaultModelId must reference an ACTIVE model. The user's default
-        model is used when starting a conversation without an explicit modelId
-        (resolution chain: explicit -> user default -> platform default).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserPreferencesRequest'
-      responses:
-        '200':
-          description: Updated profile
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserProfileApiResponse'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
 
   /users/me/email:
     post:
@@ -1106,10 +1067,6 @@ components:
           type: string
           nullable: true
           description: Unique lowercase handle ([a-z0-9_]{3,30}).
-        bio:
-          type: string
-          nullable: true
-          maxLength: 500
         avatarUrl:
           type: string
           nullable: true
@@ -1117,23 +1074,6 @@ components:
         role:
           type: string
           enum: [user, admin]
-        language:
-          type: string
-          enum: [fa, en]
-        theme:
-          type: string
-          enum: [light, dark]
-        timezone:
-          type: string
-          nullable: true
-          description: IANA timezone name, e.g. Asia/Tehran.
-        defaultModelId:
-          type: string
-          nullable: true
-          description: Preferred chat model (UUID or apiIdentifier); overrides the platform default.
-        usedTokens:
-          type: integer
-          description: Total tokens consumed across chats.
         createdAt:
           type: string
           format: date-time
@@ -1287,26 +1227,6 @@ components:
           type: string
           pattern: "^[a-zA-Z0-9_]{3,30}$"
           description: Normalized to lowercase server-side; empty string removes it.
-        bio:
-          type: string
-          maxLength: 500
-
-    UserPreferencesRequest:
-      type: object
-      properties:
-        language:
-          type: string
-          enum: [fa, en]
-        theme:
-          type: string
-          enum: [light, dark]
-        timezone:
-          type: string
-          description: IANA zone validated by Intl on the server.
-        defaultModelId:
-          type: string
-          nullable: true
-          description: Model UUID or apiIdentifier of an ACTIVE model; null to clear.
 
     ChangeEmailRequest:
       type: object

@@ -5,6 +5,7 @@ import { useAuthStore } from '../../stores/auth'
 import { useChatStore } from '../../stores/chat'
 import { useUiStore } from '../../stores/ui'
 import { getTextDirection } from '../../utils/textDirection'
+import MarkdownContent from './MarkdownContent.vue'
 
 const props = defineProps<{
   message: Message
@@ -22,7 +23,16 @@ const textDirection = computed(() => getTextDirection(props.message.content))
 const formattedTime = computed(() => {
   if (!props.message.createdAt) return ''
   const date = new Date(props.message.createdAt)
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  if (isNaN(date.getTime())) return ''
+
+  let hours = date.getHours()
+  const minutes = date.getMinutes()
+  const period = hours >= 12 ? 'بعدازظهر' : 'قبل‌ازظهر'
+  hours = hours % 12 || 12
+  const toPersianDigits = (val: number | string) =>
+    String(val).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)])
+  const minutesStr = minutes < 10 ? `۰${toPersianDigits(minutes)}` : toPersianDigits(minutes)
+  return `${toPersianDigits(hours)}:${minutesStr} ${period}`
 })
 
 const userInitial = computed(() => {
@@ -41,49 +51,82 @@ function copyContent() {
 </script>
 
 <template>
-  <div :class="['message-row', isUser ? 'row-user' : 'row-assistant']">
+  <div 
+    :class="[
+      'message-row', 
+      isUser ? 'row-user' : 'row-assistant',
+      'w-full flex gap-3.5 mb-6 group transition-all duration-200'
+    ]"
+  >
     <!-- Avatar -->
-    <div :class="['avatar', isUser ? 'avatar-user' : 'avatar-assistant']">
+    <div 
+      :class="[
+        'avatar', 
+        isUser ? 'avatar-user' : 'avatar-assistant',
+        'w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-xs shadow-sm select-none mt-0.5 transition-transform'
+      ]"
+    >
       <template v-if="isUser">
-        {{ userInitial }}
+        <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="user-avatar-image" />
+        <span v-else>{{ userInitial }}</span>
       </template>
       <template v-else>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 2C6.477 2 2 6.477 2 12C2 17.523 6.477 22 12 22C17.523 22 22 17.523 22 12C22 6.477 17.523 2 12 2Z" stroke="var(--primary)" stroke-width="2"/>
-          <circle cx="9" cy="11" r="1.5" fill="var(--primary)"/>
-          <circle cx="15" cy="11" r="1.5" fill="var(--primary)"/>
-          <path d="M9 16C9.8 17.2 11.2 17.5 12 17.5C12.8 17.5 14.2 17.2 15 16" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"/>
+        <!-- AI Icon -->
+        <svg class="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2C6.477 2 2 6.477 2 12C2 17.523 6.477 22 12 22C17.523 22 22 17.523 22 12C22 6.477 17.523 2 12 2Z"/>
+          <circle cx="9" cy="11" r="1.5" fill="currentColor"/>
+          <circle cx="15" cy="11" r="1.5" fill="currentColor"/>
+          <path d="M9 16C9.8 17.2 11.2 17.5 12 17.5C12.8 17.5 14.2 17.2 15 16" stroke-linecap="round"/>
         </svg>
       </template>
     </div>
 
-    <!-- Bubble Content -->
-    <div class="bubble-container">
+    <!-- Bubble Container -->
+    <div class="bubble-container flex flex-col flex-1 min-w-0">
+      <!-- Bubble Content -->
       <div 
-        :class="['bubble', isUser ? 'bubble-user' : 'bubble-assistant', textDirection]"
+        :class="[
+          'bubble', 
+          isUser ? 'bubble-user rounded-2xl p-4' : 'bubble-assistant p-1', 
+          textDirection,
+          'transition-colors'
+        ]"
         :dir="textDirection"
       >
-        <div class="message-text">{{ message.content }}</div>
+        <!-- User: Plain text with proper line breaks -->
+        <div v-if="isUser" class="message-text whitespace-pre-wrap leading-relaxed text-[14px] md:text-[15px]">
+          {{ message.content }}
+        </div>
+
+        <!-- Assistant: Rich Markdown with Code blocks, Tables, and Readme Elements -->
+        <div v-else class="message-text">
+          <MarkdownContent :content="message.content" />
+        </div>
       </div>
 
-      <!-- Metadata & Action bar -->
-      <div class="meta-bar">
-        <span class="timestamp font-mono">{{ formattedTime }}</span>
-        <button v-if="!isUser" class="copy-button" @click="copyContent" :title="copied ? 'Copied' : 'Copy'">
-          <svg v-if="!copied" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <!-- Action bar under message (Available for both user and assistant) -->
+      <div class="meta-bar flex items-center gap-3 mt-2 px-1 text-xs text-muted-foreground">
+        <span class="timestamp font-sans text-[11px] opacity-75">{{ formattedTime }}</span>
+        <button 
+          class="copy-button inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground text-xs font-sans transition-colors cursor-pointer" 
+          @click="copyContent" 
+          :title="copied ? 'کپی شد' : 'کپی متن'"
+        >
+          <svg v-if="!copied" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
           </svg>
-          <span v-else class="copied-text font-mono">✓</span>
+          <span v-else class="copied-text font-sans text-primary text-xs font-semibold">✓</span>
+          <span class="text-[11px]">{{ copied ? 'کپی شد' : 'کپی' }}</span>
         </button>
       </div>
 
       <!-- Recovery Action Bar for Interrupted / Error Assistant Messages -->
-      <div v-if="!isUser && (message.isInterrupted || message.id.startsWith('msg-err-'))" class="recovery-bar">
+      <div v-if="!isUser && (message.isInterrupted || message.id.startsWith('msg-err-'))" class="recovery-bar flex flex-col gap-2 mt-3">
         <!-- Status label -->
-        <div class="recovery-label">
-          <span class="stop-badge">
-            <span class="stop-square-icon"></span>
+        <div class="recovery-label flex items-center">
+          <span class="stop-badge inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-500 border border-red-500/25">
+            <span class="stop-square-icon w-1.5 h-1.5 rounded-sm bg-red-500"></span>
             {{ uiStore.direction === 'rtl'
               ? (message.isInterrupted ? 'تولید توسط کاربر متوقف شد' : 'خطا در دریافت پاسخ')
               : (message.isInterrupted ? 'Stopped by user' : 'Response error')
@@ -92,9 +135,12 @@ function copyContent() {
         </div>
 
         <!-- Retry action ONLY on the last message -->
-        <div v-if="props.isLast && !chatStore.isStreaming" class="recovery-actions">
-          <button class="recovery-btn retry-btn" @click="chatStore.retryLastMessage">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <div v-if="props.isLast && !chatStore.isStreaming" class="recovery-actions flex items-center gap-2 mt-1">
+          <button 
+            class="recovery-btn retry-btn inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium bg-primary text-primary-foreground shadow-sm hover:opacity-90 transition-all active:scale-95" 
+            @click="chatStore.retryLastMessage"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
               <polyline points="1 4 1 10 7 10"></polyline>
               <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
             </svg>
@@ -107,108 +153,26 @@ function copyContent() {
 </template>
 
 <style scoped>
-.recovery-bar {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.recovery-label {
-  display: flex;
-  align-items: center;
-}
-
-.stop-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background-color: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.25);
-  color: #ef4444;
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.stop-square-icon {
-  width: 7px;
-  height: 7px;
-  background-color: #ef4444;
-  border-radius: 1.5px;
-}
-
-.recovery-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.recovery-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border-radius: var(--radius-sm, 8px);
-  font-size: 12px;
-  font-weight: 500;
-  border: none;
-  cursor: pointer;
-  transition: all 150ms ease;
-}
-
-.retry-btn {
-  background-color: var(--primary);
-  color: var(--primary-foreground);
-  box-shadow: 0 2px 8px rgba(124, 106, 247, 0.25);
-}
-
-.retry-btn:hover {
-  opacity: 0.92;
-  transform: translateY(-1px);
-}
 .message-row {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   margin-bottom: 24px;
   width: 100%;
 }
 
-/* RTL layout (Default): User is anchored on the RIGHT, Assistant on the LEFT */
-.row-user {
-  flex-direction: row;
-  justify-content: flex-start;
-}
-
-.row-assistant {
-  flex-direction: row-reverse;
-  justify-content: flex-start;
-}
-
-html[dir="ltr"] .row-user {
-  flex-direction: row-reverse;
-}
-
-html[dir="ltr"] .row-assistant {
-  flex-direction: row;
-}
-
-.avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 13px;
-}
-
+/* User & Assistant Flow (ChatGPT Style):
+   Consistent, linear top-to-bottom layout where each turn begins with the author
+   and content flows cleanly directly beneath it */
 .avatar-user {
-  background: linear-gradient(135deg, var(--primary), #a78bfa);
+  background: linear-gradient(135deg, var(--primary), #818cf8);
   color: #ffffff;
+}
+
+.user-avatar-image {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .avatar-assistant {
@@ -219,31 +183,15 @@ html[dir="ltr"] .row-assistant {
 .bubble-container {
   display: flex;
   flex-direction: column;
-  max-width: 82%;
-}
-
-.row-user .bubble-container {
-  align-items: flex-start;
-}
-
-.row-assistant .bubble-container {
-  align-items: flex-end;
-}
-
-html[dir="ltr"] .row-user .bubble-container {
-  align-items: flex-end;
-}
-
-html[dir="ltr"] .row-assistant .bubble-container {
-  align-items: flex-start;
+  width: 100%;
+  min-width: 0;
 }
 
 .bubble {
-  padding: 12px 16px;
-  font-size: 14px;
-  line-height: 1.6;
+  padding: 14px 18px;
+  font-size: 14.5px;
+  line-height: 1.68;
   word-break: break-word;
-  white-space: pre-wrap;
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
@@ -259,53 +207,40 @@ html[dir="ltr"] .row-assistant .bubble-container {
   direction: ltr;
 }
 
-/* User Message Bubble */
+/* User Message Bubble: styled cleanly at the top of the turn */
 .bubble-user {
   background-color: var(--chat-user-bg, #1e202d);
   color: var(--chat-user-fg, #f3f4f6);
   border: 1px solid var(--chat-user-border, #2e3247);
-  border-radius: 18px 18px 4px 18px;
+  border-radius: 16px;
+  align-self: flex-start;
+  max-width: 92%;
 }
 
-/* Assistant Message Bubble */
+/* Assistant Message Bubble: completely borderless with transparent background */
 .bubble-assistant {
-  background-color: var(--chat-assistant-bg, #0c0d13);
-  color: var(--chat-assistant-fg, #f3f4f6);
-  border: 1px solid var(--chat-assistant-border, #1e202d);
-  border-radius: 18px 18px 18px 4px;
+  background-color: transparent !important;
+  background: transparent !important;
+  color: var(--foreground) !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 4px 0 !important;
+  border-radius: 0 !important;
+  width: 100%;
 }
 
+/* Action & recovery bars */
 .meta-bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 6px;
-  padding: 0 6px;
-}
-
-.timestamp {
-  font-size: 11px;
-  color: var(--muted-foreground);
-  opacity: 0.85;
-  letter-spacing: 0.02em;
 }
 
 .copy-button {
-  color: var(--muted-foreground);
-  padding: 2px 4px;
-  border-radius: 4px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.copy-button:hover {
-  color: var(--foreground);
-  background-color: var(--secondary);
+  cursor: pointer;
 }
 
 .copied-text {
-  font-size: 11px;
   color: var(--primary);
 }
 </style>

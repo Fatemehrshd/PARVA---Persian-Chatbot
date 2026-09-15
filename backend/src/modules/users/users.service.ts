@@ -8,7 +8,7 @@ export class UsersService {
   constructor(@InjectRepository(User) private repo: Repository<User>) {}
 
   findByEmail(email: string) {
-    return this.repo.findOne({ where: { email } });
+    return this.repo.findOne({ where: { email: email.trim().toLowerCase() } });
   }
 
   findById(id: string) {

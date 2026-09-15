@@ -9,9 +9,32 @@
 export interface User {
   id: string
   email: string
-  displayName?: string
+  displayName?: string | null
+  username?: string | null
+  avatarUrl?: string | null
   role: 'user' | 'admin'
   createdAt?: string
+}
+
+export interface UserProfile extends User {
+  displayName: string | null
+  username: string | null
+  avatarUrl: string | null
+}
+
+export interface UpdateProfileRequest {
+  displayName?: string
+  username?: string
+}
+
+export interface ChangeEmailRequest {
+  email: string
+  password: string
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string
+  newPassword: string
 }
 
 export interface SignupRequest {
@@ -64,6 +87,15 @@ export interface Message {
   content: string
   createdAt: string
   isInterrupted?: boolean
+  stoppedByUser?: boolean
+}
+
+export interface ActiveStreamStatus {
+  active: boolean
+  status: 'thinking' | 'streaming' | 'completed' | 'error'
+  accumulatedText: string
+  title?: string
+  messageId?: string
 }
 
 export interface SendMessageRequest {

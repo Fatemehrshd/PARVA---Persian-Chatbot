@@ -64,6 +64,15 @@ export interface Message {
   content: string
   createdAt: string
   isInterrupted?: boolean
+  stoppedByUser?: boolean
+}
+
+export interface ActiveStreamStatus {
+  active: boolean
+  status: 'thinking' | 'streaming' | 'completed' | 'error'
+  accumulatedText: string
+  title?: string
+  messageId?: string
 }
 
 export interface SendMessageRequest {

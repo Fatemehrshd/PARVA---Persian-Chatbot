@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Conversation } from './conversation.entity';
@@ -6,9 +6,11 @@ import { Message } from './message.entity';
 import { ModelsAdminService } from '../models-admin/models-admin.service';
 import { UsersService } from '../users/users.service';
 import { OpenAiCompatForwarder, ChatMessage } from '../ai/openai-compat.forwarder';
+import { ActiveStreamService, ActiveStreamStatus } from './active-stream.service';
 
 export interface ChatChunk {
   token?: string;
+  sync?: string;
   saved?: Message;
   title?: string;
 }
@@ -26,7 +28,12 @@ export class ChatService {
     private models: ModelsAdminService,
     private users: UsersService,
     private forwarder: OpenAiCompatForwarder,
-  ) {}
+    @Optional() private activeStream?: ActiveStreamService,
+  ) {
+    if (!this.activeStream) {
+      this.activeStream = new ActiveStreamService();
+    }
+  }
 
   list(userId: string) {
     return this.conv.find({ where: { userId }, order: { updatedAt: 'DESC' } });
@@ -164,6 +171,13 @@ export class ChatService {
   async *generate(userId: string, id: string, content: string): AsyncGenerator<ChatChunk> {
     const conversation = await this.assertOwned(userId, id);
 
+    // If there is already an active ongoing generation for this conversation, attach to it!
+    const existing = this.activeStream?.getSession(id);
+    if (existing && (existing.status === 'thinking' || existing.status === 'streaming')) {
+      yield* this.attachToActiveStream(id, existing);
+      return;
+    }
+
     // Validate active model status (same resolution order as before)
     let model = null;
     if (conversation.modelId) {
@@ -196,6 +210,7 @@ export class ChatService {
     }
     const shouldGenerateTitle = isDefaultTitle && existingMsgCount === 0;
 
+    const session = this.activeStream?.startSession(id, userId, content);
     await this.msg.save(this.msg.create({ conversationId: id, role: 'user', content }));
 
     const target = this.forwarder.resolveTarget(model, provider);
@@ -207,20 +222,31 @@ export class ChatService {
       );
       const full = `Echo: ${content}`;
       for (const w of full.split(/(\s+)/)) {
-        if (w) yield { token: w };
+        if (w) {
+          this.activeStream?.appendToken(id, w);
+          yield { token: w };
+        }
       }
       const savedMock = await this.msg.save(
-        this.msg.create({ conversationId: id, role: 'assistant', content: full }),
+        this.msg.create({
+          conversationId: id,
+          role: 'assistant',
+          content: full,
+          isInterrupted: false,
+          stoppedByUser: false,
+        }),
       );
       if (titlePromise) {
         const genTitle = await titlePromise;
         if (genTitle) {
           await this.conv.update(id, { title: genTitle });
+          this.activeStream?.setTitle(id, genTitle);
           yield { title: genTitle };
         }
       } else {
         await this.conv.update(id, {});
       }
+      this.activeStream?.completeSession(id, savedMock.id);
       yield { saved: savedMock };
       return;
     }
@@ -237,14 +263,24 @@ export class ChatService {
 
     let full = '';
     let savedAssistant: Message | null = null;
+    let failedMidStream = false;
     try {
       try {
         for await (const token of this.forwarder.stream(target, messages)) {
+          if (session?.abortController.signal.aborted) break;
           full += token;
+          this.activeStream?.appendToken(id, token);
           yield { token };
         }
       } catch (err) {
-        if (!full) throw err; // failed before the first token -> plain 502 upstream
+        if (!full) {
+          this.activeStream?.failSession(
+            id,
+            err instanceof Error ? err.message : String(err),
+          );
+          throw err; // failed before the first token -> plain 502 upstream
+        }
+        failedMidStream = true;
         this.logger.warn(
           `Provider "${target.apiIdentifier}" failed mid-stream, persisting partial reply: ${
             err instanceof Error ? err.message : String(err)
@@ -254,9 +290,16 @@ export class ChatService {
     } finally {
       if (full && !savedAssistant) {
         savedAssistant = await this.msg.save(
-          this.msg.create({ conversationId: id, role: 'assistant', content: full }),
+          this.msg.create({
+            conversationId: id,
+            role: 'assistant',
+            content: full,
+            isInterrupted: failedMidStream,
+            stoppedByUser: false,
+          }),
         );
         await this.conv.update(id, {});
+        this.activeStream?.completeSession(id, savedAssistant.id);
       }
     }
 
@@ -265,6 +308,7 @@ export class ChatService {
         const genTitle = await titlePromise;
         if (genTitle) {
           await this.conv.update(id, { title: genTitle });
+          this.activeStream?.setTitle(id, genTitle);
           yield { title: genTitle };
         }
       } catch (err) {
@@ -277,6 +321,209 @@ export class ChatService {
     if (savedAssistant) {
       yield { saved: savedAssistant };
     }
+  }
+
+  /**
+   * Resumes an interrupted message stream from where it stopped.
+   */
+  async *resume(
+    userId: string,
+    conversationId: string,
+    messageId: string,
+  ): AsyncGenerator<ChatChunk> {
+    const conversation = await this.assertOwned(userId, conversationId);
+
+    let targetMsg =
+      typeof this.msg.findOne === 'function'
+        ? await this.msg.findOne({ where: { id: messageId, conversationId } })
+        : null;
+
+    if (!targetMsg && (messageId.startsWith('msg-') || messageId.startsWith('temp-'))) {
+      const allMsgs = await this.msg.find({
+        where: { conversationId },
+        order: { createdAt: 'DESC' },
+      });
+      targetMsg = allMsgs.find((m) => m.role === 'assistant' && m.isInterrupted) ?? null;
+    }
+
+    if (!targetMsg) {
+      throw new NotFoundException('Resource not found');
+    }
+
+    if (targetMsg.role !== 'assistant') {
+      throw new BadRequestException('تنها پیام‌های پاسخ دستیار قابل ادامه دادن هستند');
+    }
+
+    let model = null;
+    if (conversation.modelId) {
+      model = await this.models.getRawById(conversation.modelId);
+    }
+    if (!model) {
+      model = await this.models.getDefault();
+    }
+    if (model && model.isActive === false) {
+      throw new BadRequestException('Selected AI model is currently disabled');
+    }
+    const provider = await this.models.resolveProvider(model);
+    if (provider && provider.isActive === false) {
+      throw new BadRequestException(`Provider "${provider.name}" is disabled`);
+    }
+
+    const target = this.forwarder.resolveTarget(model, provider);
+    if (!target) {
+      this.logger.warn('No API key configured — using offline echo fallback for resume.');
+      const continuation = ' (resumed)';
+      for (const w of continuation.split(/(\s+)/)) {
+        if (w) yield { token: w };
+      }
+      targetMsg.content = targetMsg.content + continuation;
+      targetMsg.isInterrupted = false;
+      targetMsg.stoppedByUser = false;
+      const saved = await this.msg.save(targetMsg);
+      yield { saved };
+      return;
+    }
+
+    const allHistory = await this.msg.find({
+      where: { conversationId },
+      order: { createdAt: 'ASC' },
+      take: HISTORY_LIMIT,
+    });
+
+    const targetIdx = allHistory.findIndex((m) => m.id === targetMsg.id);
+    const prior =
+      targetIdx >= 0
+        ? allHistory.slice(0, targetIdx)
+        : allHistory.filter((m) => m.id !== targetMsg.id);
+
+    const messages: ChatMessage[] = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...prior.map((m) => ({ role: m.role, content: m.content })),
+      { role: 'assistant', content: targetMsg.content },
+      {
+        role: 'user',
+        content:
+          'Please continue generating your previous response directly from where you stopped. Maintain the exact same language, tone, formatting, and structure (e.g., continue markdown tables, lists, or code blocks if interrupted mid-block). Do not repeat any words, phrases, or sentences from before. Do not add any conversational preamble or acknowledgments. Begin immediately with the next word.',
+      },
+    ];
+
+    let continuationText = '';
+    let failedMidStream = false;
+    try {
+      for await (const token of this.forwarder.stream(target, messages)) {
+        continuationText += token;
+        yield { token };
+      }
+    } catch (err) {
+      failedMidStream = true;
+      this.logger.warn(
+        `Resume stream failed mid-stream: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      targetMsg.content = targetMsg.content + continuationText;
+      targetMsg.isInterrupted = failedMidStream;
+      targetMsg.stoppedByUser = false;
+      const saved = await this.msg.save(targetMsg);
+      yield { saved };
+    }
+  }
+
+  /**
+   * Sets stoppedByUser on a message and marks isInterrupted false.
+   */
+  async stopMessage(userId: string, conversationId: string, messageId: string): Promise<Message> {
+    await this.assertOwned(userId, conversationId);
+    let targetMsg =
+      typeof this.msg.findOne === 'function'
+        ? await this.msg.findOne({ where: { id: messageId, conversationId } })
+        : null;
+
+    if (
+      !targetMsg &&
+      (messageId.startsWith('msg-') ||
+        messageId.startsWith('temp-') ||
+        messageId.startsWith('active-'))
+    ) {
+      const allMsgs = await this.msg.find({
+        where: { conversationId },
+        order: { createdAt: 'DESC' },
+      });
+      targetMsg = allMsgs.find((m) => m.role === 'assistant') ?? null;
+    }
+    if (!targetMsg) {
+      throw new NotFoundException('Resource not found');
+    }
+    targetMsg.stoppedByUser = true;
+    targetMsg.isInterrupted = false;
+    return this.msg.save(targetMsg);
+  }
+
+  private async *attachToActiveStream(id: string, session: any): AsyncGenerator<ChatChunk> {
+    if (session.accumulatedText) {
+      yield { sync: session.accumulatedText };
+    }
+    if (session.title) {
+      yield { title: session.title };
+    }
+
+    const queue: ChatChunk[] = [];
+    let resolveNext: (() => void) | null = null;
+    let isDone = session.status === 'completed' || session.status === 'error';
+
+    const unsubscribe = this.activeStream?.subscribe(id, (event: any) => {
+      if (event.type === 'token') {
+        queue.push({ token: event.content });
+      } else if (event.type === 'title') {
+        queue.push({ title: event.title });
+      } else if (event.type === 'done') {
+        queue.push({ saved: { id: event.messageId } as any });
+        isDone = true;
+      } else if (event.type === 'error') {
+        isDone = true;
+      }
+      if (resolveNext) {
+        resolveNext();
+        resolveNext = null;
+      }
+    });
+
+    try {
+      while (!isDone || queue.length > 0) {
+        while (queue.length > 0) {
+          yield queue.shift()!;
+        }
+        if (isDone) break;
+        await new Promise<void>((r) => (resolveNext = r));
+      }
+    } finally {
+      unsubscribe?.();
+    }
+  }
+
+  async getActiveStreamStatus(userId: string, id: string): Promise<ActiveStreamStatus> {
+    await this.assertOwned(userId, id);
+    return (
+      this.activeStream?.getActiveStatus(id) ?? {
+        active: false,
+        status: 'completed',
+        accumulatedText: '',
+      }
+    );
+  }
+
+  async *subscribeToStream(userId: string, id: string): AsyncGenerator<ChatChunk> {
+    await this.assertOwned(userId, id);
+    const session = this.activeStream?.getSession(id);
+    if (!session || session.status === 'completed' || session.status === 'error') {
+      return;
+    }
+    yield* this.attachToActiveStream(id, session);
+  }
+
+  async stopStream(userId: string, id: string): Promise<{ stopped: boolean }> {
+    await this.assertOwned(userId, id);
+    const stopped = this.activeStream?.abortSession(id) ?? false;
+    return { stopped };
   }
 
   /**

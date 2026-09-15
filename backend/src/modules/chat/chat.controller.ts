@@ -54,6 +54,60 @@ export class ChatController {
   @Get(':id/messages') history(@Req() req: any, @Param('id') id: string) {
     return this.chat.history(req.user.sub, id);
   }
+  @Get(':id/active-stream')
+  async getActiveStream(@Req() req: any, @Param('id') id: string) {
+    return this.chat.getActiveStreamStatus(req.user.sub, id);
+  }
+
+  @Post(':id/stop')
+  @HttpCode(200)
+  async stopStream(@Req() req: any, @Param('id') id: string) {
+    return this.chat.stopStream(req.user.sub, id);
+  }
+
+  @Get(':id/stream')
+  async streamActive(
+    @Req() req: Request & any,
+    @Res() res: Response,
+    @Param('id') id: string,
+  ) {
+    const gen = this.chat.subscribeToStream(req.user.sub, id);
+    let clientDisconnected = false;
+    req.on('close', () => {
+      clientDisconnected = true;
+    });
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    try {
+      for await (const chunk of gen) {
+        if (clientDisconnected || res.writableEnded) break;
+        if (chunk.sync) {
+          res.write(`event: sync\ndata: ${JSON.stringify({ content: chunk.sync })}\n\n`);
+        }
+        if (chunk.token) {
+          res.write(`event: token\ndata: ${JSON.stringify({ content: chunk.token })}\n\n`);
+        }
+        if (chunk.title) {
+          res.write(`event: title\ndata: ${JSON.stringify({ title: chunk.title })}\n\n`);
+        }
+        if (chunk.saved) {
+          res.write(`event: done\ndata: ${JSON.stringify({ messageId: chunk.saved.id })}\n\n`);
+        }
+      }
+    } catch {
+      // client disconnect or stream complete
+    } finally {
+      if (!res.writableEnded) {
+        try {
+          res.end();
+        } catch {}
+      }
+    }
+  }
+
   // The OpenAPI contract specifies 200 for this endpoint regardless of
   // whether the reply is streamed or returned as a single JSON message.
   @Post(':id/messages')
@@ -94,10 +148,20 @@ export class ChatController {
         }
       }
     };
+    if (!first.done && first.value?.sync) {
+      res.write(`event: sync\ndata: ${JSON.stringify({ content: first.value.sync })}\n\n`);
+    }
     if (!first.done && first.value?.token) writeToken(first.value.token);
     try {
       for await (const chunk of gen) {
         if (clientDisconnected) break;
+        if (chunk.sync && !clientDisconnected && !res.writableEnded) {
+          try {
+            res.write(`event: sync\ndata: ${JSON.stringify({ content: chunk.sync })}\n\n`);
+          } catch {
+            clientDisconnected = true;
+          }
+        }
         if (chunk.token) writeToken(chunk.token);
         if (chunk.title && !clientDisconnected && !res.writableEnded) {
           try {
@@ -125,5 +189,66 @@ export class ChatController {
         }
       }
     }
+  }
+
+  @Post(':id/messages/:messageId/resume')
+  @HttpCode(200)
+  async resumeMessage(
+    @Req() req: Request & any,
+    @Res() res: Response,
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+  ) {
+    const gen = this.chat.resume(req.user.sub, id, messageId);
+    let clientDisconnected = false;
+    req.on('close', () => {
+      clientDisconnected = true;
+    });
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const writeToken = (t: string) => {
+      if (!clientDisconnected && !res.writableEnded) {
+        try {
+          res.write(`event: token\ndata: ${JSON.stringify({ content: t })}\n\n`);
+        } catch {
+          clientDisconnected = true;
+        }
+      }
+    };
+
+    try {
+      for await (const chunk of gen) {
+        if (clientDisconnected) break;
+        if (chunk.token) writeToken(chunk.token);
+        if (chunk.saved && !clientDisconnected && !res.writableEnded) {
+          try {
+            res.write(`event: done\ndata: ${JSON.stringify({ messageId: chunk.saved.id })}\n\n`);
+          } catch {
+            clientDisconnected = true;
+          }
+        }
+      }
+    } catch {
+      // client disconnect or stream complete
+    } finally {
+      if (!res.writableEnded) {
+        try {
+          res.end();
+        } catch {}
+      }
+    }
+  }
+
+  @Post(':id/messages/:messageId/stop')
+  @HttpCode(200)
+  async stopMessageEndpoint(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+  ) {
+    return this.chat.stopMessage(req.user.sub, id, messageId);
   }
 }

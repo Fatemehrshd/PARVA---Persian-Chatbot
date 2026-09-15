@@ -10,6 +10,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **ChatGPT-Style Chat Layout Refactoring**:
+  - Refactored message layout to a linear turn-based format: user prompt anchored cleanly at the top of each turn with user avatar; assistant response positioned directly underneath the user prompt across the full reading width (`max-w-3xl` / `max-w-4xl`).
+  - Assistant model response box is completely borderless with 100% transparent background, seamlessly blending with the interface.
+  - Removed sender and chatbot name text for a distraction-free, modern reading experience.
+  - Replaced "در حال نوشتن..." text label with a minimal 3-dot bouncing pulse loader.
+  - Formatted timestamps in Persian digits with explicit «قبل‌ازظهر» / «بعدازظهر» time-of-day indicators.
+  - Added copy button to user messages in addition to assistant messages, enabling full prompt copying.
+  - Active streaming bubble positioned directly under the last user message with real-time markdown parsing.
+  - Full Tailwind CSS utility class styling with smooth responsive spacing on mobile and desktop, matching the Obsidian Dark and Warm Cream Light themes.
+  - Preserved full backward compatibility for all test hooks (`.message-row`, `.row-user`, `.row-assistant`, `.bubble`, `.copy-button`, `.timestamp`, `.recovery-bar`, `.retry-btn`).
+- **Rich Markdown Engine (`MarkdownContent.vue`)**:
+  - **Fenced Code Blocks**: Syntax styling, language badge header (e.g. `TYPESCRIPT`, `PYTHON`, `SQL`), interactive copy button with feedback («کپی» -> «کپی شد ✓»), strict `dir="ltr"` formatting, and horizontal scroll.
+  - **Responsive Tables (GFM)**: Multi-column tables with `table-responsive` overflow container, zebra row striping, and themed borders.
+  - **README & Rich Typography**: Headings `h1`-`h6`, ordered/unordered lists (`ul`, `ol`), blockquotes with accent borders, inline code pills (`code`), and safe links (`target="_blank" rel="noopener noreferrer"`).
+  - **BiDi (Bidirectional) Text**: Seamless RTL flow for Persian text alongside strict LTR preservation for code blocks and tables.
+  - **Streaming Resilience**: Auto-closes unclosed code fences during active stream generation.
+- **Login Page Two-Column Layout**:
+  - Arranged the login view with the logo/artwork pane strictly on the left side and the authentication form pane on the right side on desktop screens, with border separation and mobile responsiveness.
+- **Resumable & Persistent Streaming Across Refreshes & Network Drops**:
+  - **Decoupled Backend Generation (`ActiveStreamService`)**: Active LLM generation sessions run independently of HTTP sockets, preventing upstream cancellation on page reload or network glitches.
+  - **Stream Status & Reconnection (`GET /active-stream` & `GET /stream`)**: Endpoints providing instantaneous state recovery (`event: sync`) and live token streaming for reconnecting clients.
+  - **Context-Aware Message Resumption (`POST /resume`)**: Resumes interrupted assistant responses from the exact point of interruption with prior conversation history and continuation prompt.
+  - **Explicit Stream Cancellation (`POST /stop`)**: Halts active background generation on user demand and saves partial tokens with `isInterrupted: false, stoppedByUser: true`.
+  - **Frontend Resilient Reconnection (`chat.service.ts` & `chat.ts`)**: On refresh or network drop, the UI maintains the typing/streaming state, attaches to the active stream without disappearing or jumping, and smoothly finishes generation.
+- **AI-Powered Automatic Conversation Titling (Auto-Title)**:
+  - Generates concise 3-5 word titles on the first user prompt using lightweight non-streaming forwarder completions (`OpenAiCompatForwarder.complete`).
+  - Persists title to PostgreSQL and emits `event: title` via SSE to update the sidebar in real time without refreshing.
+  - Includes offline keyword boundary fallback for unconfigured/offline environments.
 - **Theme-Aware Logo Variants**:
   - New `useThemeLogo` composable in `src/composables/useThemeLogo.ts` centralizes theme-aware branding logo selection.
   - Dark theme now uses `logo-white.png` (preferred) over the legacy `logo-dark.jpg` fallback; light theme uses the new `logo-blue.png`.

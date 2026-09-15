@@ -1,0 +1,254 @@
+<script setup lang="ts">
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { Marked } from 'marked'
+import { getTextDirection } from '../../utils/textDirection'
+
+const props = defineProps<{
+  content: string
+  streaming?: boolean
+}>()
+
+const rootRef = ref<HTMLElement | null>(null)
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+// Create dedicated marked instance with custom renderers and Tailwind-powered markup
+const markedInstance = new Marked({
+  gfm: true,
+  breaks: true
+})
+
+markedInstance.use({
+  renderer: {
+    code({ text, lang }: { text: string; lang?: string }) {
+      const language = (lang || 'code').trim().toLowerCase()
+      const encodedCode = encodeURIComponent(text)
+      return `
+<div class="code-block-wrapper my-4 rounded-xl border border-border/60 overflow-hidden bg-[#11121d] text-slate-100 shadow-sm" dir="ltr">
+  <div class="code-block-header flex items-center justify-between px-4 py-2 bg-[#181926] border-b border-white/10 text-xs font-mono">
+    <span class="code-lang font-semibold tracking-wider uppercase text-slate-300">${escapeHtml(language.toUpperCase())}</span>
+    <button type="button" class="copy-code-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-sans text-slate-300 hover:text-white hover:bg-white/10 transition-colors" data-code="${encodedCode}">
+      <svg class="copy-icon w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+      <span class="copy-label">کپی</span>
+    </button>
+  </div>
+  <pre class="code-pre p-4 overflow-x-auto text-[13px] leading-relaxed font-mono selection:bg-primary/30"><code class="language-${escapeHtml(language)}">${escapeHtml(text)}</code></pre>
+</div>
+`
+    },
+    table(token: any) {
+      const headerHtml = token.header
+        .map((cell: any) => `<th class="px-4 py-2.5 text-right md:text-start font-semibold text-foreground border-b border-border/50">${this.parser.parseInline(cell.tokens)}</th>`)
+        .join('')
+
+      const rowsHtml = token.rows
+        .map((row: any, idx: number) => {
+          const cellsHtml = row
+            .map((cell: any) => `<td class="px-4 py-2.5 text-foreground/90 border-b border-border/30">${this.parser.parseInline(cell.tokens)}</td>`)
+            .join('')
+          const rowBg = idx % 2 === 0 ? 'bg-card/40' : 'bg-muted/20'
+          return `<tr class="${rowBg} hover:bg-muted/40 transition-colors">${cellsHtml}</tr>`
+        })
+        .join('')
+
+      return `
+<div class="table-responsive my-4 overflow-x-auto rounded-xl border border-border/50 shadow-sm" dir="ltr">
+  <table class="markdown-table min-w-full border-collapse text-xs md:text-sm text-start">
+    <thead class="bg-muted/60 border-b border-border/60">
+      <tr>${headerHtml}</tr>
+    </thead>
+    <tbody class="divide-y divide-border/20">
+      ${rowsHtml}
+    </tbody>
+  </table>
+</div>
+`
+    },
+    heading({ tokens, depth }: { tokens: any[]; depth: number }) {
+      const content = this.parser.parseInline(tokens)
+      const dir = getTextDirection(content)
+      const classesByDepth: Record<number, string> = {
+        1: 'text-2xl font-bold mt-6 mb-3 pb-2 border-b border-border/50 text-foreground',
+        2: 'text-xl font-bold mt-5 mb-2.5 pb-1.5 border-b border-border/40 text-foreground',
+        3: 'text-lg font-semibold mt-4 mb-2 text-foreground',
+        4: 'text-base font-semibold mt-3 mb-1.5 text-foreground',
+        5: 'text-sm font-semibold mt-2.5 mb-1 text-foreground',
+        6: 'text-xs font-semibold uppercase tracking-wider mt-2 mb-1 text-muted-foreground'
+      }
+      const classes = classesByDepth[depth] || classesByDepth[3]
+      return `<h${depth} class="${classes} ${dir}" dir="${dir}">${content}</h${depth}>`
+    },
+    blockquote({ tokens }: { tokens: any[] }) {
+      const content = this.parser.parse(tokens)
+      return `<blockquote class="my-3 py-1.5 px-4 rounded-r-lg border-s-4 border-primary bg-muted/30 text-muted-foreground italic">${content}</blockquote>`
+    },
+    codespan({ text }: { text: string }) {
+      return `<code class="inline-code font-mono text-[12.5px] px-1.5 py-0.5 rounded-md bg-secondary/80 text-primary-foreground/90 border border-border/40 font-medium" dir="ltr">${escapeHtml(text)}</code>`
+    },
+    hr() {
+      return `<hr class="my-6 border-t border-border/50" />`
+    },
+    link({ href, title, tokens }: { href: string; title?: string | null; tokens: any[] }) {
+      const text = this.parser.parseInline(tokens)
+      const titleAttr = title ? ` title="${escapeHtml(title)}"` : ''
+      return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"${titleAttr} class="text-primary font-medium hover:underline inline-flex items-center gap-0.5">${text}</a>`
+    },
+    paragraph({ tokens }: { tokens: any[] }) {
+      const text = this.parser.parseInline(tokens)
+      const dir = getTextDirection(text)
+      return `<p class="leading-relaxed mb-3 last:mb-0 ${dir}" dir="${dir}">${text}</p>`
+    },
+    list(token: any) {
+      const tag = token.ordered ? 'ol' : 'ul'
+      const listClass = token.ordered 
+        ? 'list-decimal ps-6 my-3 space-y-1.5 leading-relaxed' 
+        : 'list-disc ps-6 my-3 space-y-1.5 leading-relaxed'
+      const body = token.items.map((item: any) => this.listitem(item)).join('')
+      return `<${tag} class="${listClass}">${body}</${tag}>`
+    },
+    listitem(item: any) {
+      let itemBody = ''
+      if (item.task) {
+        const checkbox = item.checked 
+          ? '<input type="checkbox" checked disabled class="me-2 rounded text-primary focus:ring-0" />'
+          : '<input type="checkbox" disabled class="me-2 rounded text-primary focus:ring-0" />'
+        itemBody = `${checkbox}${this.parser.parse(item.tokens)}`
+      } else {
+        itemBody = this.parser.parse(item.tokens)
+      }
+      return `<li class="my-1">${itemBody}</li>`
+    }
+  }
+})
+
+// Sanitize raw text or normalize incomplete code blocks during streaming
+const parsedHtml = computed(() => {
+  if (!props.content) return ''
+  let textToParse = props.content
+
+  // If currently streaming and there's an odd number of ``` fences, close it temporarily for clean preview
+  if (props.streaming) {
+    const fenceMatches = textToParse.match(/```/g)
+    if (fenceMatches && fenceMatches.length % 2 !== 0) {
+      textToParse += '\n```'
+    }
+  }
+
+  try {
+    return markedInstance.parse(textToParse) as string
+  } catch (err) {
+    console.error('Markdown parse error:', err)
+    return escapeHtml(props.content)
+  }
+})
+
+// Event delegation for code block copy buttons
+function handleContainerClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  if (!target) return
+
+  const copyBtn = target.closest('.copy-code-btn') as HTMLElement | null
+  if (!copyBtn) return
+
+  const rawCode = copyBtn.getAttribute('data-code')
+  if (!rawCode) return
+
+  const codeToCopy = decodeURIComponent(rawCode)
+  navigator.clipboard.writeText(codeToCopy).then(() => {
+    const label = copyBtn.querySelector('.copy-label')
+    const originalText = label ? label.textContent : 'کپی'
+    if (label) {
+      label.textContent = 'کپی شد ✓'
+    }
+    copyBtn.classList.add('text-emerald-400', 'font-semibold')
+
+    setTimeout(() => {
+      if (label) {
+        label.textContent = originalText
+      }
+      copyBtn.classList.remove('text-emerald-400', 'font-semibold')
+    }, 1800)
+  }).catch(err => {
+    console.warn('Clipboard write failed', err)
+  })
+}
+
+onMounted(() => {
+  if (rootRef.value) {
+    rootRef.value.addEventListener('click', handleContainerClick)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (rootRef.value) {
+    rootRef.value.removeEventListener('click', handleContainerClick)
+  }
+})
+</script>
+
+<template>
+  <div 
+    ref="rootRef" 
+    class="markdown-content text-[14px] md:text-[15px] leading-7 font-sans transition-colors"
+    v-html="parsedHtml"
+  ></div>
+</template>
+
+<style>
+/* Scoped & nested adjustments for rich markdown presentation */
+.markdown-content pre {
+  margin: 0;
+  border-radius: 0;
+  background: transparent !important;
+}
+
+.markdown-content .inline-code {
+  font-family: var(--font-mono);
+  background-color: var(--secondary);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+}
+
+.markdown-content .table-responsive {
+  border-color: var(--border);
+  background-color: var(--card);
+}
+
+.markdown-content table {
+  border-collapse: collapse;
+}
+
+.markdown-content th,
+.markdown-content td {
+  border-color: var(--border);
+}
+
+/* Persian BiDi rules */
+.markdown-content p.rtl,
+.markdown-content h1.rtl,
+.markdown-content h2.rtl,
+.markdown-content h3.rtl,
+.markdown-content h4.rtl {
+  text-align: right;
+  direction: rtl;
+}
+
+.markdown-content p.ltr,
+.markdown-content h1.ltr,
+.markdown-content h2.ltr,
+.markdown-content h3.ltr,
+.markdown-content h4.ltr {
+  text-align: left;
+  direction: ltr;
+}
+</style>

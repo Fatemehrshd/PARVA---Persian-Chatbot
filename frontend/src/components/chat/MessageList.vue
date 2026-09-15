@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useChatStore } from '../../stores/chat'
-import { useUiStore } from '../../stores/ui'
 import { getTextDirection } from '../../utils/textDirection'
 import MessageBubble from './MessageBubble.vue'
+import MarkdownContent from './MarkdownContent.vue'
 import EmptyState from './EmptyState.vue'
-import ThinkingIndicator from './ThinkingIndicator.vue'
 
 const chatStore = useChatStore()
-const uiStore = useUiStore()
 const containerRef = ref<HTMLElement | null>(null)
 const streamingDirection = computed(() => getTextDirection(chatStore.currentStreamingText))
 
@@ -42,8 +40,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div ref="containerRef" class="message-list-viewport">
-    <div class="message-list-content">
+  <div ref="containerRef" class="message-list-viewport flex-1 overflow-y-auto overflow-x-hidden flex flex-col py-6 scroll-smooth">
+    <div class="message-list-content w-full max-w-3xl lg:max-w-4xl mx-auto px-4 sm:px-6 md:px-8 flex flex-col">
       <!-- Empty State -->
       <EmptyState v-if="chatStore.messages.length === 0 && !chatStore.isStreaming" />
 
@@ -56,26 +54,34 @@ onMounted(() => {
           :is-last="index === chatStore.messages.length - 1"
         />
 
-        <!-- Active Streaming Bubble -->
-        <div v-if="chatStore.isStreaming" class="message-row row-assistant">
-          <div class="avatar avatar-assistant">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2C6.477 2 2 6.477 2 12C2 17.523 6.477 22 12 22C17.523 22 22 17.523 22 12C22 6.477 17.523 2 12 2Z" stroke="var(--primary)" stroke-width="2"/>
-              <circle cx="9" cy="11" r="1.5" fill="var(--primary)"/>
-              <circle cx="15" cy="11" r="1.5" fill="var(--primary)"/>
-              <path d="M9 16C9.8 17.2 11.2 17.5 12 17.5C12.8 17.5 14.2 17.2 15 16" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"/>
+        <!-- Active Streaming Bubble (Positioned directly under user's prompt) -->
+        <div v-if="chatStore.isStreaming" class="message-row row-assistant w-full flex gap-3.5 mb-6 animate-in fade-in duration-200">
+          <!-- Assistant Avatar -->
+          <div class="avatar avatar-assistant w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-xs shadow-sm select-none mt-0.5">
+            <svg class="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2C6.477 2 2 6.477 2 12C2 17.523 6.477 22 12 22C17.523 22 22 17.523 22 12C22 6.477 17.523 2 12 2Z"/>
+              <circle cx="9" cy="11" r="1.5" fill="currentColor"/>
+              <circle cx="15" cy="11" r="1.5" fill="currentColor"/>
+              <path d="M9 16C9.8 17.2 11.2 17.5 12 17.5C12.8 17.5 14.2 17.2 15 16" stroke-linecap="round"/>
             </svg>
           </div>
-          <div class="bubble-container">
+
+          <!-- Streaming Bubble Container -->
+          <div class="bubble-container flex flex-col flex-1 min-w-0">
             <div 
-              :class="['bubble', 'bubble-assistant', streamingDirection]"
+              :class="['bubble', 'bubble-assistant', streamingDirection, 'transition-colors w-full p-1']"
               :dir="streamingDirection"
             >
-              <div v-if="chatStore.currentStreamingText" class="message-text">
-                {{ chatStore.currentStreamingText }}
+              <div v-if="chatStore.currentStreamingText" class="message-text relative">
+                <MarkdownContent :content="chatStore.currentStreamingText" :streaming="true" />
                 <span class="streaming-cursor"></span>
               </div>
-              <ThinkingIndicator v-else-if="chatStore.isThinking" />
+              <!-- Minimal Loading Indicator (No textual label, just clean dots) -->
+              <div v-else class="minimal-loader flex items-center gap-1.5 py-2">
+                <span class="w-2 h-2 rounded-full bg-primary/70 animate-bounce [animation-delay:-0.3s]"></span>
+                <span class="w-2 h-2 rounded-full bg-primary/70 animate-bounce [animation-delay:-0.15s]"></span>
+                <span class="w-2 h-2 rounded-full bg-primary/70 animate-bounce"></span>
+              </div>
             </div>
           </div>
         </div>
@@ -97,11 +103,7 @@ onMounted(() => {
 
 .message-list-content {
   width: 100%;
-  max-width: 672px;
   margin: 0 auto;
-  padding: 24px 16px 20px;
-  display: flex;
-  flex-direction: column;
 }
 
 @media (max-width: 767px) {
@@ -110,78 +112,31 @@ onMounted(() => {
   }
 }
 
-.message-row {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 24px;
-  width: 100%;
-}
-
-.row-assistant {
-  flex-direction: row-reverse;
-  justify-content: flex-start;
-}
-
-html[dir="ltr"] .row-assistant {
-  flex-direction: row;
-}
-
-.avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.avatar-assistant {
   background-color: var(--card);
   border: 1px solid var(--border);
 }
 
-.bubble-container {
-  display: flex;
-  flex-direction: column;
-  max-width: 82%;
-  align-items: flex-end;
-}
-
-html[dir="ltr"] .bubble-container {
-  align-items: flex-start;
-}
-
-.bubble {
-  padding: 12px 16px;
-  font-size: 14px;
-  line-height: 1.6;
-  background-color: var(--chat-assistant-bg, #0c0d13);
-  color: var(--chat-assistant-fg, #f3f4f6);
-  border: 1px solid var(--chat-assistant-border, #1e202d);
-  border-radius: 18px 18px 18px 4px;
+.bubble-assistant {
+  background-color: transparent !important;
+  background: transparent !important;
+  color: var(--foreground) !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 4px 0 !important;
+  border-radius: 0 !important;
   word-break: break-word;
-  white-space: pre-wrap;
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
-}
-
-.bubble.rtl,
-.bubble[dir="rtl"] {
-  text-align: right;
-  direction: rtl;
-}
-
-.bubble.ltr,
-.bubble[dir="ltr"] {
-  text-align: left;
-  direction: ltr;
 }
 
 .streaming-cursor {
   display: inline-block;
-  width: 6px;
-  height: 14px;
+  width: 7px;
+  height: 15px;
   background-color: var(--primary);
-  margin-inline-start: 2px;
-  vertical-align: middle;
+  margin-inline-start: 4px;
+  vertical-align: text-bottom;
   animation: blink 0.8s infinite;
+  border-radius: 2px;
 }
 
 @keyframes blink {

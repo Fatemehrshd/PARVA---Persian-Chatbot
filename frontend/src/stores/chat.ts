@@ -35,6 +35,11 @@ export const useChatStore = defineStore('chat', () => {
   )
 
   async function loadConversations(targetId?: string) {
+    const savedActive = sessionStorage.getItem('active_streaming_conv')
+    if (savedActive && (!targetId || targetId === savedActive)) {
+      targetId = savedActive
+    }
+
     try {
       const data = await chatService.listConversations()
       if (Array.isArray(data)) {
@@ -90,14 +95,76 @@ export const useChatStore = defineStore('chat', () => {
       const data = await chatService.getMessages(id)
       if (Array.isArray(data)) {
         messages.value = data
-        return
+      } else {
+        messages.value = []
       }
     } catch (err) {
       console.warn('Backend getMessages failed:', err)
+      messages.value = []
     }
 
-    messages.value = sampleMessages[id] || []
-    messages.value = []
+    // Check if there is an active background generation for this conversation (e.g. after refresh)
+    if (!id.startsWith('c-') && typeof chatService.getActiveStream === 'function') {
+      try {
+        const streamStatus = await chatService.getActiveStream(id)
+        if (streamStatus && streamStatus.active) {
+          isStreaming.value = true
+          if (streamStatus.status === 'thinking' && !streamStatus.accumulatedText) {
+            isThinking.value = true
+            currentStreamingText.value = ''
+          } else {
+            isThinking.value = false
+            currentStreamingText.value = streamStatus.accumulatedText || ''
+          }
+          if (streamStatus.title && conv) {
+            conv.title = streamStatus.title
+          }
+          reconnectToActiveStream(id)
+        }
+      } catch (err) {
+        // ignore if active stream check fails
+      }
+    }
+  }
+
+  async function reconnectToActiveStream(convId: string) {
+    if (currentAbortController) {
+      currentAbortController.abort()
+      currentAbortController = null
+    }
+    const abortCtrl = new AbortController()
+    currentAbortController = abortCtrl
+
+    await chatService.subscribeActiveStream(
+      convId,
+      (accumulated: string) => {
+        isThinking.value = false
+        currentStreamingText.value = accumulated
+      },
+      (token: string) => {
+        isThinking.value = false
+        currentStreamingText.value += token
+      },
+      (messageId: string) => {
+        currentAbortController = null
+        finishStream(messageId)
+      },
+      (_err: any) => {
+        currentAbortController = null
+        isStreaming.value = false
+        isThinking.value = false
+        if (currentStreamingText.value) {
+          finishStream(`msg-${Date.now()}`, true)
+        }
+      },
+      abortCtrl.signal,
+      (newTitle: string) => {
+        const conv = conversations.value.find((c) => c.id === convId)
+        if (conv) {
+          conv.title = newTitle
+        }
+      }
+    )
   }
 
   async function switchConversationModel(modelId: string) {
@@ -238,6 +305,7 @@ export const useChatStore = defineStore('chat', () => {
     isThinking.value = true
     isStreaming.value = true
     currentStreamingText.value = ''
+    sessionStorage.setItem('active_streaming_conv', convId)
 
     let streamedAny = false
 
@@ -273,6 +341,7 @@ export const useChatStore = defineStore('chat', () => {
           finishStream(`msg-${Date.now()}`, true)
           uiStore.showToast(errorMessage, 'error')
         } else {
+          sessionStorage.removeItem('active_streaming_conv')
           messages.value.push({
             id: `msg-err-${Date.now()}`,
             conversationId: convId,
@@ -285,11 +354,23 @@ export const useChatStore = defineStore('chat', () => {
           uiStore.showToast(errorMessage, 'error')
         }
       },
-      abortCtrl.signal
+      abortCtrl.signal,
+      (newTitle: string) => {
+        const c = conversations.value.find((item) => item.id === convId)
+        if (c) {
+          c.title = newTitle
+        }
+      },
+      (syncText: string) => {
+        isThinking.value = false
+        streamedAny = true
+        currentStreamingText.value = syncText
+      }
     )
   }
 
   function finishStream(messageId: string, isInterrupted = false, overrideContent?: string) {
+    sessionStorage.removeItem('active_streaming_conv')
     currentAbortController = null
     const textToSave = overrideContent !== undefined ? overrideContent : currentStreamingText.value
     if (textToSave) {
@@ -321,9 +402,50 @@ export const useChatStore = defineStore('chat', () => {
     await sendMessage(lastUserPrompt.value)
   }
 
+  async function resumeInterruptedMessage(messageId?: string) {
+    const convId = currentConversationId.value
+    if (!convId) return
+    const target = messageId
+      ? messages.value.find((m) => m.id === messageId)
+      : [...messages.value].reverse().find((m) => m.role === 'assistant' && m.isInterrupted)
+
+    if (!target) return
+
+    isStreaming.value = true
+    isThinking.value = false
+    currentStreamingText.value = target.content
+
+    // Remove old target temporarily while resuming
+    messages.value = messages.value.filter((m) => m.id !== target.id)
+    sessionStorage.setItem('active_streaming_conv', convId)
+
+    const abortCtrl = new AbortController()
+    currentAbortController = abortCtrl
+
+    await chatService.resumeMessage(
+      convId,
+      target.id,
+      (token: string) => {
+        currentStreamingText.value += token
+      },
+      (savedId: string) => {
+        finishStream(savedId, false)
+      },
+      (_err: any) => {
+        finishStream(target.id, true)
+      },
+      abortCtrl.signal
+    )
+  }
+
   async function continueLastMessage() {
-    const prompt = uiStore.direction === 'rtl' ? 'ادامه بده' : 'Please continue'
-    await sendMessage(prompt)
+    const last = messages.value[messages.value.length - 1]
+    if (last && last.role === 'assistant' && last.isInterrupted) {
+      await resumeInterruptedMessage(last.id)
+    } else {
+      const prompt = uiStore.direction === 'rtl' ? 'ادامه بده' : 'Please continue'
+      await sendMessage(prompt)
+    }
   }
 
   function stopStreaming() {
@@ -331,8 +453,17 @@ export const useChatStore = defineStore('chat', () => {
       currentAbortController.abort()
       currentAbortController = null
     }
+    const convId = currentConversationId.value
+    if (convId && !convId.startsWith('c-') && typeof chatService.stopActiveStream === 'function') {
+      chatService.stopActiveStream(convId).catch(() => {})
+    }
+    sessionStorage.removeItem('active_streaming_conv')
     const stoppedText = currentStreamingText.value.trim()
-    const content = stoppedText || (uiStore.direction === 'rtl' ? 'تولید پاسخ توسط کاربر متوقف شد.' : 'Generation stopped by user.')
+    const content =
+      stoppedText ||
+      (uiStore.direction === 'rtl'
+        ? 'تولید پاسخ توسط کاربر متوقف شد.'
+        : 'Generation stopped by user.')
     finishStream(`msg-${Date.now()}`, true, content)
   }
 
@@ -347,6 +478,7 @@ export const useChatStore = defineStore('chat', () => {
     lastUserPrompt,
     loadConversations,
     selectConversation,
+    reconnectToActiveStream,
     createNewConversation,
     deleteConversation,
     updateConversationTitle,
@@ -354,6 +486,7 @@ export const useChatStore = defineStore('chat', () => {
     sendMessage,
     retryLastMessage,
     continueLastMessage,
+    resumeInterruptedMessage,
     stopStreaming
   }
 })

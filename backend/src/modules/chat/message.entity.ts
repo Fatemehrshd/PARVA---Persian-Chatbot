@@ -8,5 +8,7 @@ export class Message {
   @Column() conversationId: string;
   @Column() role: string;
   @Column('text') content: string;
+  @Column({ default: false }) isInterrupted: boolean;
+  @Column({ default: false }) stoppedByUser: boolean;
   @CreateDateColumn() createdAt: Date;
 }

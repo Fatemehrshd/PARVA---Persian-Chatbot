@@ -87,7 +87,16 @@ async function handleSubmit() {
     <!-- Grok Fluid Aurora Background -->
     <GrokAurora :intensity="isLoading ? 'vibrant' : 'subtle'" />
     
-    <!-- LEFT HALF: Form Pane (50%) -->
+    <!-- LEFT HALF: Logo / Artwork Pane (Strictly on the left side) - No text, No background -->
+    <div class="image-half flex items-center justify-center">
+      <img 
+        :src="activeLogo" 
+        alt="لوگو سامانه پروا" 
+        class="login-clean-logo"
+      />
+    </div>
+
+    <!-- RIGHT HALF: Form Pane (Authentication Form on the right side) -->
     <div class="form-half" :dir="uiStore.direction">
       <div class="form-wrapper">
         
@@ -287,31 +296,42 @@ async function handleSubmit() {
       </div>
     </div>
 
-    <!-- RIGHT HALF: Logo Pane (Strictly 50% on the right side) - No text, No background -->
-    <div class="image-half flex items-center justify-center">
-      <img 
-        :src="activeLogo" 
-        alt="لوگو سامانه پروا" 
-        class="login-clean-logo"
-      />
-    </div>
-
   </div>
 </template>
 
 <style scoped>
-/* Split Layout: Outer container is flex-row (direction: ltr) so Left is Form, Right is Image */
+/* Split Layout: Outer container is flex-row (direction: ltr) so Left is Image, Right is Form */
 .split-login-page {
   min-height: 100vh;
   width: 100vw;
   display: flex;
   flex-direction: row;
-  direction: ltr; /* Keeps Left=Form and Right=Image side-by-side consistently */
+  direction: ltr; /* Keeps Left=Image and Right=Form side-by-side consistently */
   background-color: var(--background);
   overflow-x: hidden;
 }
 
-/* Left Half: Form Pane (Takes 50% on md/desktop, 100% on small mobile) */
+/* Left Half: Logo Pane (Takes exactly 50% on md/desktop, hidden on small mobile) */
+.image-half {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .image-half {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    min-height: 100vh;
+    position: relative;
+    background: transparent !important;
+    border-inline-end: 1px solid var(--border);
+    padding: 40px;
+    z-index: 5;
+  }
+}
+
+/* Right Half: Form Pane (Takes 50% on md/desktop, 100% on small mobile) */
 .form-half {
   flex: 1;
   min-height: 100vh;
@@ -327,25 +347,6 @@ async function handleSubmit() {
 .form-wrapper {
   width: 100%;
   max-width: 420px;
-}
-
-/* Right Half: Logo Pane (Takes exactly 50% on md/desktop) */
-.image-half {
-  display: none;
-}
-
-@media (min-width: 768px) {
-  .image-half {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex: 1;
-    min-height: 100vh;
-    position: relative;
-    background: transparent !important;
-    border-inline-start: 1px solid var(--border);
-    padding: 40px;
-  }
 }
 
 .login-clean-logo {

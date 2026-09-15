@@ -153,4 +153,11 @@
 - **Full Model Lifecycle (Edit / Update)**: `PATCH /admin/models/:modelId` enables updating model properties (`name`, `provider`, `providerId`, `apiIdentifier`, `apiKey`, `baseUrl`, `isActive`).
 - **Contract & Tests**: OpenAPI contract updated to `0.6.0` with new tags `Admin - Dashboard & Settings` and `Admin - Users`. 100% test pass rate: **111 backend tests passing across 15 test suites** (15 new tests in `admin-panel.spec.ts`).
 
+## Task 19: Frontend User Profile Modal
+- Added a profile modal opened from the sidebar profile menu using accessible `reka-ui` dialog primitives.
+- Added fixed modal dimensions and a scrollable body so switching between account, email, and password tabs does not resize the modal.
+- Added typed frontend service calls for `GET/PATCH /users/me`, `POST /users/me/email`, `POST /users/me/password`, and `POST /users/me/avatar` according to `api-contract.yaml`.
+- Added shadcn-style `Skeleton` loading state, reusable `Button` loading/disabled behavior, and toast feedback for profile form success and errors.
+- Updated the auth store after profile changes and added frontend behavior tests for menu opening, stable modal layout, profile submission, and success toast feedback.
+
 

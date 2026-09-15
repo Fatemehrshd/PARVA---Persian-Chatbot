@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 import {
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Search,
   SquarePen,
   MessageCircleDashed,
@@ -42,6 +44,11 @@ const isSearchModalOpen = ref(false)
 const profileMenuOpen = ref(false)
 
 const isRtl = computed(() => uiStore.direction === 'rtl')
+
+// Sidebar toggle icons mirror with the layout direction so the arrow
+// always points *toward* the sidebar (which sits on the right in RTL).
+const SidebarCollapseIcon = computed(() => (isRtl.value ? PanelRightClose : PanelLeftClose))
+const SidebarExpandIcon = computed(() => (isRtl.value ? PanelRightOpen : PanelLeftOpen))
 
 // Disable "New Chat" when user is already on an empty (fresh) conversation
 const isOnEmptyChat = computed(() =>
@@ -190,7 +197,7 @@ const userInitial = computed(() => {
           :title="isRtl ? 'بستن نوار کناری' : 'Collapse sidebar'"
           @click="uiStore.toggleSidebar"
         >
-          <PanelLeftClose :size="17" />
+          <component :is="SidebarCollapseIcon" :size="17" />
         </button>
       </div>
 
@@ -309,7 +316,7 @@ const userInitial = computed(() => {
         :title="isRtl ? 'باز کردن نوار کناری' : 'Expand sidebar'"
         @click="uiStore.toggleSidebar"
       >
-        <PanelLeftOpen :size="17" />
+        <component :is="SidebarExpandIcon" :size="17" />
       </button>
 
       <!-- Search -->

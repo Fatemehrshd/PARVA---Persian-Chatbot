@@ -3,11 +3,13 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useUiStore } from '../../stores/ui'
 import { useChatStore } from '../../stores/chat'
 import { useAuthStore } from '../../stores/auth'
-import logoImg from '@/assets/logo.jpg'
+import { useThemeLogo } from '../../composables/useThemeLogo'
 
 const uiStore = useUiStore()
 const chatStore = useChatStore()
 const authStore = useAuthStore()
+
+const { activeLogo } = useThemeLogo()
 
 const userName = computed(() => {
   return authStore.user?.displayName || authStore.user?.email?.split('@')[0] || ''
@@ -90,8 +92,8 @@ function handleSelect(prompt: { fa: string; en: string }) {
 
 <template>
   <div class="empty-state">
-    <div class="bot-icon-card overflow-hidden shadow-lg border border-border/60">
-      <img :src="logoImg" alt="پروا" class="w-full h-full object-cover rounded-xl" />
+    <div class="bot-icon-card">
+      <img :src="activeLogo" alt="پروا" class="w-full h-full object-cover" />
     </div>
 
     <h1 class="headline">
@@ -135,14 +137,10 @@ function handleSelect(prompt: { fa: string; en: string }) {
 .bot-icon-card {
   width: 56px;
   height: 56px;
-  border-radius: var(--radius-lg);
-  background-color: var(--card);
-  border: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 20px;
-  box-shadow: 0 4px 20px rgba(124, 106, 247, 0.12);
 }
 
 .headline {

@@ -1,4 +1,4 @@
-import { IsOptional, IsInt, Min, IsString, MinLength, IsIn, IsEmail } from 'class-validator';
+import { IsOptional, IsInt, Min, IsString, MinLength, IsIn, IsEmail, IsBoolean } from 'class-validator';
 
 export class UpdateSettingsDto {
   @IsOptional()
@@ -29,4 +29,9 @@ export class UpdateUserAdminDto {
   @IsInt({ message: 'میزان توکن مصرفی باید عدد صحیح باشد' })
   @Min(0, { message: 'میزان توکن مصرفی نمی‌تواند منفی باشد' })
   usedTokens?: number;
+}
+
+export class UpdateUserStatusDto {
+  @IsBoolean({ message: 'وضعیت فعال بودن باید boolean باشد' })
+  isActive: boolean;
 }

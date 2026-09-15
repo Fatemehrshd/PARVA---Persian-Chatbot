@@ -12,7 +12,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
-import { UpdateUserAdminDto } from './dto';
+import { UpdateUserAdminDto, UpdateUserStatusDto } from './dto';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { AdminGuard } from '../../shared/admin.guard';
 import { CurrentUser } from '../../shared/current-user.decorator';
@@ -31,6 +31,12 @@ export class AdminUsersController {
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
   updateUser(@Param('userId') id: string, @Body() dto: UpdateUserAdminDto) {
     return this.users.updateByAdmin(id, dto);
+  }
+
+  @Patch(':userId/status')
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
+  updateUserStatus(@Param('userId') id: string, @Body() dto: UpdateUserStatusDto) {
+    return this.users.updateStatusByAdmin(id, dto.isActive);
   }
 
   @Delete(':userId')

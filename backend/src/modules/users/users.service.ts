@@ -56,6 +56,7 @@ export class UsersService {
           'u.displayName AS "displayName"',
           'u.username AS username',
           'u.role AS role',
+          'u.isActive AS "isActive"',
           'u.avatarUrl AS "avatarUrl"',
           'u.usedTokens AS "usedTokens"',
           'u.createdAt AS "createdAt"',
@@ -71,6 +72,7 @@ export class UsersService {
         displayName: u.displayName ?? null,
         username: u.username ?? null,
         role: u.role,
+        isActive: u.isActive !== false,
         avatarUrl: u.avatarUrl ?? null,
         usedTokens: Number(u.usedTokens || 0),
         createdAt: u.createdAt,
@@ -84,6 +86,7 @@ export class UsersService {
         displayName: u.displayName ?? null,
         username: u.username ?? null,
         role: u.role,
+        isActive: u.isActive !== false,
         avatarUrl: u.avatarUrl ?? null,
         usedTokens: Number(u.usedTokens || 0),
         createdAt: u.createdAt,
@@ -118,6 +121,19 @@ export class UsersService {
     }
     if (!user) throw new NotFoundException('Resource not found');
     await this.repo.remove(user);
+  }
+
+  async updateStatusByAdmin(userId: string, isActive: boolean) {
+    let user;
+    try {
+      user = await this.repo.findOne({ where: { id: userId } });
+    } catch (err: any) {
+      if (err?.code === '22P02') throw new NotFoundException('Resource not found');
+      throw err;
+    }
+    if (!user) throw new NotFoundException('Resource not found');
+    user.isActive = isActive;
+    return this.repo.save(user);
   }
 }
 

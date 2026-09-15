@@ -8,6 +8,7 @@ import { getTextDirection } from '../../utils/textDirection'
 
 const props = defineProps<{
   message: Message
+  isLast?: boolean
 }>()
 
 const authStore = useAuthStore()
@@ -79,20 +80,27 @@ function copyContent() {
 
       <!-- Recovery Action Bar for Interrupted / Error Assistant Messages -->
       <div v-if="!isUser && (message.isInterrupted || message.id.startsWith('msg-err-'))" class="recovery-bar">
-        <button class="recovery-btn retry-btn" @click="chatStore.retryLastMessage">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="1 4 1 10 7 10"></polyline>
-            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
-          </svg>
-          <span>{{ uiStore.direction === 'rtl' ? 'تلاش مجدد' : 'Retry' }}</span>
-        </button>
+        <!-- Status label -->
+        <div class="recovery-label">
+          <span class="stop-badge">
+            <span class="stop-square-icon"></span>
+            {{ uiStore.direction === 'rtl'
+              ? (message.isInterrupted ? 'تولید توسط کاربر متوقف شد' : 'خطا در دریافت پاسخ')
+              : (message.isInterrupted ? 'Stopped by user' : 'Response error')
+            }}
+          </span>
+        </div>
 
-        <button v-if="!message.id.startsWith('msg-err-')" class="recovery-btn continue-btn" @click="chatStore.continueLastMessage">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-          </svg>
-          <span>{{ uiStore.direction === 'rtl' ? 'ادامه پاسخ' : 'Continue' }}</span>
-        </button>
+        <!-- Retry action ONLY on the last message -->
+        <div v-if="props.isLast && !chatStore.isStreaming" class="recovery-actions">
+          <button class="recovery-btn retry-btn" @click="chatStore.retryLastMessage">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <polyline points="1 4 1 10 7 10"></polyline>
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+            </svg>
+            <span>{{ uiStore.direction === 'rtl' ? 'تلاش مجدد' : 'Retry' }}</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -101,18 +109,49 @@ function copyContent() {
 <style scoped>
 .recovery-bar {
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.recovery-label {
+  display: flex;
+  align-items: center;
+}
+
+.stop-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background-color: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #ef4444;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.stop-square-icon {
+  width: 7px;
+  height: 7px;
+  background-color: #ef4444;
+  border-radius: 1.5px;
+}
+
+.recovery-actions {
+  display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 6px;
 }
 
 .recovery-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border-radius: var(--radius-sm);
-  font-size: 11px;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm, 8px);
+  font-size: 12px;
   font-weight: 500;
   border: none;
   cursor: pointer;
@@ -120,21 +159,14 @@ function copyContent() {
 }
 
 .retry-btn {
-  background-color: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 2px 8px rgba(124, 106, 247, 0.25);
 }
 
 .retry-btn:hover {
-  background-color: rgba(239, 68, 68, 0.18);
-}
-
-.continue-btn {
-  background-color: var(--secondary);
-  color: var(--foreground);
-}
-
-.continue-btn:hover {
-  background-color: rgba(140, 140, 160, 0.18);
+  opacity: 0.92;
+  transform: translateY(-1px);
 }
 .message-row {
   display: flex;
@@ -247,13 +279,15 @@ html[dir="ltr"] .row-assistant .bubble-container {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 4px;
-  padding: 0 4px;
+  margin-top: 6px;
+  padding: 0 6px;
 }
 
 .timestamp {
   font-size: 11px;
   color: var(--muted-foreground);
+  opacity: 0.85;
+  letter-spacing: 0.02em;
 }
 
 .copy-button {

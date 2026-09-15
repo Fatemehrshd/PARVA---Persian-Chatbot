@@ -1,5 +1,5 @@
 import { request, buildUrl } from './api'
-import type { Conversation, Message, CreateConversationRequest, UpdateConversationRequest, SendMessageRequest } from '../types'
+import type { Conversation, Message, CreateConversationRequest, UpdateConversationRequest, SendMessageRequest, SearchResult } from '../types'
 
 /**
  * Chat Service (Maps 1:1 with OpenAPI tag: Chat)
@@ -12,6 +12,15 @@ export const chatService = {
    */
   async listConversations(): Promise<Conversation[]> {
     return request<Conversation[]>('/chat/conversations')
+  },
+
+  /**
+   * Search conversations by title and message contents.
+   * GET /chat/conversations/search?q=...
+   */
+  async searchConversations(query: string): Promise<SearchResult[]> {
+    if (!query || !query.trim()) return []
+    return request<SearchResult[]>(`/chat/conversations/search?q=${encodeURIComponent(query.trim())}`)
   },
 
   /**

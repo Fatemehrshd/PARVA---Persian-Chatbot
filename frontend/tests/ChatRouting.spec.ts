@@ -118,8 +118,14 @@ describe('Chat Routing and Refresh Persistence', () => {
       }
     })
 
-    // Click on Beta Chat
-    const chatItems = wrapper.findAll('.chat-item')
+    // Force sidebar open so expanded state renders
+    const { useUiStore } = await import('../src/stores/ui')
+    const uiStore = useUiStore()
+    uiStore.sidebarOpen = true
+    await wrapper.vm.$nextTick()
+
+    // Click on Beta Chat — class is sb-conv-item in current implementation
+    const chatItems = wrapper.findAll('.sb-conv-item')
     expect(chatItems.length).toBe(2)
 
     await chatItems[1].trigger('click')
@@ -132,6 +138,14 @@ describe('Chat Routing and Refresh Persistence', () => {
 
   it('creates new conversation and navigates to /chat/:newId on New Chat button click', async () => {
     const chatStore = useChatStore()
+    const { useUiStore } = await import('../src/stores/ui')
+    const uiStore = useUiStore()
+
+    // Force sidebar open and have messages BEFORE mounting so expanded template renders
+    uiStore.sidebarOpen = true
+    chatStore.currentConversationId = 'conv-old'
+    chatStore.messages = [{ id: 'msg-1', conversationId: 'conv-old', role: 'user', content: 'Hi', createdAt: new Date().toISOString() }]
+
     await router.push('/chat/conv-old')
     await router.isReady()
 
@@ -140,6 +154,7 @@ describe('Chat Routing and Refresh Persistence', () => {
         plugins: [router]
       }
     })
+    await wrapper.vm.$nextTick()
 
     const newChatBtn = wrapper.find('.new-chat-btn')
     expect(newChatBtn.exists()).toBe(true)

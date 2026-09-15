@@ -127,3 +127,21 @@
 - **Credential changes with re-auth**: `POST /users/me/email` (requires the current password → 401 if wrong; 409 if the email exists; applies immediately) and `POST /users/me/password` (requires current password; bcrypt re-hash). No forgot-password/reset flow (product decision).
 - **Preferences**: `GET/PUT /users/me/preferences` — `language` (fa/en), `theme` (light|dark), IANA `timezone` (validated via `Intl`), and `defaultModelId` (must be an active model). Chat now resolves the model as **explicit → user default → platform default → echo sentinel**.
 - **Contract**: new `Users` tag + 7 paths in `api-contract.yaml`. **Tests**: 95 backend tests passing (11 new in `profile.spec.ts`; all previous green). Frontend untouched.
+
+## Task 16: Search Modal, Parva Branding, Stream Interruption & Spacing
+- **ChatGPT-Style Search Modal (Full-Stack)**:
+  - Backend: `GET /chat/conversations/search?q=...` searches conversation titles and message contents with snippet extraction.
+  - Frontend: `SearchModal.vue` with live debounced search, `Ctrl+K` / `Cmd+K` keyboard shortcut, keycap badges, and conversation selection.
+- **Backend Empty Conversation Prevention**:
+  - `ChatService.create` checks the user's latest conversation: if it has 0 messages, it reuses and returns that empty conversation instead of creating a blank duplicate.
+- **Personalized Animated Greeting**:
+  - `EmptyState.vue` displays a typewriter animation greeting the user by name with smooth cursor blinking.
+- **Chat Spacing & UX Refinements**:
+  - `MessageList.vue` added top clearance (`58px` on mobile, `24px` on desktop) preventing overlap with floating hamburger button.
+  - `MessageBubble.vue` displays single retry button on last message when interrupted or failed.
+  - Rebranded platform to **«پروا» (Parva)** with `logo.jpg` integration and dark mode logo variant support.
+
+  ## Task 17: Chat Resilience Audit
+  - Added [Chat Resilience documentation](chat-resilience.md) covering the current handling of Offline/Online state, retry, URL-based conversation restoration, persisted history, and partial Streaming replies.
+  - Recorded the remaining gap explicitly: the current implementation persists partial text but does not yet support a durable generation state or true resume from a cursor after reconnect.
+

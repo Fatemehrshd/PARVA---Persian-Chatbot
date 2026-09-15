@@ -15,7 +15,7 @@ export const useChatStore = defineStore('chat', () => {
         id: 'msg-1',
         conversationId: 'c-1',
         role: 'assistant',
-        content: 'سلام! من دستیار هوشمند شما در پلتفرم NeuralChat هستم. چگونه می‌توانم به شما کمک کنم؟',
+        content: 'سلام! من دستیار هوشمند شما در سامانه پروا هستم. چگونه می‌توانم به شما کمک کنم؟',
         createdAt: new Date(Date.now() - 3600000).toISOString()
       }
     ]
@@ -289,14 +289,15 @@ export const useChatStore = defineStore('chat', () => {
     )
   }
 
-  function finishStream(messageId: string, isInterrupted = false) {
+  function finishStream(messageId: string, isInterrupted = false, overrideContent?: string) {
     currentAbortController = null
-    if (currentStreamingText.value) {
+    const textToSave = overrideContent !== undefined ? overrideContent : currentStreamingText.value
+    if (textToSave) {
       messages.value.push({
         id: messageId,
         conversationId: currentConversationId.value!,
         role: 'assistant',
-        content: currentStreamingText.value,
+        content: textToSave,
         createdAt: new Date().toISOString(),
         isInterrupted
       })
@@ -330,12 +331,9 @@ export const useChatStore = defineStore('chat', () => {
       currentAbortController.abort()
       currentAbortController = null
     }
-    if (isStreaming.value && currentStreamingText.value) {
-      finishStream(`msg-${Date.now()}`, true)
-    } else {
-      isStreaming.value = false
-      isThinking.value = false
-    }
+    const stoppedText = currentStreamingText.value.trim()
+    const content = stoppedText || (uiStore.direction === 'rtl' ? 'تولید پاسخ توسط کاربر متوقف شد.' : 'Generation stopped by user.')
+    finishStream(`msg-${Date.now()}`, true, content)
   }
 
   return {

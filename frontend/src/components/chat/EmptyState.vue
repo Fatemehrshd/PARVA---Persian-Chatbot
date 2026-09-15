@@ -1,9 +1,59 @@
 <script setup lang="ts">
+import { ref, computed, onMounted, watch } from 'vue'
 import { useUiStore } from '../../stores/ui'
 import { useChatStore } from '../../stores/chat'
+import { useAuthStore } from '../../stores/auth'
+import logoImg from '@/assets/logo.jpg'
 
 const uiStore = useUiStore()
 const chatStore = useChatStore()
+const authStore = useAuthStore()
+
+const userName = computed(() => {
+  return authStore.user?.displayName || authStore.user?.email?.split('@')[0] || ''
+})
+
+const fullGreeting = computed(() => {
+  if (uiStore.direction === 'rtl') {
+    return userName.value
+      ? `سلام ${userName.value} عزیز، چطور می‌توانم کمکتان کنم؟`
+      : 'سلام، چطور می‌توانم کمکتان کنم؟'
+  }
+  return userName.value
+    ? `Hello ${userName.value}, how can I help you today?`
+    : 'How can I help you today?'
+})
+
+const displayedGreeting = ref('')
+const isTyping = ref(true)
+let timer: any = null
+
+function typeGreeting() {
+  if (timer) clearInterval(timer)
+  displayedGreeting.value = ''
+  isTyping.value = true
+  const target = fullGreeting.value
+  let idx = 0
+
+  timer = setInterval(() => {
+    if (idx < target.length) {
+      displayedGreeting.value += target.charAt(idx)
+      idx++
+    } else {
+      clearInterval(timer)
+      timer = null
+      isTyping.value = false
+    }
+  }, 32)
+}
+
+onMounted(() => {
+  typeGreeting()
+})
+
+watch(fullGreeting, () => {
+  typeGreeting()
+})
 
 const suggestions = [
   {
@@ -40,20 +90,16 @@ function handleSelect(prompt: { fa: string; en: string }) {
 
 <template>
   <div class="empty-state">
-    <div class="bot-icon-card">
-      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 2C6.477 2 2 6.477 2 12C2 17.523 6.477 22 12 22C17.523 22 22 17.523 22 12C22 6.477 17.523 2 12 2Z" stroke="var(--primary)" stroke-width="1.8" />
-        <path d="M8.5 10.5C8.5 10.5 9 9.5 12 9.5C15 9.5 15.5 10.5 15.5 10.5" stroke="var(--primary)" stroke-width="1.8" stroke-linecap="round" />
-        <circle cx="9" cy="14" r="1" fill="var(--primary)" />
-        <circle cx="15" cy="14" r="1" fill="var(--primary)" />
-      </svg>
+    <div class="bot-icon-card overflow-hidden shadow-lg border border-border/60">
+      <img :src="logoImg" alt="پروا" class="w-full h-full object-cover rounded-xl" />
     </div>
 
     <h1 class="headline">
-      {{ uiStore.direction === 'rtl' ? 'چطور می‌توانم به شما کمک کنم؟' : 'How can I help you today?' }}
+      <span class="gradient-text">{{ displayedGreeting }}</span>
+      <span class="typing-cursor" :class="{ 'is-blinking': !isTyping }">|</span>
     </h1>
     <p class="subheadline">
-      {{ uiStore.direction === 'rtl' ? 'پلتفرم گفتگوی هوشمند NeuralChat با پشتیبانی از مدل‌های چندگانه' : 'NeuralChat multi-model intelligent workspace' }}
+      {{ uiStore.direction === 'rtl' ? 'پلتفرم گفتگوی هوشمند پروا با پشتیبانی از مدل‌های پیشرفته' : 'Parva multi-model intelligent workspace' }}
     </p>
 
     <div class="suggestion-grid">
@@ -103,7 +149,36 @@ function handleSelect(prompt: { fa: string; en: string }) {
   font-size: 24px;
   font-weight: 700;
   color: var(--foreground);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, var(--foreground) 30%, var(--primary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.typing-cursor {
+  font-weight: 300;
+  color: var(--primary);
+  display: inline-block;
+  margin-inline-start: 2px;
+  animation: blink 0.7s infinite;
+}
+
+.typing-cursor.is-blinking {
+  animation: blink 1.1s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 .subheadline {

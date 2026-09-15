@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Parva Branding & Logo Integration**:
+  - Integrated `logo.jpg` into `AppSidebar.vue` (both expanded and collapsed modes), `LoginView.vue` (brand icon and hero split screen), and `EmptyState.vue`.
+  - Rebranded the platform name to **«پروا» (Parva)** across `index.html`, headers, login, and disclaimers.
+- **Enhanced ChatGPT-style Stop & Retry UX**:
+  - `useChatStore.stopStreaming()` guarantees the interrupted message is persisted with `isInterrupted: true` and an explicit notice even if 0 tokens had been streamed.
+  - `MessageBubble.vue`: Prominently renders a `⏹ تولید توسط کاربر متوقف شد` (Response stopped by user) badge and a dedicated `تلاش دوباره` (Retry) button with icon.
+- **Sidebar Responsiveness & Collapsed Content**:
+  - Ensured the hamburger menu button is strictly hidden on desktop (`@media (min-width: 768px) { display: none !important }`).
+  - Added recent conversation icons to the collapsed sidebar strip so it is no longer empty in collapsed/mini mode.
+  - Fixed mobile drawer slide-in behavior in RTL mode (`transform: translateX(0) !important`).
 - **Stream Resilience & Partial Message Recovery**:
 - **Stream Resilience, Cancellation & Partial Message Recovery**:
   - `ChatService.generate()`: Guarantees via `try ... finally` that any accumulated assistant tokens are saved to PostgreSQL even when aborted mid-stream or when the client closes the tab/refreshes.

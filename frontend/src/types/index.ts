@@ -70,6 +70,14 @@ export interface SendMessageRequest {
   content: string
 }
 
+export interface SearchResult {
+  id: string
+  title: string
+  updatedAt: string
+  matchedIn: 'title' | 'message'
+  snippet: string
+}
+
 // ========================
 // Provider Schemas (Admin)
 // ========================

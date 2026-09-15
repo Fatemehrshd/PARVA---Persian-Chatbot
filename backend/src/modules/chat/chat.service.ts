@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Conversation } from './conversation.entity';
@@ -6,6 +6,7 @@ import { Message } from './message.entity';
 import { ModelsAdminService } from '../models-admin/models-admin.service';
 import { UsersService } from '../users/users.service';
 import { OpenAiCompatForwarder, ChatMessage } from '../ai/openai-compat.forwarder';
+import { SettingsService } from '../admin/settings.service';
 
 export interface ChatChunk {
   token?: string;
@@ -26,6 +27,7 @@ export class ChatService {
     private models: ModelsAdminService,
     private users: UsersService,
     private forwarder: OpenAiCompatForwarder,
+    @Optional() private settings?: SettingsService,
   ) {}
 
   list(userId: string) {
@@ -164,6 +166,17 @@ export class ChatService {
   async *generate(userId: string, id: string, content: string): AsyncGenerator<ChatChunk> {
     const conversation = await this.assertOwned(userId, id);
 
+    // Global token quota enforcement
+    if (this.settings) {
+      const globalLimit = await this.settings.getGlobalTokenLimit();
+      if (globalLimit > 0 && typeof this.users?.findById === 'function') {
+        const user = await this.users.findById(userId);
+        if ((user?.usedTokens || 0) >= globalLimit) {
+          throw new BadRequestException('سقف مجاز مصرف توکن به پایان رسیده است');
+        }
+      }
+    }
+
     // Validate active model status (same resolution order as before)
     let model = null;
     if (conversation.modelId) {
@@ -212,6 +225,11 @@ export class ChatService {
       const savedMock = await this.msg.save(
         this.msg.create({ conversationId: id, role: 'assistant', content: full }),
       );
+      const consumedTokens = Math.ceil((content.length + full.length) / 4);
+      if (typeof this.users?.incrementUsedTokens === 'function') {
+        await this.users.incrementUsedTokens(userId, consumedTokens);
+      }
+
       if (titlePromise) {
         const genTitle = await titlePromise;
         if (genTitle) {
@@ -230,8 +248,11 @@ export class ChatService {
       order: { createdAt: 'ASC' },
       take: HISTORY_LIMIT,
     });
+    const activeSystemPrompt = this.settings
+      ? await this.settings.getSystemPrompt()
+      : SYSTEM_PROMPT;
     const messages: ChatMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: activeSystemPrompt },
       ...history.map((m) => ({ role: m.role, content: m.content })),
     ];
 
@@ -257,6 +278,10 @@ export class ChatService {
           this.msg.create({ conversationId: id, role: 'assistant', content: full }),
         );
         await this.conv.update(id, {});
+        const consumedTokens = Math.ceil((content.length + full.length) / 4);
+        if (typeof this.users?.incrementUsedTokens === 'function') {
+          await this.users.incrementUsedTokens(userId, consumedTokens);
+        }
       }
     }
 

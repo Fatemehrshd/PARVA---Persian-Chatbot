@@ -95,6 +95,44 @@ export class ModelsAdminService {
     return this.maskApiKey(m);
   }
 
+  async update(id: string, d: any) {
+    let m;
+    try {
+      m = await this.repo.findOne({ where: { id } });
+    } catch (err: any) {
+      if (err?.code === '22P02') throw new NotFoundException('Resource not found');
+      throw err;
+    }
+    if (!m) throw new NotFoundException('Resource not found');
+
+    if (d.providerId !== undefined) {
+      if (d.providerId) {
+        let p;
+        try {
+          p = await this.providers.findOne({ where: { id: d.providerId } });
+        } catch (err: any) {
+          if (err?.code === '22P02') throw err;
+        }
+        if (!p) throw new BadRequestException('Provider not found');
+        m.providerId = p.id;
+        m.provider = p.name;
+      } else {
+        m.providerId = null as any;
+      }
+    } else if (d.provider !== undefined) {
+      m.provider = d.provider;
+    }
+
+    if (d.name !== undefined) m.name = d.name;
+    if (d.apiIdentifier !== undefined) m.apiIdentifier = d.apiIdentifier;
+    if (d.apiKey !== undefined) m.apiKey = d.apiKey;
+    if (d.baseUrl !== undefined) m.baseUrl = d.baseUrl;
+    if (d.isActive !== undefined) m.isActive = d.isActive;
+
+    const saved = await this.repo.save(m);
+    return this.maskApiKey(saved);
+  }
+
   async updateStatus(id: string, isActive: boolean) {
     let m;
     try {

@@ -2,18 +2,19 @@
 openapi: 3.0.3
 info:
   title: CODELESS API
-  version: 0.5.0
+  version: 0.6.0
   description: >
     API contract for the CODELESS multi-model AI chat platform.
-    Features: authentication (sign-up/login/logout), multi-turn chat
-    with AI models (Server-Sent Events streaming & JSON fallback), model
-    switching mid-conversation, a user-facing active-model listing
-    (GET /models), admin management of PROVIDERS as first-class entities
-    (CRUD, enable/disable, per-provider default model, provider cascade
-    delete) and of models (CRUD, platform default, active/inactive toggle,
-    optional per-model key/baseUrl overrides), forwarding chat to real
-    OpenAI-compatible upstreams, and standard OpenAI-compatible endpoints
-    (/v1/models, /v1/chat/completions) now behind bearer auth.
+    Features: authentication (sign-up/login/logout), user profile with
+    custom avatar and preferences, multi-turn chat with AI models
+    (Server-Sent Events streaming & JSON fallback), model switching
+    mid-conversation, admin management of PROVIDERS (CRUD, active toggle,
+    per-provider default), admin management of MODELS (CRUD, active toggle,
+    platform default, provider binding), admin global token quota limit
+    per user, customizable system prompt, admin user listing & management
+    with chat/token stats, admin dashboard KPI metrics, forwarding chat to
+    real OpenAI-compatible upstreams, and standard OpenAI-compatible endpoints
+    (/v1/models, /v1/chat/completions) behind bearer auth.
     All standard JSON responses are wrapped in a unified envelope:
     { success: boolean, message: string, data: any }.
   contact:
@@ -32,6 +33,10 @@ tags:
     description: Conversations and messages with an AI model
   - name: Admin - Models
     description: Manage AI providers and models (admin only)
+  - name: Admin - Dashboard & Settings
+    description: High-level platform metrics and dynamic system configurations (global token limit, system prompt)
+  - name: Admin - Users
+    description: List all registered users with chat & token consumption stats, edit user details and delete users
   - name: Users
     description: Profile, preferences, credentials and avatar of the current user
   - name: OpenAI Compatibility
@@ -709,6 +714,30 @@ paths:
   /admin/models/{modelId}:
     parameters:
       - $ref: '#/components/parameters/ModelId'
+    patch:
+      tags: [Admin - Models]
+      summary: Update model properties (name, provider, providerId, apiIdentifier, apiKey, baseUrl, isActive)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateModelRequest'
+      responses:
+        '200':
+          description: Model updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelApiResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     delete:
       tags: [Admin - Models]
       summary: Remove an AI model
@@ -767,6 +796,136 @@ paths:
                 $ref: '#/components/schemas/ModelApiResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/dashboard/stats:
+    get:
+      tags: [Admin - Dashboard & Settings]
+      summary: High-level administrative dashboard overview metrics
+      description: >
+        Aggregates total users, active and total models, active and total providers,
+        total conversations/sessions, total messages, sum of all tokens consumed,
+        and current platform global settings. Admin only.
+      responses:
+        '200':
+          description: Aggregated system statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminDashboardStatsApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/settings:
+    get:
+      tags: [Admin - Dashboard & Settings]
+      summary: Get platform global settings (token limit and system prompt)
+      responses:
+        '200':
+          description: Current platform settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSettingsApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [Admin - Dashboard & Settings]
+      summary: Update platform global settings (global token limit, system prompt)
+      description: >
+        globalTokenLimit: 0 means unlimited. When > 0, users who reach this limit
+        are blocked from sending chat messages with an explicit Persian error message.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAdminSettingsRequest'
+      responses:
+        '200':
+          description: Updated platform settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSettingsApiResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/users:
+    get:
+      tags: [Admin - Users]
+      summary: List all users with conversation counts and token usage
+      description: Returns list of all registered users with their created conversations count and consumed tokens.
+      responses:
+        '200':
+          description: List of users with statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUsersListApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/users/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Admin - Users]
+      summary: Update user details, role, or reset/set used tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserAdminRequest'
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileApiResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Admin - Users]
+      summary: Delete a user and cascade their conversations and messages
+      description: Admins cannot delete their own account.
+      responses:
+        '204':
+          description: User deleted successfully
+        '400':
+          description: Cannot delete self
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -972,6 +1131,9 @@ components:
           type: string
           nullable: true
           description: Preferred chat model (UUID or apiIdentifier); overrides the platform default.
+        usedTokens:
+          type: integer
+          description: Total tokens consumed across chats.
         createdAt:
           type: string
           format: date-time
@@ -983,6 +1145,137 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/UserProfile'
+
+    AdminDashboardStats:
+      type: object
+      properties:
+        totalUsers:
+          type: integer
+        totalModels:
+          type: integer
+        activeModels:
+          type: integer
+        totalProviders:
+          type: integer
+        activeProviders:
+          type: integer
+        totalConversations:
+          type: integer
+        totalMessages:
+          type: integer
+        totalTokensUsed:
+          type: integer
+        globalTokenLimit:
+          type: integer
+        systemPrompt:
+          type: string
+
+    AdminDashboardStatsApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AdminDashboardStats'
+
+    AdminSettings:
+      type: object
+      properties:
+        globalTokenLimit:
+          type: integer
+          description: 0 for unlimited; otherwise maximum tokens a user can consume.
+        systemPrompt:
+          type: string
+
+    AdminSettingsApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AdminSettings'
+
+    UpdateAdminSettingsRequest:
+      type: object
+      properties:
+        globalTokenLimit:
+          type: integer
+          minimum: 0
+        systemPrompt:
+          type: string
+
+    AdminUserItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+          nullable: true
+        username:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [user, admin]
+        avatarUrl:
+          type: string
+          nullable: true
+        usedTokens:
+          type: integer
+        conversationsCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminUsersListApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdminUserItem'
+
+    UpdateUserAdminRequest:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [user, admin]
+        displayName:
+          type: string
+        email:
+          type: string
+          format: email
+        usedTokens:
+          type: integer
+          minimum: 0
+
+    UpdateModelRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        provider:
+          type: string
+        providerId:
+          type: string
+          format: uuid
+        apiIdentifier:
+          type: string
+        apiKey:
+          type: string
+        baseUrl:
+          type: string
+        isActive:
+          type: boolean
 
     UpdateProfileRequest:
       type: object

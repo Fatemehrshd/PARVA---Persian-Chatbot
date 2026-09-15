@@ -32,3 +32,34 @@ export class UpdateModelStatusDto {
   @IsBoolean({ message: FA.boolean('isActive') })
   isActive: boolean;
 }
+
+export class UpdateModelDto {
+  @IsOptional()
+  @IsString({ message: FA.string('name') })
+  name?: string;
+
+  @IsOptional()
+  @IsString({ message: FA.string('provider') })
+  provider?: string;
+
+  @IsOptional()
+  @IsUUID('4', { message: FA.uuid('providerId') })
+  providerId?: string;
+
+  @IsOptional()
+  @IsString({ message: FA.string('apiIdentifier') })
+  apiIdentifier?: string;
+
+  @IsOptional()
+  @IsString({ message: FA.string('apiKey') })
+  apiKey?: string;
+
+  @IsOptional()
+  @IsString({ message: FA.string('baseUrl') })
+  baseUrl?: string;
+
+  @IsOptional()
+  @IsBoolean({ message: FA.boolean('isActive') })
+  isActive?: boolean;
+}
+

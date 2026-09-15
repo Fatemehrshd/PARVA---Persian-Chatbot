@@ -10,6 +10,7 @@ Welcome to the project documentation wiki.
 - [Chat Resilience: Offline, Refresh & Interrupted Streaming](chat-resilience.md)
 - [Streaming Comprehensive Guide (README)](../STREAMING_README.md)
 - [Features History](features.md)
+- [Admin Panel Guide (راهنمای پنل مدیریت)](admin.md)
 - [Architectural Decisions (ADRs)](decisions.md)
 
 ## Development Workflow & Testing

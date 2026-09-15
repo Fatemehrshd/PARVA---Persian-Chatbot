@@ -9,59 +9,91 @@ import ThinkingIndicator from './ThinkingIndicator.vue'
 
 const chatStore = useChatStore()
 const containerRef = ref<HTMLElement | null>(null)
-const shouldFollowStream = ref(true)
+const shouldAutoScroll = ref(true)
+const isUserScrolling = ref(false)
 const streamingDirection = computed(() => getTextDirection(chatStore.currentStreamingText))
+
+let scrollTimeout: ReturnType<typeof setTimeout> | undefined
+
+function isNearBottom(container: HTMLElement, threshold = 100): boolean {
+  const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+  return distanceFromBottom <= threshold
+}
+
+function handleUserInteraction() {
+  // کاربر شروع به اسکرول دستی کرد
+  isUserScrolling.value = true
+}
 
 function handleScroll() {
   const container = containerRef.value
   if (!container) return
 
-  // ~150px threshold: if user scrolls up by more than this, respect their
-  // position and stop auto-following. Generous enough that a single drag
-  // up clearly breaks the follow without being triggered by micro-scrolls.
-  const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
-  shouldFollowStream.value = distanceFromBottom <= 150
+  // بعد از هر scroll event، بعد از 50ms چک کن که آیا کاربر نزدیک پایین است
+  if (scrollTimeout) {
+    clearTimeout(scrollTimeout)
+  }
+  
+  scrollTimeout = setTimeout(() => {
+    isUserScrolling.value = false
+    if (container) {
+      shouldAutoScroll.value = isNearBottom(container, 100)
+    }
+  }, 50)
 }
 
-function scrollToBottom(smooth = true) {
+function scrollToBottom() {
   nextTick(() => {
-    if (containerRef.value) {
-      if (!smooth || typeof containerRef.value.scrollTo !== 'function') {
-        containerRef.value.scrollTop = containerRef.value.scrollHeight
-        return
-      }
-
-      containerRef.value.scrollTo({
-        top: containerRef.value.scrollHeight,
-        behavior: 'smooth'
-      })
-    }
+    const container = containerRef.value
+    if (!container) return
+    container.scrollTop = container.scrollHeight
   })
 }
 
 watch(
   () => [chatStore.messages.length, chatStore.currentStreamingText, chatStore.isStreaming],
   (currentState, previousState) => {
-    const streamEnded = previousState?.[2] === true && currentState[2] === false
+    const messagesChanged = currentState[0] !== previousState?.[0]
+    const streamingTextChanged = currentState[1] !== previousState?.[1]
+    const isCurrentlyStreaming = currentState[2]
 
-    if (!streamEnded && (!chatStore.isStreaming || shouldFollowStream.value)) {
-      // During streaming use *instant* scroll: smooth-scroll animations
-      // arriving on every token fight the user's wheel/touch input and
-      // effectively trap them at the bottom. Outside streaming (e.g. a
-      // freshly sent user prompt) we keep the smooth animation for polish.
-      scrollToBottom(!chatStore.isStreaming)
+    // اگر پیام جدیدی اضافه شد، auto-scroll را فعال کن و به پایین برو
+    if (messagesChanged) {
+      shouldAutoScroll.value = true
+      isUserScrolling.value = false
+      scrollToBottom()
+      return
+    }
+
+    // در حین streaming فقط اگر shouldAutoScroll فعال و کاربر در حال اسکرول دستی نباشد
+    if (isCurrentlyStreaming && streamingTextChanged && shouldAutoScroll.value && !isUserScrolling.value) {
+      scrollToBottom()
     }
   },
   { flush: 'post' }
 )
 
 onMounted(() => {
-  containerRef.value?.addEventListener('scroll', handleScroll, { passive: true })
-  scrollToBottom(false)
+  const container = containerRef.value
+  if (container) {
+    // تشخیص شروع اسکرول دستی
+    container.addEventListener('wheel', handleUserInteraction, { passive: true })
+    container.addEventListener('touchstart', handleUserInteraction, { passive: true })
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    scrollToBottom()
+  }
 })
 
 onBeforeUnmount(() => {
-  containerRef.value?.removeEventListener('scroll', handleScroll)
+  const container = containerRef.value
+  if (scrollTimeout) {
+    clearTimeout(scrollTimeout)
+  }
+  if (container) {
+    container.removeEventListener('wheel', handleUserInteraction)
+    container.removeEventListener('touchstart', handleUserInteraction)
+    container.removeEventListener('scroll', handleScroll)
+  }
 })
 </script>
 

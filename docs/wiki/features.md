@@ -191,3 +191,7 @@
 - **Verification**:
   - 100% test pass rate: **109 backend tests** (15 test suites) + **82 frontend tests** (17 test suites, including new unit tests in `MarkdownContent.spec.ts`) — 191/191 total passing tests.
   - Production build (`vue-tsc -b && vite build`) compiles with zero errors.
+
+## Task 20: Local Login Connection Fix
+- Corrected the frontend `VITE_API_BASE_URL` to use the reachable local backend at `http://localhost:3000/api/v1` instead of an unavailable machine-specific IP.
+- Updated the getting-started example to include the backend's `/api/v1` global prefix.

@@ -17,7 +17,7 @@ Configure `.env`:
 Copy `.env.example` to `.env`:
 ```env
 VITE_APP_TITLE=Codeless App
-VITE_API_BASE_URL=http://localhost:3000
+VITE_API_BASE_URL=http://localhost:3000/api/v1
 ```
 
 Run in development mode:

@@ -20,6 +20,8 @@ export class User {
   @Column({ nullable: true }) timezone?: string;
   /** The user's preferred chat model; falls back to the platform default. */
   @Column({ nullable: true }) defaultModelId?: string;
+  /** Total tokens consumed by the user across chats */
+  @Column({ type: 'int', default: 0 }) usedTokens: number;
   @CreateDateColumn() createdAt: Date;
   @OneToMany(() => Conversation, (c) => c.user) conversations: Conversation[];
 }

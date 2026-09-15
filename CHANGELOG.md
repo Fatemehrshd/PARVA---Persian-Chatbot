@@ -9,7 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-15
+
 ### Added
+- **Admin Global Token Quota & Dynamic System Prompt (Task 18)**:
+  - Added `SystemSetting` entity and `system_settings` table to store platform dynamic configurations.
+  - `PUT /admin/settings` allows admins to set a global token consumption cap (`globalTokenLimit`) and a customized platform system prompt (`systemPrompt`).
+  - Chat engine automatically validates user token usage against the global limit before generation and returns a localized 400 error (`سقف مجاز مصرف توکن به پایان رسیده است`) when reached.
+  - Added `usedTokens` column to `users` table with atomic token consumption calculation upon message completion.
+- **Admin User Management & Usage Analytics**:
+  - `GET /admin/users` lists all registered users with their created conversations count (`conversationsCount`) and token usage (`usedTokens`).
+  - `PATCH /admin/users/:userId` enables admin to update user roles (`user` / `admin`), profile details, and reset or adjust token usage.
+  - `DELETE /admin/users/:userId` deletes users and cascades conversations/messages, protected with self-deletion guards.
+- **Admin Dashboard KPI Statistics**:
+  - `GET /admin/dashboard/stats` aggregates essential platform statistics: `totalUsers`, `totalModels`, `activeModels`, `totalProviders`, `activeProviders`, `totalConversations`, `totalMessages`, `totalTokensUsed`, `globalTokenLimit`, and `systemPrompt`.
+- **Model Editing Endpoint**:
+  - `PATCH /admin/models/:modelId` enables updating model name, providerId, apiIdentifier, apiKey, baseUrl, and active state.
+- **Admin Wiki Documentation**:
+  - Added [docs/wiki/admin.md](docs/wiki/admin.md) explaining all admin capabilities in simple Persian language.
+- **Test Suite Expansion**:
+  - Added comprehensive unit and integration tests in `test/admin-panel.spec.ts` (111 tests passing across 15 suites).
+
 - **Parva Branding & Logo Integration**:
   - Integrated `logo.jpg` into `AppSidebar.vue` (both expanded and collapsed modes), `LoginView.vue` (brand icon and hero split screen), and `EmptyState.vue`.
   - Rebranded the platform name to **«پروا» (Parva)** across `index.html`, headers, login, and disclaimers.

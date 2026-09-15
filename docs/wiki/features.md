@@ -145,3 +145,13 @@
   - Added [Chat Resilience documentation](chat-resilience.md) covering the current handling of Offline/Online state, retry, URL-based conversation restoration, persisted history, and partial Streaming replies.
   - Recorded the remaining gap explicitly: the current implementation persists partial text but does not yet support a durable generation state or true resume from a cursor after reconnect.
 
+## Task 18: Admin Panel Backend - Global Token Quota, Dynamic System Prompt, User Management, Model Lifecycle & Dashboard Analytics
+- **Global Token Quota per User**: Admin can configure a global token consumption cap (`PUT /admin/settings` with `globalTokenLimit`). When `globalTokenLimit > 0`, any user who reaches or exceeds this limit is blocked from sending chat messages with an explicit, localized error: `سقف مجاز مصرف توکن به پایان رسیده است`.
+- **Dynamic Platform System Prompt**: Admin can update the platform system prompt (`PUT /admin/settings` with `systemPrompt`). The chat generation engine automatically prepends this custom prompt to message histories sent to upstream AI forwarders.
+- **Token Accounting**: Track total tokens used by each user (`usedTokens` column on `User` entity, initialized via TypeORM migration `1760100000000-AddAdminSettingsAndTokenUsage.ts`). Token consumption is calculated after streaming or mock reply (`Math.ceil((content.length + full.length) / 4)`) and atomically incremented.
+- **Admin User Management & Analytics**: `GET /admin/users` lists all registered users with their conversation count (`conversationsCount`) and consumed tokens (`usedTokens`). `PATCH /admin/users/:userId` updates user details (role `user` or `admin`, `displayName`, `email`, resets/sets `usedTokens`). `DELETE /admin/users/:userId` deletes the user and cascades their conversations and messages (with self-deletion guard preventing admin accidental lockout).
+- **Admin Dashboard KPI Metrics**: `GET /admin/dashboard/stats` aggregates essential platform statistics: `totalUsers`, `totalModels`, `activeModels`, `totalProviders`, `activeProviders`, `totalConversations`, `totalMessages`, `totalTokensUsed`, `globalTokenLimit`, and `systemPrompt`.
+- **Full Model Lifecycle (Edit / Update)**: `PATCH /admin/models/:modelId` enables updating model properties (`name`, `provider`, `providerId`, `apiIdentifier`, `apiKey`, `baseUrl`, `isActive`).
+- **Contract & Tests**: OpenAPI contract updated to `0.6.0` with new tags `Admin - Dashboard & Settings` and `Admin - Users`. 100% test pass rate: **111 backend tests passing across 15 test suites** (15 new tests in `admin-panel.spec.ts`).
+
+

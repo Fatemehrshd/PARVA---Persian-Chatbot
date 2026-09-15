@@ -14,7 +14,7 @@ import {
 import { ModelsAdminService } from './models-admin.service';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { AdminGuard } from '../../shared/admin.guard';
-import { CreateModelDto, UpdateModelStatusDto } from './dto';
+import { CreateModelDto, UpdateModelStatusDto, UpdateModelDto } from './dto';
 
 @UseGuards(JwtAuthGuard, AdminGuard)
 @Controller('admin/models')
@@ -30,6 +30,12 @@ export class ModelsAdminController {
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
   create(@Body() d: CreateModelDto) {
     return this.svc.create(d);
+  }
+
+  @Patch(':modelId')
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
+  update(@Param('modelId') id: string, @Body() d: UpdateModelDto) {
+    return this.svc.update(id, d);
   }
 
   @Patch(':modelId/status')

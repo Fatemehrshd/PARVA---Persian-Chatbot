@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useChatStore } from '../../stores/chat'
 import { getTextDirection } from '../../utils/textDirection'
 import MessageBubble from './MessageBubble.vue'
@@ -9,12 +9,24 @@ import ThinkingIndicator from './ThinkingIndicator.vue'
 
 const chatStore = useChatStore()
 const containerRef = ref<HTMLElement | null>(null)
+const shouldFollowStream = ref(true)
 const streamingDirection = computed(() => getTextDirection(chatStore.currentStreamingText))
+
+function handleScroll() {
+  const container = containerRef.value
+  if (!container) return
+
+  // ~150px threshold: if user scrolls up by more than this, respect their
+  // position and stop auto-following. Generous enough that a single drag
+  // up clearly breaks the follow without being triggered by micro-scrolls.
+  const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+  shouldFollowStream.value = distanceFromBottom <= 150
+}
 
 function scrollToBottom(smooth = true) {
   nextTick(() => {
     if (containerRef.value) {
-      if (!smooth) {
+      if (!smooth || typeof containerRef.value.scrollTo !== 'function') {
         containerRef.value.scrollTop = containerRef.value.scrollHeight
         return
       }
@@ -28,13 +40,28 @@ function scrollToBottom(smooth = true) {
 }
 
 watch(
-  () => [chatStore.messages.length, chatStore.isStreaming],
-  () => scrollToBottom(false),
+  () => [chatStore.messages.length, chatStore.currentStreamingText, chatStore.isStreaming],
+  (currentState, previousState) => {
+    const streamEnded = previousState?.[2] === true && currentState[2] === false
+
+    if (!streamEnded && (!chatStore.isStreaming || shouldFollowStream.value)) {
+      // During streaming use *instant* scroll: smooth-scroll animations
+      // arriving on every token fight the user's wheel/touch input and
+      // effectively trap them at the bottom. Outside streaming (e.g. a
+      // freshly sent user prompt) we keep the smooth animation for polish.
+      scrollToBottom(!chatStore.isStreaming)
+    }
+  },
   { flush: 'post' }
 )
 
 onMounted(() => {
+  containerRef.value?.addEventListener('scroll', handleScroll, { passive: true })
   scrollToBottom(false)
+})
+
+onBeforeUnmount(() => {
+  containerRef.value?.removeEventListener('scroll', handleScroll)
 })
 </script>
 
@@ -106,7 +133,7 @@ onMounted(() => {
 .message-list-content {
   width: 100%;
   min-height: 100%;
-  padding-bottom: 48px;
+  padding-bottom: clamp(4rem, 6vw, 5rem);
 }
 
 .streaming-row {

@@ -195,3 +195,9 @@
 ## Task 20: Local Login Connection Fix
 - Corrected the frontend `VITE_API_BASE_URL` to use the reachable local backend at `http://localhost:3000/api/v1` instead of an unavailable machine-specific IP.
 - Updated the getting-started example to include the backend's `/api/v1` global prefix.
+
+## Task 21: Streaming Chat Scroll Follow Behavior
+- Chat streaming auto-scroll now follows only while the user is at or near the bottom of the message list.
+- Scrolling upward during generation preserves the reader's position; returning to the bottom re-enables follow mode.
+- Stream completion no longer forces a user who is reading older messages back to the bottom.
+- Added focused regression coverage in `frontend/tests/MessageList.spec.ts`.

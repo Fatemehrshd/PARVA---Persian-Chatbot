@@ -16,33 +16,20 @@ import {
 import { useUiStore } from '../../stores/ui'
 import { useChatStore } from '../../stores/chat'
 import { useAuthStore } from '../../stores/auth'
+import { useThemeLogo } from '../../composables/useThemeLogo'
 import ProfileMenu from './ProfileMenu.vue'
 import EditConversationModal from '../chat/EditConversationModal.vue'
 import DeleteConversationModal from '../chat/DeleteConversationModal.vue'
 import LogoutModal from '../auth/LogoutModal.vue'
 import SearchModal from '../chat/SearchModal.vue'
-import logoImg from '../../assets/logo.jpg'
 import type { Conversation } from '../../types'
-
-// Dynamic detection of any dark logo variant (e.g. logo-dark.jpg)
-const darkLogos = import.meta.glob('@/assets/*-dark.{jpg,jpeg,png,webp,svg}', {
-  eager: true,
-  query: '?url',
-  import: 'default'
-})
-const darkLogoUrl = Object.values(darkLogos)[0] as string | undefined
-
-const activeLogo = computed(() => {
-  if (uiStore.theme === 'dark' && darkLogoUrl) {
-    return darkLogoUrl
-  }
-  return logoImg
-})
 
 const router = useRouter()
 const uiStore = useUiStore()
 const chatStore = useChatStore()
 const authStore = useAuthStore()
+
+const { activeLogo } = useThemeLogo()
 
 const editingConversation = ref<Conversation | null>(null)
 const isEditModalOpen = ref(false)
@@ -515,20 +502,16 @@ const userInitial = computed(() => {
 .sb-brand-logo {
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-sm, 8px);
-  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 .sb-brand-logo-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: inherit;
 }
 
 .sb-brand-name {
@@ -835,11 +818,8 @@ const userInitial = computed(() => {
 .sb-collapsed-logo {
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-sm, 8px);
-  overflow: hidden;
   margin-bottom: 6px;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 .sb-divider-mini {

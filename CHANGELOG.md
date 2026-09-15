@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Theme-Aware Logo Variants**:
+  - New `useThemeLogo` composable in `src/composables/useThemeLogo.ts` centralizes theme-aware branding logo selection.
+  - Dark theme now uses `logo-white.png` (preferred) over the legacy `logo-dark.jpg` fallback; light theme uses the new `logo-blue.png`.
+  - The sidebar, login page, and empty chat state all reactively swap logos when the theme is toggled.
+  - File-based detection via Vite's `import.meta.glob` — drop a new `logo-<variant>.<ext>` into `src/assets/` to register a new variant with no extra wiring.
 - **Parva Branding & Logo Integration**:
   - Integrated `logo.jpg` into `AppSidebar.vue` (both expanded and collapsed modes), `LoginView.vue` (brand icon and hero split screen), and `EmptyState.vue`.
   - Rebranded the platform name to **«پروا» (Parva)** across `index.html`, headers, login, and disclaimers.

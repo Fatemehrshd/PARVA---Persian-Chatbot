@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
@@ -10,27 +10,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 import { useFormSubmit } from '../composables/useFormSubmit'
+import { useThemeLogo } from '../composables/useThemeLogo'
 import GrokAurora from '@/components/ui/GrokAurora.vue'
-import logoArtwork from '@/assets/logo.jpg'
-
-// Dynamic detection of any dark logo variant (e.g. logo-dark.jpg)
-const darkLogos = import.meta.glob('@/assets/*-dark.{jpg,jpeg,png,webp,svg}', {
-  eager: true,
-  query: '?url',
-  import: 'default'
-})
-const darkLogoUrl = Object.values(darkLogos)[0] as string | undefined
-
-const activeLogo = computed(() => {
-  if (uiStore.theme === 'dark' && darkLogoUrl) {
-    return darkLogoUrl
-  }
-  return logoArtwork
-})
 
 const router = useRouter()
 const authStore = useAuthStore()
 const uiStore = useUiStore()
+
+const { activeLogo } = useThemeLogo()
 
 const isSignup = ref(false)
 const email = ref('')
@@ -106,7 +93,7 @@ async function handleSubmit() {
         
         <!-- Brand Logo & Name Header -->
         <div class="flex items-center gap-3 mb-8">
-          <div class="w-11 h-11 rounded-xl overflow-hidden shadow-md flex-shrink-0 border border-border/40">
+          <div class="w-11 h-11 flex-shrink-0">
             <img :src="activeLogo" alt="پروا" class="w-full h-full object-cover" />
           </div>
           <div class="text-start">
@@ -367,7 +354,6 @@ async function handleSubmit() {
   width: 70%;
   height: auto;
   object-fit: contain;
-  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.18));
   transition: opacity 300ms ease, transform 300ms ease;
 }
 </style>

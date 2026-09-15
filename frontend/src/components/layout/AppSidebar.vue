@@ -759,8 +759,9 @@ const userInitial = computed(() => {
 }
 
 .sb-avatar {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--primary), var(--primary-hover, #839BFF));
   color: #fff;

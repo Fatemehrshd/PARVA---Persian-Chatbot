@@ -150,6 +150,13 @@ html, body {
   flex-direction: column;
 }
 
+/* Shared centered width for the chat transcript and composer. */
+.chat-content-wrapper {
+  width: 100%;
+  max-width: 896px;
+  margin-inline: auto;
+}
+
 /* Custom Minimal Scrollbar: 4px, surface on hover */
 ::-webkit-scrollbar {
   width: 4px;

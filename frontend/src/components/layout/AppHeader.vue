@@ -150,8 +150,9 @@ const authStore = useAuthStore()
 }
 
 .header-avatar {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--primary), #a78bfa);
   color: #fff;

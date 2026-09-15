@@ -92,7 +92,7 @@ onUnmounted(() => {
 
 <template>
   <div class="composer-outer">
-    <div class="composer-container">
+    <div class="chat-content-wrapper composer-container">
       <div :class="['composer-card', { focused: isFocused }]">
         <textarea
           ref="textareaRef"
@@ -189,9 +189,6 @@ onUnmounted(() => {
 }
 
 .composer-container {
-  width: 100%;
-  max-width: 672px;
-  margin: 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;

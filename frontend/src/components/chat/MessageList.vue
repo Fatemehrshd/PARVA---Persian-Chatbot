@@ -40,7 +40,7 @@ onMounted(() => {
 
 <template>
   <div ref="containerRef" class="message-list-viewport flex-1 overflow-y-auto overflow-x-hidden flex flex-col py-6 scroll-smooth">
-    <div class="message-list-content w-full max-w-3xl lg:max-w-4xl mx-auto px-4 sm:px-6 md:px-8 flex flex-col">
+    <div class="chat-content-wrapper message-list-content px-4 sm:px-6 md:px-8 flex flex-col">
       <!-- Empty State -->
       <EmptyState v-if="chatStore.messages.length === 0 && !chatStore.isStreaming" />
 
@@ -64,7 +64,7 @@ onMounted(() => {
           ]"
         >
           <!-- Assistant Avatar -->
-          <div class="avatar avatar-assistant w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-xs shadow-sm select-none mt-0.5">
+          <div class="avatar avatar-assistant streaming-avatar flex-shrink-0 flex items-center justify-center font-bold text-xs shadow-sm select-none mt-0.5">
             <svg class="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 2C6.477 2 2 6.477 2 12C2 17.523 6.477 22 12 22C17.523 22 22 17.523 22 12C22 6.477 17.523 2 12 2Z"/>
               <circle cx="9" cy="11" r="1.5" fill="currentColor"/>
@@ -129,6 +129,11 @@ onMounted(() => {
 }
 
 .avatar-assistant {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 50%;
+  overflow: hidden;
   background-color: var(--card);
   border: 1px solid var(--border);
 }

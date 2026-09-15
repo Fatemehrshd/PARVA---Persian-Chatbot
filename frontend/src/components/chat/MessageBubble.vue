@@ -160,6 +160,14 @@ function copyContent() {
   width: 100%;
 }
 
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex: 0 0 32px;
+  overflow: hidden;
+}
+
 /* User & Assistant Flow (ChatGPT Style):
    Consistent, linear top-to-bottom layout where each turn begins with the author
    and content flows cleanly directly beneath it */

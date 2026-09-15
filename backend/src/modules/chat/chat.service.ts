@@ -10,6 +10,7 @@ import { OpenAiCompatForwarder, ChatMessage } from '../ai/openai-compat.forwarde
 export interface ChatChunk {
   token?: string;
   saved?: Message;
+  title?: string;
 }
 
 const SYSTEM_PROMPT = 'You are a helpful and knowledgeable AI assistant.';
@@ -33,11 +34,14 @@ export class ChatService {
 
   async create(userId: string, modelId?: string, title?: string) {
     // If user's latest conversation is empty (has 0 messages), reuse it instead of creating a duplicate
-    const latest = await this.conv.findOne({
-      where: { userId },
-      order: { createdAt: 'DESC' },
-    });
-    if (latest) {
+    const latest =
+      typeof this.conv.findOne === 'function'
+        ? await this.conv.findOne({
+            where: { userId },
+            order: { createdAt: 'DESC' },
+          })
+        : null;
+    if (latest && typeof this.msg.count === 'function') {
       const messageCount = await this.msg.count({ where: { conversationId: latest.id } });
       if (messageCount === 0) {
         if (modelId && latest.modelId !== modelId) {
@@ -118,6 +122,40 @@ export class ChatService {
   }
 
   /**
+   * Generates a concise title (3-5 words) using AI forwarder if available,
+   * with fallback to clean prefix of the prompt.
+   */
+  async generateTitle(target: any, prompt: string): Promise<string> {
+    if (target && typeof (this.forwarder as any)?.complete === 'function') {
+      try {
+        const titleMessages: ChatMessage[] = [
+          {
+            role: 'system',
+            content:
+              'You are a title generator. Generate an extremely brief, descriptive, and natural title (maximum 3 to 5 words) summarizing the core topic of the user message. Answer strictly in the same language as the user query. Do not wrap in quotes or brackets. Do not add punctuation or prefixes like "Title:". Return ONLY the title text.',
+          },
+          { role: 'user', content: prompt.slice(0, 500) },
+        ];
+        const res = await (this.forwarder as any).complete(target, titleMessages, 30);
+        const cleaned = (res || '')
+          .replace(/^["'«»“]+|["'«»”]+$/g, '')
+          .replace(/^(Title|عنوان)\s*:\s*/i, '')
+          .trim();
+        if (cleaned && cleaned.length <= 100) return cleaned;
+      } catch (err) {
+        this.logger.warn(
+          `AI title generation failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    // Heuristic fallback for offline/echo/unconfigured API
+    const trimmed = prompt.trim().replace(/\s+/g, ' ');
+    if (trimmed.length <= 35) return trimmed;
+    const boundary = trimmed.slice(0, 35).lastIndexOf(' ');
+    return (boundary > 10 ? trimmed.slice(0, boundary) : trimmed.slice(0, 35)).trim() + '...';
+  }
+
+  /**
    * Resolves the model chain (conversation -> platform default), persists the
    * user turn and streams the assistant reply. The mock echo path is kept
    * ONLY for environments without any configured credential (dev/tests);
@@ -142,9 +180,27 @@ export class ChatService {
       throw new BadRequestException(`Provider "${provider.name}" is disabled`);
     }
 
+    const isDefaultTitle =
+      !conversation.title ||
+      conversation.title === 'New conversation' ||
+      conversation.title === 'گفتگوی جدید' ||
+      conversation.title === 'New Chat';
+
+    let existingMsgCount = 0;
+    if (typeof this.msg.count === 'function') {
+      try {
+        existingMsgCount = await this.msg.count({ where: { conversationId: id } });
+      } catch {
+        existingMsgCount = 0;
+      }
+    }
+    const shouldGenerateTitle = isDefaultTitle && existingMsgCount === 0;
+
     await this.msg.save(this.msg.create({ conversationId: id, role: 'user', content }));
 
     const target = this.forwarder.resolveTarget(model, provider);
+    const titlePromise = shouldGenerateTitle ? this.generateTitle(target, content) : null;
+
     if (!target) {
       this.logger.warn(
         'No API key configured for the resolved model/provider (and no global OPENAI_API_KEY) — using offline echo fallback.',
@@ -156,7 +212,15 @@ export class ChatService {
       const savedMock = await this.msg.save(
         this.msg.create({ conversationId: id, role: 'assistant', content: full }),
       );
-      await this.conv.update(id, {});
+      if (titlePromise) {
+        const genTitle = await titlePromise;
+        if (genTitle) {
+          await this.conv.update(id, { title: genTitle });
+          yield { title: genTitle };
+        }
+      } else {
+        await this.conv.update(id, {});
+      }
       yield { saved: savedMock };
       return;
     }
@@ -193,6 +257,20 @@ export class ChatService {
           this.msg.create({ conversationId: id, role: 'assistant', content: full }),
         );
         await this.conv.update(id, {});
+      }
+    }
+
+    if (titlePromise) {
+      try {
+        const genTitle = await titlePromise;
+        if (genTitle) {
+          await this.conv.update(id, { title: genTitle });
+          yield { title: genTitle };
+        }
+      } catch (err) {
+        this.logger.warn(
+          `Failed saving auto title: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
 

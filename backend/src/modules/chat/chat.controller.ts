@@ -99,6 +99,13 @@ export class ChatController {
       for await (const chunk of gen) {
         if (clientDisconnected) break;
         if (chunk.token) writeToken(chunk.token);
+        if (chunk.title && !clientDisconnected && !res.writableEnded) {
+          try {
+            res.write(`event: title\ndata: ${JSON.stringify({ title: chunk.title })}\n\n`);
+          } catch {
+            clientDisconnected = true;
+          }
+        }
         if (chunk.saved && !clientDisconnected && !res.writableEnded) {
           try {
             res.write(`event: done\ndata: ${JSON.stringify({ messageId: chunk.saved.id })}\n\n`);

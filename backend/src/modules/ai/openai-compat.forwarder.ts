@@ -102,4 +102,43 @@ export class OpenAiCompatForwarder {
       this.logger.warn(`Provider "${target.apiIdentifier}" completed without any content`);
     }
   }
+
+  /** Non-streaming completion for lightweight tasks (e.g., auto-title generation). */
+  async complete(
+    target: ResolvedTarget,
+    messages: ChatMessage[],
+    maxTokens = 60,
+  ): Promise<string> {
+    const url = target.baseUrl.endsWith('/chat/completions')
+      ? target.baseUrl
+      : `${target.baseUrl}/chat/completions`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${target.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: target.apiIdentifier,
+          messages,
+          max_tokens: maxTokens,
+          stream: false,
+        }),
+      });
+      if (!res.ok) {
+        this.logger.warn(
+          `AI provider non-streaming call returned ${res.status}: ${await res.text().catch(() => '')}`,
+        );
+        return '';
+      }
+      const json = await res.json();
+      return json?.choices?.[0]?.message?.content?.trim() || '';
+    } catch (err) {
+      this.logger.warn(
+        `AI provider non-streaming call failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return '';
+    }
+  }
 }

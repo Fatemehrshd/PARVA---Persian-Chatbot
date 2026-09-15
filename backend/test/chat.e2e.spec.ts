@@ -107,4 +107,47 @@ describe('Chat (behavior)', () => {
     expect(results[1].matchedIn).toBe('message');
     expect(results[1].snippet).toContain('reactivity and hooks');
   });
+
+  it('automatically generates and saves title on first user message', async () => {
+    let updatedTitle = '';
+    const conv: any = {
+      findOne: async () => ({ id: 'c-new', userId: 'u1', title: 'New conversation' }),
+      update: async (_id: string, data: any) => {
+        if (data?.title) updatedTitle = data.title;
+      },
+    };
+    const saved: any[] = [];
+    const msg: any = {
+      count: async () => 0, // 0 messages before this
+      find: async () => saved,
+      create: (d: any) => d,
+      save: async (d: any) => {
+        const m = { id: 'm' + saved.length, createdAt: new Date(), ...d };
+        saved.push(m);
+        return m;
+      },
+    };
+    const models: any = {
+      getDefault: async () => ({ id: 'model1' }),
+      resolveProvider: async () => null,
+    };
+    const users: any = { findById: async () => null };
+    const forwarder: any = {
+      resolveTarget: () => ({ apiIdentifier: 'gpt-4o', apiKey: 'test', baseUrl: 'http://ai' }),
+      stream: async function* () {
+        yield 'Hello ';
+        yield 'world';
+      },
+      complete: async () => 'راهنمای برنامه‌نویسی پایتون',
+    };
+
+    const s = new ChatService(conv, msg, models, users, forwarder);
+    let titleEmitted = '';
+    for await (const chunk of s.generate('u1', 'c-new', 'چگونه پایتون یاد بگیرم؟')) {
+      if (chunk.title) titleEmitted = chunk.title;
+    }
+
+    expect(titleEmitted).toBe('راهنمای برنامه‌نویسی پایتون');
+    expect(updatedTitle).toBe('راهنمای برنامه‌نویسی پایتون');
+  });
 });

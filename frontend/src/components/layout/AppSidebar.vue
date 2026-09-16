@@ -356,27 +356,6 @@ const userInitial = computed(() => {
         <MessageCircleDashed :size="17" />
       </button>
 
-      <div class="sb-divider-mini" />
-
-      <!-- Collapsed Chat List (shows icons with tooltips so sidebar is not empty) -->
-      <div class="sb-collapsed-chats" v-if="chatStore.conversations.length > 0">
-        <button
-          v-for="conv in chatStore.conversations"
-          :key="conv.id"
-          class="sb-icon-btn sb-icon-btn--conv"
-          :class="{ 'is-active': conv.id === chatStore.currentConversationId }"
-          @click="handleSelect(conv.id)"
-          :title="conv.title"
-        >
-          <span
-            v-if="chatStore.getConvIsStreaming(conv.id)"
-            class="sb-conv-streaming-dot sb-conv-streaming-dot--sm"
-            title="در حال دریافت پاسخ..."
-          />
-          <MessageSquare v-else :size="14" />
-        </button>
-      </div>
-
       <!-- Spacer -->
       <div class="sb-spacer" />
 
@@ -895,48 +874,6 @@ const userInitial = computed(() => {
   flex-shrink: 0;
 }
 
-.sb-divider-mini {
-  width: 24px;
-  height: 1px;
-  background: var(--border);
-  margin: 4px 0;
-  flex-shrink: 0;
-}
-
-.sb-collapsed-chats {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  width: 100%;
-  max-height: 40vh;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 2px 0;
-}
-
-.sb-collapsed-chats::-webkit-scrollbar {
-  width: 2px;
-}
-.sb-collapsed-chats::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 2px;
-}
-
-.sb-icon-btn--conv {
-  color: var(--muted-foreground);
-}
-
-.sb-icon-btn--conv:hover {
-  color: var(--foreground);
-}
-
-.sb-icon-btn--conv.is-active {
-  background-color: var(--surface-alt, var(--secondary));
-  color: var(--primary);
-  box-shadow: 0 0 0 1px var(--border);
-}
-
 .sb-spacer { flex: 1; }
 
 /* Icon buttons */
@@ -1033,12 +970,6 @@ const userInitial = computed(() => {
   background-color: var(--primary);
   animation: stream-pulse 1.1s ease-in-out infinite;
   flex-shrink: 0;
-}
-
-.sb-conv-streaming-dot--sm {
-  width: 7px;
-  height: 7px;
-  min-width: 7px;
 }
 
 @keyframes stream-pulse {

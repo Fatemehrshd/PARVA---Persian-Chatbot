@@ -24,6 +24,7 @@ export class AuthService {
       email: u.email,
       displayName: u.displayName,
       role: u.role,
+      isActive: u.isActive !== false,
       createdAt: u.createdAt,
     };
   }
@@ -38,6 +39,8 @@ export class AuthService {
     const u = await this.users.findByEmail(email.trim().toLowerCase());
     if (!u || !(await bcrypt.compare(password, u.passwordHash)))
       throw new UnauthorizedException(FA.invalidCredentials);
+    if (u.isActive === false)
+      throw new UnauthorizedException('حساب کاربری غیرفعال است');
     return { user: this.toUserJson(u), ...this.tokens(u) };
   }
   async logout() {

@@ -41,3 +41,8 @@ export class UpdateUserStatusDto {
   @IsBoolean({ message: 'وضعیت فعال بودن باید boolean باشد' })
   isActive: boolean;
 }
+
+export class UpdateUserStatusDto {
+  @IsBoolean({ message: 'وضعیت فعال بودن باید boolean باشد' })
+  isActive: boolean;
+}

@@ -22,4 +22,18 @@ describe('Auth (behavior)', () => {
     const s = new AuthService(users, jwt);
     await expect(s.signup('a@x.com', 'password123')).rejects.toThrow('Email is already registered');
   });
+
+  it('disabled users cannot log in', async () => {
+    const passwordHash = await (await import('bcryptjs')).default.hash('password123', 10);
+    users.data.push({
+      id: 'disabled-user',
+      email: 'disabled@x.com',
+      passwordHash,
+      role: 'user',
+      isActive: false,
+    });
+
+    const s = new AuthService(users, jwt);
+    await expect(s.login('disabled@x.com', 'password123')).rejects.toThrow('حساب کاربری غیرفعال است');
+  });
 });

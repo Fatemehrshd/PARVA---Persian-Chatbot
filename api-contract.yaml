@@ -874,6 +874,39 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /admin/users/{userId}/status:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Admin - Users]
+      summary: Enable or disable a user account without deleting it
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserStatusRequest'
+      responses:
+        '200':
+          description: User status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileApiResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     delete:
       tags: [Admin - Users]
       summary: Delete a user and cascade their conversations and messages
@@ -1047,6 +1080,8 @@ components:
         role:
           type: string
           enum: [user, admin]
+        isActive:
+          type: boolean
         createdAt:
           type: string
           format: date-time
@@ -1162,6 +1197,8 @@ components:
         role:
           type: string
           enum: [user, admin]
+        isActive:
+          type: boolean
         avatarUrl:
           type: string
           nullable: true
@@ -1197,6 +1234,13 @@ components:
         usedTokens:
           type: integer
           minimum: 0
+
+    UpdateUserStatusRequest:
+      type: object
+      required: [isActive]
+      properties:
+        isActive:
+          type: boolean
 
     UpdateModelRequest:
       type: object

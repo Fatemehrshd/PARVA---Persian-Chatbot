@@ -27,8 +27,6 @@ const searchResults = ref<SearchResult[]>([])
 const selectedIndex = ref(0)
 let debounceTimer: any = null
 
-const isRtl = computed(() => uiStore.direction === 'rtl')
-
 const displayedItems = computed(() => {
   if (!query.value.trim()) {
     // Show recent conversations if no search query
@@ -144,7 +142,7 @@ function formatDate(dateStr?: string) {
   if (!dateStr) return ''
   try {
     const d = new Date(dateStr)
-    return d.toLocaleDateString(isRtl.value ? 'fa-IR' : 'en-US', {
+    return d.toLocaleDateString('fa-IR', {
       month: 'short',
       day: 'numeric'
     })
@@ -158,7 +156,7 @@ function formatDate(dateStr?: string) {
   <Teleport to="body">
     <Transition name="search-modal">
       <div v-if="isOpen" class="search-modal-backdrop" @click="close">
-        <div class="search-modal-card" @click.stop :dir="uiStore.direction">
+        <div class="search-modal-card" @click.stop dir="rtl">
           <!-- Search Header Input -->
           <div class="search-input-wrapper">
             <Search :size="18" class="search-icon" />
@@ -167,14 +165,14 @@ function formatDate(dateStr?: string) {
               v-model="query"
               type="text"
               class="search-input"
-              :placeholder="isRtl ? 'جستجو در گفتگوها و پیام‌ها...' : 'Search conversations and messages...'"
+              placeholder="جستجو در گفتگوها و پیام‌ها..."
             />
             <Loader2 v-if="isSearching" :size="16" class="search-spinner animate-spin" />
             <button
               v-else-if="query"
               class="search-clear-btn"
               @click="query = ''; inputRef?.focus()"
-              :title="isRtl ? 'پاک کردن' : 'Clear'"
+              title="پاک کردن"
             >
               <X :size="15" />
             </button>
@@ -183,7 +181,7 @@ function formatDate(dateStr?: string) {
 
           <!-- Section Label -->
           <div class="search-section-label">
-            <span>{{ query ? (isRtl ? 'نتایج جستجو' : 'Search Results') : (isRtl ? 'گفتگوهای اخیر' : 'Recent Conversations') }}</span>
+            <span>{{ query ? 'نتایج جستجو' : 'گفتگوهای اخیر' }}</span>
           </div>
 
           <!-- Results List -->
@@ -219,10 +217,10 @@ function formatDate(dateStr?: string) {
             <div v-if="!isSearching && query && displayedItems.length === 0" class="search-empty-state">
               <Search :size="32" class="empty-icon" />
               <p class="empty-text">
-                {{ isRtl ? 'هیچ نتیجه‌ای یافت نشد' : 'No conversations found' }}
+                هیچ نتیجه‌ای یافت نشد
               </p>
               <span class="empty-hint">
-                {{ isRtl ? 'عبارت دیگری را امتحان کنید' : 'Try searching with different keywords' }}
+                عبارت دیگری را امتحان کنید
               </span>
             </div>
           </div>
@@ -231,16 +229,16 @@ function formatDate(dateStr?: string) {
           <div class="search-modal-footer font-mono">
             <div class="footer-hint">
               <span class="keycap">↵</span>
-              <span>{{ isRtl ? 'انتخاب' : 'Open' }}</span>
+              <span>انتخاب</span>
             </div>
             <div class="footer-hint">
               <span class="keycap">↑</span>
               <span class="keycap">↓</span>
-              <span>{{ isRtl ? 'ناوبری' : 'Navigate' }}</span>
+              <span>ناوبری</span>
             </div>
             <div class="footer-hint">
               <span class="keycap">ESC</span>
-              <span>{{ isRtl ? 'بستن' : 'Close' }}</span>
+              <span>بستن</span>
             </div>
           </div>
         </div>

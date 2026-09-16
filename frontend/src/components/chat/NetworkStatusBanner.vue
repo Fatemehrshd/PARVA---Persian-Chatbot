@@ -19,10 +19,13 @@ async function checkConnection() {
     }
     uiStore.setOnline(true)
     uiStore.showToast(
-      uiStore.direction === 'rtl' ? 'اتصال برقرار شد.' : 'Connection restored.',
+      'اتصال برقرار شد.',
       'success',
       2000
     )
+    if (chatStore.streamError && !chatStore.isStreaming) {
+      await chatStore.retryLastMessage()
+    }
   } catch {
     uiStore.setOnline(false)
   } finally {
@@ -50,7 +53,7 @@ async function checkConnection() {
             <line x1="12" y1="20" x2="12.01" y2="20"></line>
           </svg>
           <span>
-            {{ uiStore.direction === 'rtl' ? 'اتصال شما به اینترنت قطع است.' : 'You are currently offline.' }}
+            اتصال شما به اینترنت قطع است.
           </span>
         </div>
 
@@ -66,7 +69,7 @@ async function checkConnection() {
             <polyline points="1 4 1 10 7 10"></polyline>
             <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
           </svg>
-          <span>{{ uiStore.direction === 'rtl' ? 'تلاش مجدد' : 'Retry' }}</span>
+          <span>تلاش مجدد</span>
         </button>
       </div>
     </div>

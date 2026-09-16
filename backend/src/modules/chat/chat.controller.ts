@@ -96,6 +96,10 @@ export class ChatController {
         if (chunk.saved) {
           res.write(`event: done\ndata: ${JSON.stringify({ messageId: chunk.saved.id })}\n\n`);
         }
+        if (chunk.error) {
+          res.write(`event: error\ndata: ${JSON.stringify({ error: chunk.error, message: chunk.error })}\n\n`);
+          break;
+        }
       }
     } catch {
       // client disconnect or stream complete
@@ -137,8 +141,10 @@ export class ChatController {
     });
 
     const first = await gen.next();
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
     const writeToken = (t: string) => {
       if (!clientDisconnected && !res.writableEnded) {
         try {
@@ -148,6 +154,11 @@ export class ChatController {
         }
       }
     };
+    if (!first.done && first.value?.error) {
+      res.write(`event: error\ndata: ${JSON.stringify({ error: first.value.error, message: first.value.error })}\n\n`);
+      if (!res.writableEnded) res.end();
+      return;
+    }
     if (!first.done && first.value?.sync) {
       res.write(`event: sync\ndata: ${JSON.stringify({ content: first.value.sync })}\n\n`);
     }
@@ -155,6 +166,14 @@ export class ChatController {
     try {
       for await (const chunk of gen) {
         if (clientDisconnected) break;
+        if (chunk.error && !clientDisconnected && !res.writableEnded) {
+          try {
+            res.write(`event: error\ndata: ${JSON.stringify({ error: chunk.error, message: chunk.error })}\n\n`);
+          } catch {
+            clientDisconnected = true;
+          }
+          break;
+        }
         if (chunk.sync && !clientDisconnected && !res.writableEnded) {
           try {
             res.write(`event: sync\ndata: ${JSON.stringify({ content: chunk.sync })}\n\n`);
@@ -178,8 +197,15 @@ export class ChatController {
           }
         }
       }
-    } catch {
-      // Stream error or client aborted
+    } catch (err: any) {
+      if (!clientDisconnected && !res.writableEnded) {
+        try {
+          const errMessage = err?.message || 'خطا در برقراری ارتباط با مدل هوش مصنوعی';
+          res.write(`event: error\ndata: ${JSON.stringify({ error: errMessage, message: errMessage })}\n\n`);
+        } catch {
+          clientDisconnected = true;
+        }
+      }
     } finally {
       if (!res.writableEnded) {
         try {

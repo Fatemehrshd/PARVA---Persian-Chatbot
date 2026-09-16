@@ -4,15 +4,33 @@ import { createPinia, setActivePinia } from 'pinia'
 import MessageList from '../src/components/chat/MessageList.vue'
 import { useChatStore } from '../src/stores/chat'
 
+const TEST_CONV_ID = 'test-stream-conv'
+
 describe('MessageList streaming scroll behavior', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
   })
 
+  function makeStreamState(overrides: Partial<{
+    isStreaming: boolean
+    currentStreamingText: string
+    isThinking: boolean
+  }> = {}) {
+    return {
+      isStreaming: overrides.isStreaming ?? true,
+      isThinking: overrides.isThinking ?? false,
+      streamError: null,
+      currentStreamingText: overrides.currentStreamingText ?? 'first token',
+      abortController: null,
+      watchdogTimer: null,
+      lastUserPrompt: ''
+    }
+  }
+
   function mountStreamingList() {
     const chatStore = useChatStore()
-    chatStore.isStreaming = true
-    chatStore.currentStreamingText = 'first token'
+    chatStore.currentConversationId = TEST_CONV_ID
+    chatStore.convStreamStates.set(TEST_CONV_ID, makeStreamState())
 
     const wrapper = mount(MessageList, {
       global: {
@@ -45,7 +63,7 @@ describe('MessageList streaming scroll behavior', () => {
     container.scrollTop = 400
     container.dispatchEvent(new Event('scroll'))
     container.scrollHeight = 1100
-    chatStore.currentStreamingText = 'second token'
+    chatStore.convStreamStates.set(TEST_CONV_ID, makeStreamState({ currentStreamingText: 'second token' }))
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
 
@@ -59,7 +77,7 @@ describe('MessageList streaming scroll behavior', () => {
     container.scrollTop = 200
     container.dispatchEvent(new Event('scroll'))
     container.scrollHeight = 1400
-    chatStore.currentStreamingText = 'second token'
+    chatStore.convStreamStates.set(TEST_CONV_ID, makeStreamState({ currentStreamingText: 'second token' }))
     await wrapper.vm.$nextTick()
 
     expect(container.scrollTop).toBe(200)
@@ -74,7 +92,7 @@ describe('MessageList streaming scroll behavior', () => {
     container.scrollTop = 500
     container.dispatchEvent(new Event('scroll'))
     container.scrollHeight = 1200
-    chatStore.currentStreamingText = 'second token'
+    chatStore.convStreamStates.set(TEST_CONV_ID, makeStreamState({ currentStreamingText: 'second token' }))
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
 
@@ -87,10 +105,61 @@ describe('MessageList streaming scroll behavior', () => {
 
     container.scrollTop = 200
     container.dispatchEvent(new Event('scroll'))
-    chatStore.isStreaming = false
+    chatStore.convStreamStates.set(TEST_CONV_ID, makeStreamState({ isStreaming: false }))
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
 
     expect(container.scrollTop).toBe(200)
   })
-})
+
+  it('scrolls to absolute bottom when a new user message is added even if user was scrolled up', async () => {
+    const { wrapper, chatStore, container } = mountStreamingList()
+    await wrapper.vm.$nextTick()
+
+    // User scrolled up away from bottom
+    container.scrollTop = 200
+    container.dispatchEvent(new Event('scroll'))
+    await wrapper.vm.$nextTick()
+
+    // User sends a new message
+    container.scrollHeight = 2500
+    chatStore.messages.push({
+      id: 'msg-user-new',
+      conversationId: TEST_CONV_ID,
+      role: 'user',
+      content: 'Hello, this is a new message in a long chat!',
+      createdAt: new Date().toISOString()
+    })
+
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+
+    // Must jump to the absolute bottom (2500)
+    expect(container.scrollTop).toBe(2500)
+  })
+
+  it('renders jump-to-bottom button when user is scrolled up and triggers scroll on click', async () => {
+    const { wrapper, chatStore, container } = mountStreamingList()
+    chatStore.messages.push({
+      id: 'msg-1',
+      conversationId: TEST_CONV_ID,
+      role: 'user',
+      content: 'Initial message',
+      createdAt: new Date().toISOString()
+    })
+    await wrapper.vm.$nextTick()
+
+    // Scrolled up
+    container.scrollTop = 150
+    container.dispatchEvent(new Event('scroll'))
+    await wrapper.vm.$nextTick()
+
+    // Button should be visible
+    const scrollBtn = wrapper.find('.scroll-to-bottom-btn')
+    expect(scrollBtn.exists()).toBe(true)
+
+    // Click button
+    await scrollBtn.trigger('click')
+    expect(container.scrollTo).toHaveBeenCalled()
+  })
+})

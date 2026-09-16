@@ -9,6 +9,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Per-Conversation Streaming State (`frontend`)**:
+  - Refactored `chat.ts` to use a `Map<convId, ConvStreamState>` instead of global `isStreaming`/`isThinking`/`streamError`/`currentStreamingText`/`lastUserPrompt`/`abortController` refs.
+  - Each conversation now has fully independent streaming state — switching conversations no longer aborts background streams.
+  - `isStreaming`, `isThinking`, `streamError`, `currentStreamingText`, `lastUserPrompt` are now computed from the Map for the currently active conversation, providing full backward compatibility with all existing components.
+  - Added `getConvIsStreaming(convId)` public helper for reading any conversation's streaming state (used by sidebar).
+  - `AppSidebar.vue`: Added animated pulsing dot (`sb-conv-streaming-dot`) next to any conversation that is streaming in the background (both expanded and collapsed sidebar states).
+  - Updated `MessageList.spec.ts`, `ChatComposer.spec.ts`, `NetworkAndRetry.spec.ts` to use `convStreamStates` Map for test state setup (all 22 suites / 114 tests passing).
+
+### Removed
+- **English Language & LTR Capability Removed (`frontend`)**:
+  - Completely removed English language selection, LTR toggling, and bilingual conditionals throughout the application.
+  - Hardcoded document and store direction strictly to Persian RTL (`dir="rtl"`, `lang="fa"`), removing direction overrides from `localStorage`.
+  - Removed the "Language & Direction" (`زبان و جهت چیدمان`) configuration section and LTR buttons from `SettingsModal.vue`.
+  - Replaced all bilingual ternary expressions (`isRtl ? ... : ...`, `uiStore.direction === 'rtl' ? ... : ...`) across all components (`AppHeader`, `AppSidebar`, `ProfileModal`, `ProfileMenu`, `SearchModal`, `LogoutModal`, `EditConversationModal`, `DeleteConversationModal`, `ModelsModal`, `ChatComposer`, `MessageBubble`, `EmptyState`, `LoginView`, and `AdminModelsView`) with clean, purely Persian text, placeholders, labels, and tooltips.
+  - Updated frontend test suites (`SettingsModal.spec.ts`, `Stores.spec.ts`, `AdminModelsView.spec.ts`) to verify that English/LTR options are absent and the application operates exclusively in Persian RTL (all 22 suites / 114 tests passing).
+
+### Fixed
+- **Large Message List Auto-Scrolling & State Preservation (`MessageList.vue`)**:
+  - Fixed an issue where conversations with high message volume failed to auto-scroll to the bottom upon receiving or sending new messages due to asynchronous DOM layout recalculation and smooth-scroll animation clamping.
+  - Replaced single microtask scrolling with multi-pass synchronization (`nextTick` + `requestAnimationFrame` + post-layout micro-delays).
+  - Integrated `ResizeObserver` on the message container to dynamically track height adjustments caused by Markdown parsing, syntax highlighting, and KaTeX rendering, locking to the absolute bottom when auto-scroll is active.
+  - Implemented strict state protection: manual scroll-up is respected so users can read chat history uninterrupted without being pulled down by incoming stream tokens or stream completion.
+  - Force auto-scrolls to the absolute bottom whenever the user sends a new message or switches conversations.
+  - Added a floating, glassmorphic "Scroll to bottom" button with a real-time pulse badge when new streaming content arrives while scrolled up, smoothly returning the viewport to the bottom when clicked.
+  - Expanded `tests/MessageList.spec.ts` with 6 comprehensive unit tests covering auto-scroll, position preservation, and jump button interactions.
+
+### Added
+- **Visual Theme Switcher & Sidebar Settings Overhaul**:
+  - Replaced the two plain text theme buttons in `SettingsModal.vue` with rich visual theme preview cards featuring realistic miniature UI mockups for Dark (Slate Obsidian) and Light (Warm Cream) themes.
+  - Added active check indicators, radio pills, smooth hover animations, and auto-save indicators in `SettingsModal.vue`.
+  - Added direct quick "تنظیمات" (Settings) row in `AppSidebar.vue` footer (in both expanded and collapsed icon-only states) with live theme indicator badge (Moon / Sun icon).
+  - Fixed dead "شخصی‌سازی" button in `ProfileMenu.vue` to properly open Appearance & Theme settings, and enhanced profile popup menu with floating glassmorphism styling and theme indicator badge.
+  - Added comprehensive test suite `tests/SettingsModal.spec.ts` covering modal visibility, theme toggling, direction switching, and close actions.
+
+### Fixed
+- **Chat Error Handling, Timeouts & Message Delivery Status**:
+  - Implemented upstream LLM connection timeout (35s) and idle read stall timeout (25s) with `AbortSignal` in `OpenAiCompatForwarder`.
+  - Added 35-second `thinkingTimer` in `ActiveStreamService` to automatically fail stalled upstream sessions before first token emission.
+  - Added `@Get(['health', 'api/v1/health'])` endpoint to test server health without requiring authentication.
+  - Implemented client-side pre-flight health check (`checkBackendHealth`) in `frontend/src/services/api.ts` before streaming messages.
+  - Resolved alert banner retry functionality: `retryLastMessage` now accurately recovers the last user prompt even when `lastUserPrompt` was cleared (e.g., following a page refresh), aborts any lingering controllers/watchdogs, cleans trailing failed messages, and cleanly re-triggers `sendMessage()`.
+  - In backend `generate()`, existing stalled/thinking sessions are automatically aborted when starting a new send or retry, and duplicate user message entities are prevented from accumulating in PostgreSQL.
+  - Replaced persistent fake assistant error messages (`msg-err-...`) with transient Pinia `streamError` ref and composer alert banner in `ChatComposer.vue`, ensuring error messages are completely cleared on page refresh or conversation switch.
+    - Single Error Alert Enforcement: Removed redundant error boxes inside user message bubbles and assistant timeline so that only the single, persistent alert banner above the composer (`stream-error-banner`) is displayed when an error occurs, keeping the conversation stream clean and distraction-free.
+  - Normalized all offline and network errors to user-friendly Persian: «خطا در برقراری ارتباط».
+- **MinIO Object Storage & Avatar Upload**:
+  - Resolved 503 error (`Object storage (MinIO) is not configured; avatar upload is disabled`) by adding the missing MinIO configuration to `backend/.env`.
+  - Started MinIO container (`codeless_minio`) on ports `9000` (API) and `9001` (Console).
+  - Enhanced `StorageService` to implement `OnModuleInit` for automatic bucket creation on startup, with automatic recovery in `put()` on `NoSuchBucket`.
+  - Added project-level `docker-compose.yml` defining PostgreSQL and MinIO for repeatable local development.
+  - Corrected `tests/services/profile.service.spec.ts` to dynamically resolve base origin from `getApiBaseUrl()`.
+
 ### Removed (backend)
 - **User profile slimmed down (product decision).** The `users` table columns `language`, `theme`, `timezone`, `defaultModelId` and `bio` are dropped (migration `1761000000000-DropUserProfileAndPreferences`), and `GET/PUT /users/me/preferences` is removed. `GET/PATCH /users/me` now cover only `displayName` + `username`; avatars on MinIO, email/password change with current-password re-auth, and the unique-lowercase username logic are unchanged. Chat model resolution reverts to **explicit → platform default** (no per-user default). `api-contract.yaml` updated accordingly (Users tag without preferences paths).
 

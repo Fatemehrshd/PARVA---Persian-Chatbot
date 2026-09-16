@@ -13,8 +13,8 @@ const authStore = useAuthStore()
       <button
         class="icon-button"
         @click="uiStore.toggleSidebar"
-        :title="uiStore.sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'"
-        aria-label="Toggle sidebar"
+        :title="uiStore.sidebarOpen ? 'بستن نوار کناری' : 'باز کردن نوار کناری'"
+        aria-label="تغییر وضعیت نوار کناری"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -32,7 +32,7 @@ const authStore = useAuthStore()
       <button
         class="icon-button"
         @click="uiStore.openSettings"
-        :title="uiStore.direction === 'rtl' ? 'تنظیمات' : 'Settings'"
+        title="تنظیمات"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"></circle>
@@ -45,14 +45,14 @@ const authStore = useAuthStore()
         v-if="authStore.isAdmin"
         class="icon-text-btn px-2 sm:px-3"
         @click="uiStore.openAdminModels"
-        :title="uiStore.direction === 'rtl' ? 'پنل ادمین (مدیریت مدل‌ها)' : 'Admin Panel (Manage Models)'"
+        title="پنل ادمین (مدیریت مدل‌ها)"
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
           <line x1="8" y1="21" x2="16" y2="21"></line>
           <line x1="12" y1="17" x2="12" y2="21"></line>
         </svg>
-        <span class="btn-label hidden sm:inline">{{ uiStore.direction === 'rtl' ? 'پنل ادمین' : 'Admin Panel' }}</span>
+        <span class="btn-label hidden sm:inline">پنل ادمین</span>
       </button>
 
       <!-- Auth State / User Button -->
@@ -68,7 +68,7 @@ const authStore = useAuthStore()
       </template>
       <template v-else>
         <router-link to="/login" class="login-trigger-btn px-2 sm:px-3 text-xs sm:text-sm inline-flex items-center justify-center">
-          {{ uiStore.direction === 'rtl' ? 'ورود' : 'Sign In' }}
+          ورود
         </router-link>
       </template>
     </div>

@@ -69,7 +69,7 @@ async function selectModel(id: string) {
     await chatStore.switchConversationModel(id)
   } catch (err: any) {
     uiStore.showToast(
-      err?.message || (uiStore.direction === 'rtl' ? 'خطا در تغییر مدل گفتگو' : 'Failed to switch model'),
+      err?.message || 'خطا در تغییر مدل گفتگو',
       'error'
     )
   }
@@ -79,6 +79,10 @@ function handleClickOutside(event: MouseEvent) {
   if (modelPickerRef.value && !modelPickerRef.value.contains(event.target as Node)) {
     modelMenuOpen.value = false
   }
+}
+
+async function handleRetry() {
+  await chatStore.retryLastMessage()
 }
 
 onMounted(() => {
@@ -93,13 +97,45 @@ onUnmounted(() => {
 <template>
   <div class="composer-outer">
     <div class="chat-content-wrapper composer-container">
+      <!-- Transient Stream Error Alert (clears on refresh, new conversation or retry) -->
+      <div
+        v-if="chatStore.streamError && !chatStore.isStreaming"
+        class="stream-error-banner"
+      >
+        <div class="stream-error-content">
+          <svg class="stream-error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <span class="stream-error-text">{{ chatStore.streamError }}</span>
+        </div>
+        <div class="stream-error-actions">
+          <button
+            type="button"
+            class="stream-error-retry-btn"
+            @click.stop.prevent="handleRetry"
+          >
+            تلاش مجدد
+          </button>
+          <button
+            type="button"
+            class="stream-error-dismiss-btn"
+            @click.stop.prevent="chatStore.clearStreamError"
+            title="بستن"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
       <div :class="['composer-card', { focused: isFocused }]">
         <textarea
           ref="textareaRef"
           v-model="inputContent"
           :class="['composer-textarea', inputDirection]"
           :dir="inputDirection"
-          :placeholder="uiStore.direction === 'rtl' ? 'پیام خود را بنویسید... (Enter برای ارسال)' : 'Type a message... (Enter to send)'"
+          placeholder="پیام خود را بنویسید... (Enter برای ارسال)"
           rows="1"
           @focus="isFocused = true"
           @blur="isFocused = false"
@@ -114,7 +150,7 @@ onUnmounted(() => {
               type="button"
               class="model-badge-btn"
               @click="toggleModelMenu"
-              :title="uiStore.direction === 'rtl' ? 'تغییر مدل هوش مصنوعی' : 'Change AI Model'"
+              title="تغییر مدل هوش مصنوعی"
             >
               <span class="model-dot"></span>
               <span class="model-name">{{ modelsStore.selectedModel.name }}</span>
@@ -126,7 +162,7 @@ onUnmounted(() => {
             <!-- Dropdown Popover opening upward -->
             <div v-if="modelMenuOpen" class="composer-model-dropdown">
               <div class="dropdown-header font-mono">
-                {{ uiStore.direction === 'rtl' ? 'انتخاب مدل هوش مصنوعی' : 'SELECT AI MODEL' }}
+                انتخاب مدل هوش مصنوعی
               </div>
               <div class="model-options-list">
                 <button
@@ -152,7 +188,7 @@ onUnmounted(() => {
               v-if="chatStore.isStreaming"
               class="btn-stop"
               @click="handleStop"
-              title="Stop generation"
+              title="توقف پاسخ"
             >
               <span class="stop-square"></span>
             </button>
@@ -161,7 +197,7 @@ onUnmounted(() => {
               class="btn-send"
               :disabled="!canSend"
               @click="handleSubmit"
-              title="Send message"
+              title="ارسال پیام"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -172,10 +208,7 @@ onUnmounted(() => {
       </div>
 
       <p class="disclaimer">
-        {{ uiStore.direction === 'rtl'
-          ? 'سامانه پروا ممکن است خطا داشته باشد. اطلاعات مهم را ارزیابی کنید.'
-          : 'Parva can make mistakes. Verify important information.'
-        }}
+        سامانه پروا ممکن است خطا داشته باشد. اطلاعات مهم را ارزیابی کنید.
       </p>
     </div>
   </div>
@@ -192,6 +225,92 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+.stream-error-banner {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  margin-bottom: 8px;
+  background-color: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-md, 10px);
+  color: #ef4444;
+  font-size: 12px;
+  animation: fadeIn 200ms ease-out;
+}
+
+.stream-error-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stream-error-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.stream-error-text {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stream-error-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.stream-error-retry-btn {
+  background-color: #ef4444;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 150ms;
+}
+
+.stream-error-retry-btn:hover {
+  opacity: 0.9;
+}
+
+.stream-error-dismiss-btn {
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  transition: background-color 150ms;
+}
+
+.stream-error-dismiss-btn:hover {
+  background-color: rgba(239, 68, 68, 0.2);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .composer-card {

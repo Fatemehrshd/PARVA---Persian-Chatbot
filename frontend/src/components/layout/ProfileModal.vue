@@ -47,8 +47,6 @@ const open = computed({
   },
 })
 
-const isRtl = computed(() => uiStore.direction === 'rtl')
-
 function syncProfile(nextProfile: UserProfile) {
   profile.value = nextProfile
   displayName.value = nextProfile.displayName ?? ''
@@ -62,7 +60,7 @@ async function loadProfile() {
   try {
     syncProfile(await profileService.getProfile())
   } catch (error: any) {
-    uiStore.showToast(error?.message || (isRtl.value ? 'دریافت پروفایل ناموفق بود.' : 'Could not load profile.'), 'error')
+    uiStore.showToast(error?.message || 'دریافت پروفایل ناموفق بود.', 'error')
   } finally {
     isLoadingProfile.value = false
   }
@@ -166,18 +164,18 @@ watch(
   <DialogRoot v-model:open="open">
     <DialogPortal>
       <DialogOverlay class="profile-modal-overlay" />
-      <DialogContent class="profile-modal-content" :dir="uiStore.direction">
+      <DialogContent class="profile-modal-content" dir="rtl">
         <div class="profile-modal-header">
           <div>
             <DialogTitle class="profile-modal-title">
-              {{ isRtl ? 'نمایه کاربری' : 'Your profile' }}
+              نمایه کاربری
             </DialogTitle>
             <DialogDescription class="profile-modal-description">
-              {{ isRtl ? 'اطلاعات حساب خود را مدیریت کنید.' : 'Manage your account details.' }}
+              اطلاعات حساب خود را مدیریت کنید.
             </DialogDescription>
           </div>
           <DialogClose as-child>
-            <Button variant="ghost" size="icon-sm" :aria-label="isRtl ? 'بستن' : 'Close'">
+            <Button variant="ghost" size="icon-sm" aria-label="بستن">
               <X :size="18" />
             </Button>
           </DialogClose>
@@ -186,9 +184,9 @@ watch(
         <div class="profile-tabs" role="tablist">
           <button
             v-for="tab in [
-              { id: 'profile', label: isRtl ? 'اطلاعات حساب' : 'Account', icon: UserRound },
-              { id: 'email', label: isRtl ? 'ایمیل' : 'Email', icon: Mail },
-              { id: 'password', label: isRtl ? 'رمز عبور' : 'Password', icon: LockKeyhole },
+              { id: 'profile', label: 'اطلاعات حساب', icon: UserRound },
+              { id: 'email', label: 'ایمیل', icon: Mail },
+              { id: 'password', label: 'رمز عبور', icon: LockKeyhole },
             ]"
             :key="tab.id"
             class="profile-tab"
@@ -203,7 +201,7 @@ watch(
         </div>
 
         <div class="profile-modal-body">
-          <div v-if="isLoadingProfile" class="profile-skeleton" aria-label="Loading profile">
+          <div v-if="isLoadingProfile" class="profile-skeleton" aria-label="در حال بارگذاری نمایه">
             <Skeleton class="h-16 w-16 rounded-full" />
             <Skeleton class="h-10 w-full" />
             <Skeleton class="h-10 w-full" />
@@ -218,8 +216,8 @@ watch(
                 <button
                   type="button"
                   class="profile-avatar-add"
-                  :aria-label="isRtl ? 'انتخاب تصویر نمایه' : 'Choose profile image'"
-                  :title="isRtl ? 'انتخاب تصویر نمایه' : 'Choose profile image'"
+                  aria-label="انتخاب تصویر نمایه"
+                  title="انتخاب تصویر نمایه"
                   :disabled="profileSubmit.isSubmitting.value"
                   @click="openAvatarPicker"
                 >
@@ -241,52 +239,52 @@ watch(
               </div>
             </div>
             <div class="profile-field">
-              <Label for="profile-display-name">{{ isRtl ? 'نام نمایشی' : 'Display name' }}</Label>
+              <Label for="profile-display-name">نام نمایشی</Label>
               <Input id="profile-display-name" v-model="displayName" :loading="profileSubmit.isSubmitting.value" maxlength="60" />
             </div>
             <div class="profile-field">
-              <Label for="profile-username">{{ isRtl ? 'نام کاربری' : 'Username' }}</Label>
+              <Label for="profile-username">نام کاربری</Label>
               <Input id="profile-username" v-model="username" :loading="profileSubmit.isSubmitting.value" placeholder="username" />
-              <span class="profile-helper">{{ isRtl ? '۳ تا ۳۰ کاراکتر انگلیسی، عدد یا _' : '3–30 lowercase letters, numbers, or _' }}</span>
+              <span class="profile-helper">۳ تا ۳۰ کاراکتر انگلیسی، عدد یا _</span>
             </div>
             <div class="profile-form-actions">
               <Button type="submit" :loading="profileSubmit.isSubmitting.value" :disabled="isLoadingProfile">
-                {{ isRtl ? 'ذخیره اطلاعات' : 'Save profile' }}
+                ذخیره اطلاعات
               </Button>
             </div>
           </form>
 
           <form v-else-if="activeTab === 'email'" class="profile-form" @submit.prevent="emailSubmit.submit()">
-            <div class="profile-tab-intro"><Mail :size="20" /><span>{{ isRtl ? 'برای تغییر ایمیل، رمز عبور فعلی لازم است.' : 'Your current password is required to change email.' }}</span></div>
+            <div class="profile-tab-intro"><Mail :size="20" /><span>برای تغییر ایمیل، رمز عبور فعلی لازم است.</span></div>
             <div class="profile-field">
-              <Label for="profile-email">{{ isRtl ? 'ایمیل جدید' : 'New email' }}</Label>
+              <Label for="profile-email">ایمیل جدید</Label>
               <Input id="profile-email" v-model="email" type="email" :loading="emailSubmit.isSubmitting.value" required />
             </div>
             <div class="profile-field">
-              <Label for="profile-email-password">{{ isRtl ? 'رمز عبور فعلی' : 'Current password' }}</Label>
+              <Label for="profile-email-password">رمز عبور فعلی</Label>
               <Input id="profile-email-password" v-model="emailPassword" type="password" :loading="emailSubmit.isSubmitting.value" required />
             </div>
             <div class="profile-form-actions">
-              <Button type="submit" :loading="emailSubmit.isSubmitting.value">{{ isRtl ? 'تغییر ایمیل' : 'Change email' }}</Button>
+              <Button type="submit" :loading="emailSubmit.isSubmitting.value">تغییر ایمیل</Button>
             </div>
           </form>
 
           <form v-else class="profile-form" @submit.prevent="passwordSubmit.submit()">
-            <div class="profile-tab-intro"><LockKeyhole :size="20" /><span>{{ isRtl ? 'رمز عبور جدید باید حداقل ۸ کاراکتر باشد.' : 'Your new password must be at least 8 characters.' }}</span></div>
+            <div class="profile-tab-intro"><LockKeyhole :size="20" /><span>رمز عبور جدید باید حداقل ۸ کاراکتر باشد.</span></div>
             <div class="profile-field">
-              <Label for="profile-current-password">{{ isRtl ? 'رمز عبور فعلی' : 'Current password' }}</Label>
+              <Label for="profile-current-password">رمز عبور فعلی</Label>
               <Input id="profile-current-password" v-model="currentPassword" type="password" :loading="passwordSubmit.isSubmitting.value" required />
             </div>
             <div class="profile-field">
-              <Label for="profile-new-password">{{ isRtl ? 'رمز عبور جدید' : 'New password' }}</Label>
+              <Label for="profile-new-password">رمز عبور جدید</Label>
               <Input id="profile-new-password" v-model="newPassword" type="password" minlength="8" :loading="passwordSubmit.isSubmitting.value" required />
             </div>
             <div class="profile-field">
-              <Label for="profile-confirm-password">{{ isRtl ? 'تکرار رمز عبور جدید' : 'Confirm new password' }}</Label>
+              <Label for="profile-confirm-password">تکرار رمز عبور جدید</Label>
               <Input id="profile-confirm-password" v-model="confirmPassword" type="password" :loading="passwordSubmit.isSubmitting.value" required />
             </div>
             <div class="profile-form-actions">
-              <Button type="submit" :loading="passwordSubmit.isSubmitting.value">{{ isRtl ? 'تغییر رمز عبور' : 'Change password' }}</Button>
+              <Button type="submit" :loading="passwordSubmit.isSubmitting.value">تغییر رمز عبور</Button>
             </div>
           </form>
         </div>

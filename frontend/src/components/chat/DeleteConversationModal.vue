@@ -48,14 +48,14 @@ async function handleConfirm() {
             </svg>
           </div>
           <h3 class="text-base font-semibold text-foreground">
-            {{ uiStore.direction === 'rtl' ? 'حذف گفتگو' : 'Delete Chat' }}
+            حذف گفتگو
           </h3>
         </div>
 
         <button
           @click="emit('close')"
           class="text-muted-foreground hover:text-foreground hover:bg-secondary p-1.5 rounded-md transition-colors"
-          aria-label="Close"
+          aria-label="بستن"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -67,72 +67,38 @@ async function handleConfirm() {
       <!-- Body -->
       <div class="p-6 space-y-3">
         <p class="text-sm text-foreground">
-          <template v-if="uiStore.direction === 'rtl'">
-            آیا از حذف گفتگوی 
-            <span class="font-semibold text-primary">«{{ conversation.title }}»</span> 
-            اطمینان دارید؟
-          </template>
-          <template v-else>
-            Are you sure you want to delete 
-            <span class="font-semibold text-primary">"{{ conversation.title }}"</span>?
-          </template>
+          آیا از حذف گفتگوی 
+          <span class="font-semibold text-primary">«{{ conversation.title }}»</span> 
+          اطمینان دارید؟
         </p>
         <p class="text-xs text-muted-foreground">
-          {{ uiStore.direction === 'rtl' 
-            ? 'تمامی پیام‌ها و تاریخچه این گفتگو به صورت دائمی حذف خواهد شد و این عملیات قابل بازگشت نیست.' 
-            : 'All messages and history within this conversation will be permanently removed. This action cannot be undone.' }}
+          تمامی پیام‌ها و تاریخچه این گفتگو به صورت دائمی حذف خواهد شد و این عملیات قابل بازگشت نیست.
         </p>
       </div>
 
       <!-- Footer Buttons -->
       <div class="px-6 py-4 border-t border-border bg-secondary/30 flex items-center justify-between gap-3 w-full">
-        <template v-if="uiStore.direction === 'rtl'">
-          <button
-            type="button"
-            @click="handleConfirm"
-            :disabled="isDeleting"
-            class="px-4 py-2 rounded-lg bg-destructive hover:bg-destructive/90 text-destructive-foreground text-xs sm:text-sm font-medium shadow-sm transition-colors flex items-center gap-2"
-          >
-            <svg v-if="isDeleting" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <span>{{ uiStore.direction === 'rtl' ? 'حذف قطعی گفتگو' : 'Delete Chat' }}</span>
-          </button>
+        <button
+          type="button"
+          @click="handleConfirm"
+          :disabled="isDeleting"
+          class="px-4 py-2 rounded-lg bg-destructive hover:bg-destructive/90 text-destructive-foreground text-xs sm:text-sm font-medium shadow-sm transition-colors flex items-center gap-2"
+        >
+          <svg v-if="isDeleting" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span>حذف قطعی گفتگو</span>
+        </button>
 
-          <button
-            type="button"
-            @click="emit('close')"
-            :disabled="isDeleting"
-            class="px-4 py-2 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-secondary-foreground text-xs sm:text-sm font-medium transition-colors"
-          >
-            {{ uiStore.direction === 'rtl' ? 'انصراف' : 'Cancel' }}
-          </button>
-        </template>
-
-        <template v-else>
-          <button
-            type="button"
-            @click="emit('close')"
-            :disabled="isDeleting"
-            class="px-4 py-2 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-secondary-foreground text-xs sm:text-sm font-medium transition-colors"
-          >
-            Cancel
-          </button>
-
-          <button
-            type="button"
-            @click="handleConfirm"
-            :disabled="isDeleting"
-            class="px-4 py-2 rounded-lg bg-destructive hover:bg-destructive/90 text-destructive-foreground text-xs sm:text-sm font-medium shadow-sm transition-colors flex items-center gap-2"
-          >
-            <svg v-if="isDeleting" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <span>Delete Chat</span>
-          </button>
-        </template>
+        <button
+          type="button"
+          @click="emit('close')"
+          :disabled="isDeleting"
+          class="px-4 py-2 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-secondary-foreground text-xs sm:text-sm font-medium transition-colors"
+        >
+          انصراف
+        </button>
       </div>
     </div>
   </div>

@@ -22,6 +22,7 @@ export interface ActiveStreamSession {
   abortController: AbortController;
   subscribers: Set<(event: StreamEvent) => void>;
   startedAt: number;
+  thinkingTimer?: any;
   cleanupTimer?: any;
 }
 
@@ -59,6 +60,9 @@ export class ActiveStreamService {
     if (existing?.cleanupTimer) {
       clearTimeout(existing.cleanupTimer);
     }
+    if (existing?.thinkingTimer) {
+      clearTimeout(existing.thinkingTimer);
+    }
 
     const session: ActiveStreamSession = {
       conversationId,
@@ -72,6 +76,19 @@ export class ActiveStreamService {
       startedAt: Date.now(),
     };
 
+    session.thinkingTimer = setTimeout(() => {
+      if (session.status === 'thinking' && !session.accumulatedText) {
+        this.logger.warn(`Session ${conversationId} timed out in thinking state`);
+        this.failSession(
+          conversationId,
+          'زمان انتظار برای پردازش پیام به پایان رسید (Timeout)',
+        );
+      }
+    }, 35000);
+    if (session.thinkingTimer && typeof session.thinkingTimer.unref === 'function') {
+      session.thinkingTimer.unref();
+    }
+
     this.sessions.set(conversationId, session);
     return session;
   }
@@ -83,6 +100,11 @@ export class ActiveStreamService {
   appendToken(conversationId: string, token: string): void {
     const session = this.sessions.get(conversationId);
     if (!session || session.status === 'completed' || session.status === 'error') return;
+
+    if (session.thinkingTimer) {
+      clearTimeout(session.thinkingTimer);
+      session.thinkingTimer = undefined;
+    }
 
     session.status = 'streaming';
     session.accumulatedText += token;
@@ -117,6 +139,11 @@ export class ActiveStreamService {
     const session = this.sessions.get(conversationId);
     if (!session) return;
 
+    if (session.thinkingTimer) {
+      clearTimeout(session.thinkingTimer);
+      session.thinkingTimer = undefined;
+    }
+
     session.status = 'completed';
     session.savedMessageId = messageId;
 
@@ -136,8 +163,16 @@ export class ActiveStreamService {
     const session = this.sessions.get(conversationId);
     if (!session) return;
 
+    if (session.thinkingTimer) {
+      clearTimeout(session.thinkingTimer);
+      session.thinkingTimer = undefined;
+    }
+
     session.status = 'error';
     session.error = error;
+    try {
+      session.abortController.abort();
+    } catch {}
 
     const event: StreamEvent = { type: 'error', message: error };
     for (const sub of session.subscribers) {
@@ -155,6 +190,11 @@ export class ActiveStreamService {
     const session = this.sessions.get(conversationId);
     if (!session || session.status === 'completed' || session.status === 'error') {
       return false;
+    }
+
+    if (session.thinkingTimer) {
+      clearTimeout(session.thinkingTimer);
+      session.thinkingTimer = undefined;
     }
 
     session.abortController.abort();

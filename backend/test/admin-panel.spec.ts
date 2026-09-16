@@ -92,9 +92,9 @@ describe('Admin Panel Suite', () => {
         convRepo,
         msgRepo,
         modelsService,
-        usersService,
         forwarder,
         settingsService,
+        usersService,
       );
 
       const gen = chatService.generate('u1', 'c1', 'Hello');
@@ -137,9 +137,9 @@ describe('Admin Panel Suite', () => {
         convRepo,
         msgRepo,
         modelsService,
-        usersService,
         forwarder,
         settingsService,
+        usersService,
       );
 
       const gen = chatService.generate('u1', 'c1', 'Hello');

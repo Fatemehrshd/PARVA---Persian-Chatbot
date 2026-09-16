@@ -14,6 +14,9 @@ import {
   Trash2,
   ChevronUp,
   LogIn,
+  Settings,
+  Moon,
+  Sun,
 } from '@lucide/vue'
 import { useUiStore } from '../../stores/ui'
 import { useChatStore } from '../../stores/chat'
@@ -45,12 +48,9 @@ const isSearchModalOpen = ref(false)
 const isProfileModalOpen = ref(false)
 const profileMenuOpen = ref(false)
 
-const isRtl = computed(() => uiStore.direction === 'rtl')
-
-// Sidebar toggle icons mirror with the layout direction so the arrow
-// always points *toward* the sidebar (which sits on the right in RTL).
-const SidebarCollapseIcon = computed(() => (isRtl.value ? PanelRightClose : PanelLeftClose))
-const SidebarExpandIcon = computed(() => (isRtl.value ? PanelRightOpen : PanelLeftOpen))
+// Sidebar toggle icons for RTL layout (sidebar sits on the right)
+const SidebarCollapseIcon = PanelRightClose
+const SidebarExpandIcon = PanelRightOpen
 
 // Disable "New Chat" when user is already on an empty (fresh) conversation
 const isOnEmptyChat = computed(() =>
@@ -87,9 +87,9 @@ async function handleSaveTitle(id: string, newTitle: string) {
     await chatStore.updateConversationTitle(id, newTitle)
     isEditModalOpen.value = false
     editingConversation.value = null
-    uiStore.showToast(isRtl.value ? 'عنوان ویرایش شد.' : 'Title updated.', 'success')
+    uiStore.showToast('عنوان ویرایش شد.', 'success')
   } catch (err: any) {
-    uiStore.showToast(err?.message || 'Failed to update title', 'error')
+    uiStore.showToast(err?.message || 'خطا در ویرایش عنوان گفتگو', 'error')
   }
 }
 
@@ -109,9 +109,9 @@ async function handleConfirmDelete(id: string) {
     } else {
       router.push('/')
     }
-    uiStore.showToast(isRtl.value ? 'گفتگو حذف شد.' : 'Conversation deleted.', 'success')
+    uiStore.showToast('گفتگو حذف شد.', 'success')
   } catch (err: any) {
-    uiStore.showToast(err?.message || 'Failed to delete conversation', 'error')
+    uiStore.showToast(err?.message || 'خطا در حذف گفتگو', 'error')
   }
 }
 
@@ -161,9 +161,9 @@ async function handleConfirmLogout() {
     await authStore.logout()
     isLogoutModalOpen.value = false
     router.push('/login')
-    uiStore.showToast(isRtl.value ? 'با موفقیت خارج شدید.' : 'Signed out.', 'info')
+    uiStore.showToast('با موفقیت خارج شدید.', 'info')
   } catch (err: any) {
-    uiStore.showToast(err?.message || 'Logout failed', 'error')
+    uiStore.showToast(err?.message || 'خطا در خروج از حساب', 'error')
   }
 }
 
@@ -201,7 +201,7 @@ const userInitial = computed(() => {
         </div>
         <button
           class="sb-icon-btn"
-          :title="isRtl ? 'بستن نوار کناری' : 'Collapse sidebar'"
+          title="بستن نوار کناری"
           @click="uiStore.toggleSidebar"
         >
           <component :is="SidebarCollapseIcon" :size="17" />
@@ -210,9 +210,9 @@ const userInitial = computed(() => {
 
       <!-- Actions: Search / New Chat / Temp Chat — stacked vertically -->
       <nav class="sb-actions">
-        <button class="sb-action-row" @click="isSearchModalOpen = true" :title="isRtl ? 'جستجو (Ctrl+K)' : 'Search chats (Ctrl+K)'">
+        <button class="sb-action-row" @click="isSearchModalOpen = true" title="جستجو (Ctrl+K)">
           <Search :size="16" class="sb-action-icon" />
-          <span class="sb-action-label">{{ isRtl ? 'جستجو' : 'Search' }}</span>
+          <span class="sb-action-label">جستجو</span>
         </button>
 
         <button
@@ -220,15 +220,15 @@ const userInitial = computed(() => {
           :class="{ 'sb-action-row--disabled': isOnEmptyChat }"
           :disabled="isOnEmptyChat"
           @click="handleNewChat"
-          :title="isRtl ? 'گفتگوی جدید' : 'New chat'"
+          title="گفتگوی جدید"
         >
           <SquarePen :size="16" class="sb-action-icon" />
-          <span class="sb-action-label">{{ isRtl ? 'گفتگوی جدید' : 'New chat' }}</span>
+          <span class="sb-action-label">گفتگوی جدید</span>
         </button>
 
-        <button class="sb-action-row" :title="isRtl ? 'گفتگوی موقت' : 'Temporary chat'">
+        <button class="sb-action-row" title="گفتگوی موقت">
           <MessageCircleDashed :size="16" class="sb-action-icon" />
-          <span class="sb-action-label">{{ isRtl ? 'موقت' : 'Temporary' }}</span>
+          <span class="sb-action-label">موقت</span>
         </button>
       </nav>
 
@@ -237,7 +237,7 @@ const userInitial = computed(() => {
 
       <!-- Chat History -->
       <div class="sb-chat-list">
-        <p class="sb-section-label">{{ isRtl ? 'گفتگوهای اخیر' : 'RECENT' }}</p>
+        <p class="sb-section-label">گفتگوهای اخیر</p>
 
         <div class="sb-conversations">
           <div
@@ -246,21 +246,27 @@ const userInitial = computed(() => {
             :class="['sb-conv-item', { 'is-active': conv.id === chatStore.currentConversationId }]"
             @click="handleSelect(conv.id)"
           >
-            <MessageSquare :size="13" class="sb-conv-icon" />
+            <!-- Streaming indicator: pulsing dot when this conv is streaming in background -->
+            <span
+              v-if="chatStore.getConvIsStreaming(conv.id)"
+              class="sb-conv-streaming-dot"
+              title="در حال دریافت پاسخ..."
+            />
+            <MessageSquare v-else :size="13" class="sb-conv-icon" />
             <span class="sb-conv-title">{{ conv.title }}</span>
 
             <div class="sb-conv-actions">
               <button
                 class="sb-conv-btn"
                 @click="openEditModal($event, conv)"
-                :title="isRtl ? 'ویرایش' : 'Edit'"
+                title="ویرایش"
               >
                 <Pencil :size="11" />
               </button>
               <button
                 class="sb-conv-btn sb-conv-btn--danger"
                 @click="openDeleteModal($event, conv)"
-                :title="isRtl ? 'حذف' : 'Delete'"
+                title="حذف"
               >
                 <Trash2 :size="11" />
               </button>
@@ -268,13 +274,15 @@ const userInitial = computed(() => {
           </div>
 
           <p v-if="chatStore.conversations.length === 0" class="sb-empty-hint">
-            {{ isRtl ? 'هنوز گفتگویی ندارید' : 'No conversations yet' }}
+            هنوز گفتگویی ندارید
           </p>
         </div>
       </div>
 
-      <!-- ─── Footer: Profile ─── -->
+      <!-- ─── Footer: Profile & Settings ─── -->
       <div class="sb-footer">
+      
+
         <template v-if="authStore.isAuthenticated">
           <!-- Profile popup menu -->
           <ProfileMenu
@@ -296,7 +304,7 @@ const userInitial = computed(() => {
             <div v-else class="sb-avatar">{{ userInitial }}</div>
             <div class="sb-user-info">
               <span class="sb-user-name">{{ authStore.user?.displayName || authStore.user?.email }}</span>
-              <span v-if="authStore.isAdmin" class="sb-user-role">Admin</span>
+              <span v-if="authStore.isAdmin" class="sb-user-role">ادمین</span>
             </div>
             <ChevronUp :size="13" class="sb-chevron" :class="{ 'is-flipped': !profileMenuOpen }" />
           </button>
@@ -304,7 +312,7 @@ const userInitial = computed(() => {
 
         <router-link v-else to="/login" class="sb-login-btn">
           <LogIn :size="15" />
-          <span>{{ isRtl ? 'ورود / عضویت' : 'Sign In' }}</span>
+          <span>ورود / عضویت</span>
         </router-link>
       </div>
     </div>
@@ -315,21 +323,21 @@ const userInitial = computed(() => {
     <div v-else class="sidebar-collapsed">
 
       <!-- Logo in collapsed state -->
-      <div class="sb-collapsed-logo" :title="isRtl ? 'پروا' : 'Parva'">
+      <div class="sb-collapsed-logo" title="پروا">
         <img :src="activeLogo" alt="پروا" class="sb-brand-logo-img" />
       </div>
 
       <!-- Expand button -->
       <button
         class="sb-icon-btn sb-icon-btn--lg"
-        :title="isRtl ? 'باز کردن نوار کناری' : 'Expand sidebar'"
+        title="باز کردن نوار کناری"
         @click="uiStore.toggleSidebar"
       >
         <component :is="SidebarExpandIcon" :size="17" />
       </button>
 
       <!-- Search -->
-      <button class="sb-icon-btn sb-icon-btn--lg" @click="isSearchModalOpen = true" :title="isRtl ? 'جستجو (Ctrl+K)' : 'Search (Ctrl+K)'">
+      <button class="sb-icon-btn sb-icon-btn--lg" @click="isSearchModalOpen = true" title="جستجو (Ctrl+K)">
         <Search :size="17" />
       </button>
 
@@ -339,13 +347,13 @@ const userInitial = computed(() => {
         :class="{ 'sb-icon-btn--disabled': isOnEmptyChat }"
         :disabled="isOnEmptyChat"
         @click="handleNewChat"
-        :title="isRtl ? 'گفتگوی جدید' : 'New chat'"
+        title="گفتگوی جدید"
       >
         <SquarePen :size="17" />
       </button>
 
       <!-- Temporary Chat -->
-      <button class="sb-icon-btn sb-icon-btn--lg" :title="isRtl ? 'گفتگوی موقت' : 'Temporary'">
+      <button class="sb-icon-btn sb-icon-btn--lg" title="گفتگوی موقت">
         <MessageCircleDashed :size="17" />
       </button>
 
@@ -361,16 +369,30 @@ const userInitial = computed(() => {
           @click="handleSelect(conv.id)"
           :title="conv.title"
         >
-          <MessageSquare :size="14" />
+          <span
+            v-if="chatStore.getConvIsStreaming(conv.id)"
+            class="sb-conv-streaming-dot sb-conv-streaming-dot--sm"
+            title="در حال دریافت پاسخ..."
+          />
+          <MessageSquare v-else :size="14" />
         </button>
       </div>
 
       <!-- Spacer -->
       <div class="sb-spacer" />
 
+      <!-- Settings in collapsed state -->
+      <button
+        class="sb-icon-btn sb-icon-btn--lg"
+        @click="openSettings"
+        title="تنظیمات و تم"
+      >
+        <Settings :size="17" />
+      </button>
+
       <!-- Profile (collapsed) -->
       <div class="sb-collapsed-profile" v-if="authStore.isAuthenticated">
-        <!-- Profile popup (positioned to the right of icon in LTR, left in RTL) -->
+        <!-- Profile popup (positioned to the left of icon in RTL) -->
         <div v-if="profileMenuOpen" class="sb-collapsed-menu-wrapper">
           <ProfileMenu
             @close="profileMenuOpen = false"
@@ -384,7 +406,7 @@ const userInitial = computed(() => {
         <button
           class="sb-avatar-btn profile-trigger"
           @click="toggleProfileMenu"
-          :title="authStore.user?.displayName || 'Profile'"
+          :title="authStore.user?.displayName || 'پروفایل'"
         >
           <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="sb-avatar sb-avatar-image" />
           <div v-else class="sb-avatar">{{ userInitial }}</div>
@@ -739,6 +761,29 @@ const userInitial = computed(() => {
   margin-top: auto;
 }
 
+.sb-footer-settings-btn {
+  margin-bottom: 5px;
+  border-radius: var(--radius-sm, 8px);
+}
+
+.sb-footer-theme-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background-color: var(--surface-alt, var(--secondary));
+  color: var(--muted-foreground);
+  border: 1px solid var(--border);
+  transition: all 150ms ease;
+}
+
+.sb-footer-settings-btn:hover .sb-footer-theme-tag {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
 /* Profile trigger */
 .sb-profile-btn {
   width: 100%;
@@ -974,4 +1019,30 @@ const userInitial = computed(() => {
     0 4px 24px rgba(0, 0, 0, 0.35),
     0 1px 4px rgba(0, 0, 0, 0.2);
 }
+
+/* ════════════════════════════════════════
+   STREAMING DOT — background conv indicator
+════════════════════════════════════════ */
+.sb-conv-streaming-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  min-width: 8px;
+  border-radius: 50%;
+  background-color: var(--primary);
+  animation: stream-pulse 1.1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.sb-conv-streaming-dot--sm {
+  width: 7px;
+  height: 7px;
+  min-width: 7px;
+}
+
+@keyframes stream-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.75); }
+}
+
 </style>

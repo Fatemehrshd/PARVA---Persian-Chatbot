@@ -70,7 +70,7 @@ function svcWith(opts: {
       opts.streamImpl ? opts.streamImpl(t, m) : (async function* () {})(),
   };
   const users: any = { findById: async () => null };
-  const svc = new ChatService(conv, msg, models, users, forwarder);
+  const svc = new ChatService(conv, msg, models, forwarder, undefined, users, undefined);
   return { svc, savedMsgs };
 }
 

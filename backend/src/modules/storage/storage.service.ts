@@ -3,6 +3,7 @@ import {
   Logger,
   ServiceUnavailableException,
   InternalServerErrorException,
+  OnModuleInit,
 } from '@nestjs/common';
 import * as minio from 'minio';
 
@@ -13,10 +14,14 @@ import * as minio from 'minio';
  * no silent disk fallback so misconfiguration surfaces immediately.
  */
 @Injectable()
-export class StorageService {
+export class StorageService implements OnModuleInit {
   private readonly logger = new Logger(StorageService.name);
   private client?: minio.Client;
   private readonly bucket = process.env.MINIO_BUCKET || 'codeless';
+
+  async onModuleInit() {
+    await this.ensureBucket();
+  }
 
   get configured(): boolean {
     return Boolean(
@@ -32,9 +37,22 @@ export class StorageService {
         'Object storage (MinIO) is not configured; avatar upload is disabled',
       );
     if (this.client) return this.client;
+
+    let endPoint = (process.env.MINIO_ENDPOINT || '')
+      .replace(/^https?:\/\//i, '')
+      .replace(/\/.*$/, '');
+    let port = Number(process.env.MINIO_PORT ?? 9000);
+    if (endPoint.includes(':')) {
+      const [host, p] = endPoint.split(':');
+      endPoint = host;
+      if (p && !process.env.MINIO_PORT) {
+        port = Number(p);
+      }
+    }
+
     this.client = new minio.Client({
-      endPoint: process.env.MINIO_ENDPOINT!,
-      port: Number(process.env.MINIO_PORT ?? 9000),
+      endPoint,
+      port,
       useSSL: (process.env.MINIO_USE_SSL ?? 'false') === 'true',
       accessKey: process.env.MINIO_ACCESS_KEY!,
       secretKey: process.env.MINIO_SECRET_KEY!,
@@ -45,8 +63,8 @@ export class StorageService {
   /** Ensures the target bucket exists (best-effort; requires admin creds). */
   async ensureBucket(): Promise<void> {
     if (!this.configured) return;
-    const c = this.ensure();
     try {
+      const c = this.ensure();
       const exists = await c.bucketExists(this.bucket);
       if (!exists) await c.makeBucket(this.bucket, process.env.MINIO_REGION || 'us-east-1');
     } catch (err) {
@@ -56,9 +74,20 @@ export class StorageService {
 
   async put(key: string, data: Buffer, contentType: string): Promise<void> {
     const c = this.ensure();
-    await c.putObject(this.bucket, key, data, data.length, {
-      'Content-Type': contentType,
-    });
+    try {
+      await c.putObject(this.bucket, key, data, data.length, {
+        'Content-Type': contentType,
+      });
+    } catch (err: any) {
+      if (err?.code === 'NoSuchBucket') {
+        await this.ensureBucket();
+        await c.putObject(this.bucket, key, data, data.length, {
+          'Content-Type': contentType,
+        });
+      } else {
+        throw err;
+      }
+    }
   }
 
   async getBuffer(key: string): Promise<Buffer> {

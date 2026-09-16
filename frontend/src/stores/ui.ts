@@ -12,7 +12,11 @@ export const useUiStore = defineStore('ui', () => {
   // On mobile (< 768px) sidebar is always hidden by default regardless of localStorage
   const isMobileDefault = typeof window !== 'undefined' && window.innerWidth < 768
   const sidebarOpen = ref(isMobileDefault ? false : localStorage.getItem('sidebarOpen') !== 'false')
-  const direction = ref<'rtl' | 'ltr'>((localStorage.getItem('direction') as 'rtl' | 'ltr') || 'rtl')
+  // The application is strictly RTL (Persian)
+  const direction = ref<'rtl'>('rtl')
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('direction')
+  }
   const authModalOpen = ref(false)
   const authMode = ref<'login' | 'signup'>('login')
   const adminModelsModalOpen = ref(false)
@@ -34,15 +38,11 @@ export const useUiStore = defineStore('ui', () => {
     applyTheme(newTheme)
   })
 
-  // Sync direction to html element
-  document.documentElement.setAttribute('dir', direction.value)
-  document.documentElement.setAttribute('lang', direction.value === 'rtl' ? 'fa' : 'en')
-
-  watch(direction, (newDir) => {
-    localStorage.setItem('direction', newDir)
-    document.documentElement.setAttribute('dir', newDir)
-    document.documentElement.setAttribute('lang', newDir === 'rtl' ? 'fa' : 'en')
-  })
+  // Sync direction to html element (strictly Persian RTL)
+  if (typeof document !== 'undefined') {
+    document.documentElement.setAttribute('dir', 'rtl')
+    document.documentElement.setAttribute('lang', 'fa')
+  }
 
   watch(sidebarOpen, (isOpen) => {
     localStorage.setItem('sidebarOpen', String(isOpen))
@@ -53,7 +53,7 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   function toggleDirection() {
-    direction.value = direction.value === 'rtl' ? 'ltr' : 'rtl'
+    direction.value = 'rtl'
   }
 
   function openAuth(mode: 'login' | 'signup' = 'login') {
@@ -88,6 +88,17 @@ export const useUiStore = defineStore('ui', () => {
     type: 'info' | 'success' | 'warning' | 'error' = 'info',
     duration = 4000
   ) {
+    // Prevent duplicate toast spam if the exact message is already showing
+    const existing = toasts.value.find((t) => t.message === message)
+    if (existing) {
+      return existing.id
+    }
+
+    // Limit to maximum 2 visible toasts at a time to prevent UI clutter and spam
+    while (toasts.value.length >= 2) {
+      toasts.value.shift()
+    }
+
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     toasts.value.push({ id, message, type, duration })
     if (duration > 0) {

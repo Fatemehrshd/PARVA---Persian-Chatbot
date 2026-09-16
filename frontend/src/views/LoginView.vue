@@ -41,16 +41,12 @@ const { isSubmitting: isLoading, submit: submitAuth } = useFormSubmit(async () =
 
   if (success) {
     uiStore.showToast(
-      isSignup.value
-        ? (uiStore.direction === 'rtl' ? 'حساب کاربری با موفقیت ایجاد شد.' : 'Account created successfully.')
-        : (uiStore.direction === 'rtl' ? 'با موفقیت وارد شدید.' : 'Logged in successfully.'),
+      isSignup.value ? 'حساب کاربری با موفقیت ایجاد شد.' : 'با موفقیت وارد شدید.',
       'success'
     )
     router.push('/')
   } else {
-    const fallbackMsg = uiStore.direction === 'rtl'
-      ? (isSignup.value ? 'ثبت‌نام با خطا مواجه شد.' : 'ایمیل یا رمز عبور اشتباه است.')
-      : (isSignup.value ? 'Sign up failed.' : 'Invalid email or password.')
+    const fallbackMsg = isSignup.value ? 'ثبت‌نام با خطا مواجه شد.' : 'ایمیل یا رمز عبور اشتباه است.'
     const errorMsg = authStore.error || fallbackMsg
     formError.value = errorMsg
   }
@@ -60,20 +56,17 @@ async function handleSubmit() {
   formError.value = null
 
   if (isSignup.value && !displayName.value.trim()) {
-    const msg = uiStore.direction === 'rtl' ? 'لطفاً نام خود را وارد کنید.' : 'Please enter your name.'
-    formError.value = msg
+    formError.value = 'لطفاً نام خود را وارد کنید.'
     return
   }
 
   if (!email.value.includes('@')) {
-    const msg = uiStore.direction === 'rtl' ? 'لطفاً یک ایمیل معتبر وارد کنید.' : 'Please enter a valid email address.'
-    formError.value = msg
+    formError.value = 'لطفاً یک ایمیل معتبر وارد کنید.'
     return
   }
 
   if (isSignup.value && password.value.length < 8) {
-    const msg = uiStore.direction === 'rtl' ? 'رمز عبور باید حداقل ۸ کاراکتر باشد.' : 'Password must be at least 8 characters.'
-    formError.value = msg
+    formError.value = 'رمز عبور باید حداقل ۸ کاراکتر باشد.'
     return
   }
 
@@ -82,22 +75,21 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <!-- Full Screen Two-Column Split with Grok Aurora Dynamic Mesh -->
-  <div class="split-login-page relative overflow-hidden bg-background">
-    <!-- Grok Fluid Aurora Background -->
-    <GrokAurora :intensity="isLoading ? 'vibrant' : 'subtle'" />
+  <div class="login-split-page">
     
-    <!-- LEFT HALF: Logo / Artwork Pane (Strictly on the left side) - No text, No background -->
-    <div class="image-half flex items-center justify-center">
+    <!-- LEFT HALF: Artwork / Logo Pane -->
+    <div class="artwork-half">
+      <div class="artwork-glow" />
+      
       <img 
         :src="activeLogo" 
-        alt="لوگو سامانه پروا" 
+        alt="پروا" 
         class="login-clean-logo"
       />
     </div>
 
     <!-- RIGHT HALF: Form Pane (Authentication Form on the right side) -->
-    <div class="form-half" :dir="uiStore.direction">
+    <div class="form-half" dir="rtl">
       <div class="form-wrapper">
         
         <!-- Brand Logo & Name Header -->
@@ -124,7 +116,7 @@ async function handleSubmit() {
             :disabled="isLoading"
             type="button"
           >
-            {{ uiStore.direction === 'rtl' ? 'ورود به حساب' : 'Sign In' }}
+            ورود به حساب
           </button>
           <button 
             :class="[
@@ -137,22 +129,19 @@ async function handleSubmit() {
             :disabled="isLoading"
             type="button"
           >
-            {{ uiStore.direction === 'rtl' ? 'ثبت‌نام جدید' : 'Sign Up' }}
+            ثبت‌نام جدید
           </button>
         </div>
 
         <!-- Section Title & Description -->
         <div class="mb-6 text-start">
           <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-            {{ isSignup 
-              ? (uiStore.direction === 'rtl' ? 'ساخت حساب کاربری' : 'Create an Account') 
-              : (uiStore.direction === 'rtl' ? 'ورود به حساب کاربری' : 'Welcome Back') 
-            }}
+            {{ isSignup ? 'ساخت حساب کاربری' : 'ورود به حساب کاربری' }}
           </h1>
           <p class="text-xs sm:text-sm text-muted-foreground mt-1.5 leading-relaxed">
             {{ isSignup 
-              ? (uiStore.direction === 'rtl' ? 'مشخصات خود را برای دسترسی به پنل و مدل‌ها وارد کنید.' : 'Enter your details below to create your account.') 
-              : (uiStore.direction === 'rtl' ? 'ایمیل و رمز عبور خود را برای ورود به سامانه وارد کنید.' : 'Enter your email and password to access your chats.') 
+              ? 'مشخصات خود را برای دسترسی به پنل و مدل‌ها وارد کنید.' 
+              : 'ایمیل و رمز عبور خود را برای ورود به سامانه وارد کنید.' 
             }}
           </p>
         </div>
@@ -176,7 +165,7 @@ async function handleSubmit() {
           <!-- Display Name (Signup Only) -->
           <div v-if="isSignup" class="space-y-1.5">
             <Label for="displayName" class="text-xs font-medium text-foreground/90">
-              {{ uiStore.direction === 'rtl' ? 'نام و نام‌خانوادگی' : 'Display Name' }}
+              نام و نام‌خانوادگی
             </Label>
             <div class="relative">
               <span class="absolute inset-y-0 start-3 flex items-center pointer-events-none text-muted-foreground">
@@ -192,7 +181,7 @@ async function handleSubmit() {
                 :disabled="isLoading"
                 :loading="isLoading"
                 class="ps-9 h-11 text-sm bg-secondary/40 border-border/60 focus-visible:ring-primary/40 focus-visible:border-primary transition-all"
-                :placeholder="uiStore.direction === 'rtl' ? 'نام شما' : 'Your name'" 
+                placeholder="نام شما" 
                 @input="formError = null"
               />
             </div>
@@ -201,7 +190,7 @@ async function handleSubmit() {
           <!-- Email Input -->
           <div class="space-y-1.5">
             <Label for="email" class="text-xs font-medium text-foreground/90">
-              {{ uiStore.direction === 'rtl' ? 'نشانی ایمیل' : 'Email Address' }}
+              نشانی ایمیل
             </Label>
             <div class="relative">
               <span class="absolute inset-y-0 start-3 flex items-center pointer-events-none text-muted-foreground">
@@ -228,10 +217,10 @@ async function handleSubmit() {
           <div class="space-y-1.5">
             <div class="flex items-center justify-between">
               <Label for="password" class="text-xs font-medium text-foreground/90">
-                {{ uiStore.direction === 'rtl' ? 'رمز عبور' : 'Password' }}
+                رمز عبور
               </Label>
               <span v-if="isSignup" class="text-[10px] text-muted-foreground font-mono">
-                {{ uiStore.direction === 'rtl' ? 'حداقل ۸ کاراکتر' : 'min. 8 chars' }}
+                حداقل ۸ کاراکتر
               </span>
             </div>
             <div class="relative">
@@ -256,7 +245,7 @@ async function handleSubmit() {
                 type="button" 
                 class="absolute inset-y-0 end-2.5 flex items-center text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer"
                 @click="showPassword = !showPassword"
-                :title="showPassword ? 'Hide password' : 'Show password'"
+                title="نمایش یا پنهان‌سازی رمز عبور"
                 tabindex="-1"
               >
                 <svg v-if="!showPassword" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -279,19 +268,14 @@ async function handleSubmit() {
             :disabled="isLoading"
           >
             <span v-if="isLoading">
-              {{ uiStore.direction === 'rtl' ? 'در حال برقراری ارتباط...' : 'Authenticating...' }}
+              در حال برقراری ارتباط...
             </span>
             <span v-else>
-              {{ isSignup
-                ? (uiStore.direction === 'rtl' ? 'ایجاد حساب کاربری' : 'Create Account')
-                : (uiStore.direction === 'rtl' ? 'ورود به حساب' : 'Sign In')
-              }}
+              {{ isSignup ? 'ایجاد حساب کاربری' : 'ورود به حساب' }}
             </span>
           </Button>
         </form>
 
-        <!-- Back to Chat Link -->
-    
 
       </div>
     </div>
@@ -300,38 +284,46 @@ async function handleSubmit() {
 </template>
 
 <style scoped>
-/* Split Layout: Outer container is flex-row (direction: ltr) so Left is Image, Right is Form */
-.split-login-page {
+/* Split Layout: Outer container is flex-row (ltr) so Left=Image, Right=Form */
+.login-split-page {
   min-height: 100vh;
   width: 100vw;
   display: flex;
   flex-direction: row;
-  direction: ltr; /* Keeps Left=Image and Right=Form side-by-side consistently */
+  direction: ltr;
   background-color: var(--background);
   overflow-x: hidden;
 }
 
-/* Left Half: Logo Pane (Takes exactly 50% on md/desktop, hidden on small mobile) */
-.image-half {
+/* Left Half: Artwork/Logo Pane — hidden on mobile, shown on md+ */
+.artwork-half {
   display: none;
+  position: relative;
 }
 
 @media (min-width: 768px) {
-  .image-half {
+  .artwork-half {
     display: flex;
     align-items: center;
     justify-content: center;
     flex: 1;
     min-height: 100vh;
-    position: relative;
-    background: transparent !important;
     border-inline-end: 1px solid var(--border);
     padding: 40px;
     z-index: 5;
+    background: transparent;
   }
 }
 
-/* Right Half: Form Pane (Takes 50% on md/desktop, 100% on small mobile) */
+/* Decorative glow behind logo */
+.artwork-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 50%, rgba(124, 106, 247, 0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* Right Half: Form Pane */
 .form-half {
   flex: 1;
   min-height: 100vh;

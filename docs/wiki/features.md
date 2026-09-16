@@ -1,5 +1,13 @@
 # Features
 
+## Task 27: Per-Conversation Independent Streaming State
+- Refactored `chat.ts` Pinia store to replace all global streaming state refs with a `Map<convId, ConvStreamState>`.
+- Each conversation now has its own `isStreaming`, `isThinking`, `streamError`, `currentStreamingText`, `abortController`, and `lastUserPrompt`.
+- Backward-compatible computed aliases expose the active conversation's state to all components without code changes in `ChatComposer.vue`, `MessageList.vue`, etc.
+- Switching conversations no longer aborts an ongoing background stream — both conversations continue independently.
+- `AppSidebar.vue`: Animated pulsing dot badge shown next to any conversation currently streaming in the background (visible in both expanded and icon-only sidebar modes).
+- Updated 3 test files (`MessageList.spec.ts`, `ChatComposer.spec.ts`, `NetworkAndRetry.spec.ts`) to use `convStreamStates` Map for test setup.
+
 ## Task 1: Full-Stack Project Initialization
 - Initialized Vue 3 + Vite + TypeScript frontend with Vue Router 4 and Pinia state management.
 - Initialized NestJS + TypeScript backend with Express platform adapter and CORS enabled.
@@ -201,3 +209,81 @@
 - Scrolling upward during generation preserves the reader's position; returning to the bottom re-enables follow mode.
 - Stream completion no longer forces a user who is reading older messages back to the bottom.
 - Added focused regression coverage in `frontend/tests/MessageList.spec.ts`.
+
+## Task 22: MinIO Object Storage Setup & Avatar Upload Fix
+- Diagnosed root cause of `Object storage (MinIO) is not configured; avatar upload is disabled`: MinIO environment variables were missing from `backend/.env` and no local MinIO server was running.
+- Started containerized MinIO server using Quay.io mirror (`codeless_minio`) with API on `9000` and console on `9001`.
+- Added a root `docker-compose.yml` defining PostgreSQL and MinIO for repeatable local development.
+- Configured MinIO settings in `backend/.env` (`MINIO_ENDPOINT`, `MINIO_PORT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_REGION`, `PUBLIC_BASE_URL`).
+- Enhanced `StorageService`:
+  - Implemented `OnModuleInit` to auto-bootstrap the target bucket (`codeless`) on backend startup.
+  - Added self-healing bucket creation in `put()` on `NoSuchBucket` errors.
+  - Added robust parsing for `MINIO_ENDPOINT` handling (protocol/port stripping).
+- Verified end-to-end user avatar upload, storage in MinIO, and retrieval via `GET /static/avatars/:userId/:file`.
+
+## Task 23: Chat Error Handling, Upstream Timeouts & Message Delivery Status
+- **Root Cause & Scope**: Long-running or stalled chat requests previously left the chat in an indefinite thinking state with no feedback, and network glitches inserted synthetic assistant messages that polluted chat history on refresh.
+- **Backend Timeouts & Health Endpoint**:
+  - Added `@Get(['health', 'api/v1/health'])` health endpoint (`backend/src/app.controller.ts` & `app.service.ts`), excluded from JWT guard and accessible at root without prefix.
+  - Implemented 35-second connection timeout and 25-second idle read stall timeout in `OpenAiCompatForwarder` using `AbortController` and `AbortSignal`.
+  - Added 35-second `thinkingTimer` in `ActiveStreamService` to automatically terminate stuck background sessions before first token emission.
+  - Ensured provider failures before the first token properly propagate as standard 502 envelopes / SSE error events and cleanly end response sockets (`res.end()`).
+- **Frontend Pre-flight Health & Delivery Lifecycle**:
+  - Implemented `checkBackendHealth(timeoutMs?: number)` in `frontend/src/services/api.ts` to verify server availability before sending messages.
+  - Kept user message bottom meta-bar strictly clean (timestamp + copy button only, avoiding clutter or status labels).
+  - Fixed error persistence: Replaced fake synthetic assistant messages (`msg-err-...`) with a transient Pinia `streamError` ref and composer alert banner (`ChatComposer.vue`) that automatically resets to `null` on page refresh or conversation switch.
+  - Enhanced retry action: Clicking the retry button on the stream error alert banner accurately recovers the user prompt even when `lastUserPrompt` was cleared (e.g. after refresh), aborts any lingering controllers/watchdogs, cleans trailing failed messages, and cleanly re-sends the prompt.
+  - In backend `generate()`, existing stalled/thinking sessions are automatically aborted when starting a new send or retry, and duplicate user message entities are prevented from accumulating in PostgreSQL.
+  - Normalized all offline and fetch failures to user-friendly Persian: «خطا در برقراری ارتباط».
+- **Verification**:
+  - 100% test pass rate across both monorepo projects: **125 backend tests** (18 test suites) + **109 frontend tests** (21 test suites) — 234 total passing tests.
+
+## Task 24: Visual Theme Switcher & Sidebar Settings Overhaul
+- **Problem**: The sidebar lacked a direct settings trigger, the "شخصی‌سازی" button in `ProfileMenu.vue` was non-functional (`emit('close')`), and the theme switcher in `SettingsModal.vue` consisted of two plain text rectangular buttons with typos (`Dark (Grok)`).
+- **Sidebar & Profile Menu**:
+  - Added dedicated Settings row in `AppSidebar.vue` footer with Persian label «تنظیمات», settings icon, and current active theme badge (`Moon` / `Sun`).
+  - Added collapsed-state Settings icon button with tooltip in `sidebar-collapsed`.
+  - Fixed "شخصی‌سازی" in `ProfileMenu.vue` to trigger `openSettings` with live theme badge.
+  - Upgraded `ProfileMenu.vue` panel to floating glassmorphism styling (`backdrop-filter: blur(16px)`, rounded corners, soft shadows).
+- **Settings Modal & Theme Switcher**:
+  - Replaced basic buttons with two large interactive visual theme cards (Dark vs Light):
+    - **Dark Mode Card**: Realistic miniature UI mockup showing slate-dark window frame, dark chat canvas, mini user and assistant chat bubbles, input bar, Moon icon badge, and active radio check indicator.
+    - **Light Mode Card**: Realistic miniature UI mockup showing warm cream window frame, clean white chat canvas, navy chat bubbles, Sun icon badge, and active radio check indicator.
+  - Supported instant real-time theme toggling with zero flicker and full CSS variable color preservation (`#FFFFFF` light mode, `#171825` dark mode).
+  - Modernized language & direction toggles with country/locale badges and auto-save indicator.
+- **Verification**:
+  - Added `tests/SettingsModal.spec.ts` testing modal visibility, theme card switching, direction toggling, and closing.
+  - 100% test pass rate across both monorepo projects: **125 backend tests** (18 test suites) + **112 frontend tests** (22 test suites) — 237/237 total passing tests.
+
+## Task 25: Large Message List Auto-Scrolling & State Preservation
+- **Problem**: When a conversation contained many messages (20+), sending a new message or streaming an assistant response failed to scroll all the way to the bottom. This occurred due to single-microtask scrolling (`nextTick`) measuring incomplete DOM layout heights before Markdown/code/KaTeX components finished reflow, coupled with Tailwind's `scroll-smooth` interrupting successive position updates.
+- **Implementation**:
+  - Replaced single `nextTick` scroll with multi-pass synchronization in `MessageList.vue`: Pass 1 (`nextTick`), Pass 2 (`requestAnimationFrame`), Pass 3 (`setTimeout(50)`), and Pass 4 (`setTimeout(150)`).
+  - Attached `ResizeObserver` to the inner message content wrapper (`.message-list-content`) to detect dynamic height expansion from Markdown and syntax-highlighted code blocks, keeping the scroll position pinned to the absolute bottom during generation.
+  - Implemented strict state protection:
+    1. **User Scroll-Up**: If the user manually scrolls up to read earlier messages (`distanceFromBottom > 120px`), auto-scroll is paused so their reading position is never interrupted.
+    2. **User Returns Near Bottom**: If the user scrolls within 120px of the bottom, auto-scroll smoothly resumes.
+    3. **New User Message**: When the user submits a new prompt or switches conversations, auto-scroll is forcefully re-engaged and viewport jumps to the absolute bottom.
+    4. **Stream Completion Away from Bottom**: If the assistant finishes streaming while the user is scrolled up, their reading position is preserved without sudden jerking.
+  - Added a floating glassmorphic "Scroll to bottom" button (with real-time pulsating badge when streaming is active in the background) that allows 1-click jump to the absolute bottom.
+- **Verification**:
+  - Added comprehensive test coverage in `frontend/tests/MessageList.spec.ts` (6 passing tests).
+  - Verified with headless Chrome screenshots (`chat_many_messages_bottom.png`, `chat_scroll_up_with_button.png`, `chat_after_jump_click.png`) with 25 messages, confirming `distanceFromBottom: 0`.
+  - Full test suite green: **125 backend tests** (18 suites) + **114 frontend tests** (22 suites) — 239 total passing tests.
+
+## Task 26: Complete Removal of English Language & Strictly Persian RTL Platform
+- **Requirement**: Completely remove the English language option/capability from the platform, ensuring the application is purely Persian and strictly RTL without any bilingual toggles or LTR modes.
+- **Store & Core Architecture**:
+  - Updated `frontend/src/stores/ui.ts`: hardcoded `direction` strictly to `'rtl'`, purged any stored direction overrides from `localStorage`, and configured document root attributes exclusively to `dir="rtl"` and `lang="fa"`.
+  - Converted `toggleDirection` to a backward-compatible no-op ensuring the direction cannot be changed away from RTL.
+- **Settings Modal (`SettingsModal.vue`)**:
+  - Removed the entire "Language & Direction" section (`زبان و جهت چیدمان`), including the English / LTR switch button and English labels.
+  - Simplified the modal subtitle to «شخصی‌سازی ظاهر و تم برنامه» and retained the visual Dark / Light theme cards.
+- **Component Text & Tooltip Normalization**:
+  - Replaced all bilingual ternary checks (`isRtl ? ... : ...` and `uiStore.direction === 'rtl' ? ... : ...`) across the entire frontend codebase (`AppHeader`, `AppSidebar`, `ProfileModal`, `ProfileMenu`, `SearchModal`, `LogoutModal`, `EditConversationModal`, `DeleteConversationModal`, `ModelsModal`, `ChatComposer`, `MessageBubble`, `EmptyState`, `LoginView`, and `AdminModelsView`) with authentic Persian strings.
+- **Verification & Visual Confirmation**:
+  - Updated test suites (`SettingsModal.spec.ts`, `Stores.spec.ts`, and `AdminModelsView.spec.ts`) asserting that English/LTR options are absent and the application strictly operates in Persian RTL.
+  - Verified with headless Chrome CDP screenshots (`settings_modal_pure_persian.png` and `persian_chat_view.png`).
+  - Full test suite 100% green across both frontend and backend: **125 backend tests** (18 suites) + **114 frontend tests** (22 suites) — 239 total passing tests.
+
+

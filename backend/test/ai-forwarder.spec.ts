@@ -113,4 +113,51 @@ describe('OpenAiCompatForwarder.stream', () => {
       collect(f.stream({ apiIdentifier: 'gpt-4o', apiKey: 'sk-1', baseUrl: 'http://x' }, [])),
     ).rejects.toBeInstanceOf(BadGatewayException);
   });
+
+  it('rejects with GatewayTimeoutException when upstream connection times out', async () => {
+    global.fetch = ((_url: string, init: any) => {
+      return new Promise((_, reject) => {
+        init.signal.addEventListener('abort', () => {
+          const err = new Error('The operation was aborted');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      });
+    }) as any;
+    const f = new OpenAiCompatForwarder();
+    await expect(
+      collect(
+        f.stream(
+          { apiIdentifier: 'gpt-4o', apiKey: 'sk-1', baseUrl: 'http://x' },
+          [],
+          { connectTimeoutMs: 50 },
+        ),
+      ),
+    ).rejects.toThrow('زمان پاسخگویی مدل هوش مصنوعی به پایان رسید (Timeout)');
+  });
+
+  it('rejects with GatewayTimeoutException when stream stalls mid-generation', async () => {
+    global.fetch = (async () => {
+      return {
+        ok: true,
+        status: 200,
+        body: {
+          getReader: () => ({
+            read: () => new Promise(() => {}), // never resolves -> stalls
+            cancel: async () => {},
+          }),
+        },
+      };
+    }) as any;
+    const f = new OpenAiCompatForwarder();
+    await expect(
+      collect(
+        f.stream(
+          { apiIdentifier: 'gpt-4o', apiKey: 'sk-1', baseUrl: 'http://x' },
+          [],
+          { connectTimeoutMs: 500, stallTimeoutMs: 50 },
+        ),
+      ),
+    ).rejects.toThrow('پاسخگویی مدل هوش مصنوعی به دلیل وقفه طولانی متوقف شد (Timeout)');
+  });
 });

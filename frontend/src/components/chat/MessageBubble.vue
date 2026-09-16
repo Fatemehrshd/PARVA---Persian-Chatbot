@@ -55,7 +55,8 @@ function copyContent() {
     :class="[
       'message-row', 
       isUser ? 'row-user' : 'row-assistant',
-      'w-full flex gap-3.5 mb-6 group transition-all duration-200'
+      props.isLast ? 'last-message-row mb-12 sm:mb-16' : 'mb-6',
+      'w-full flex gap-3.5 group transition-all duration-200'
     ]"
   >
     <!-- Avatar -->
@@ -88,6 +89,7 @@ function copyContent() {
         :class="[
           'bubble', 
           isUser ? 'bubble-user rounded-2xl p-4' : 'bubble-assistant p-1', 
+          isUser && message.status === 'error' ? 'border border-destructive/50' : '',
           textDirection,
           'transition-colors'
         ]"
@@ -98,14 +100,14 @@ function copyContent() {
           {{ message.content }}
         </div>
 
-        <!-- Assistant: Rich Markdown with Code blocks, Tables, and Readme Elements -->
+        <!-- Assistant: Rich Markdown -->
         <div v-else class="message-text">
           <MarkdownContent :content="message.content" />
         </div>
       </div>
 
       <!-- Action bar under message (Available for both user and assistant) -->
-      <div class="meta-bar flex items-center gap-3 mt-2 px-1 text-xs text-muted-foreground">
+      <div v-if="!message.id.startsWith('msg-err-')" class="meta-bar flex items-center gap-3 mt-2 px-1 text-xs text-muted-foreground">
         <span class="timestamp font-sans text-[11px] opacity-75">{{ formattedTime }}</span>
         <button 
           class="copy-button inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground text-xs font-sans transition-colors cursor-pointer" 
@@ -121,16 +123,13 @@ function copyContent() {
         </button>
       </div>
 
-      <!-- Recovery Action Bar for Interrupted / Error Assistant Messages -->
-      <div v-if="!isUser && (message.isInterrupted || message.id.startsWith('msg-err-'))" class="recovery-bar flex flex-col gap-2 mt-3">
+      <!-- Recovery Action Bar for Interrupted Assistant Messages -->
+      <div v-if="!isUser && message.isInterrupted && !message.id.startsWith('msg-err-') && message.status !== 'error'" class="recovery-bar flex flex-col gap-2 mt-3">
         <!-- Status label -->
         <div class="recovery-label flex items-center">
           <span class="stop-badge inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-500 border border-red-500/25">
             <span class="stop-square-icon w-1.5 h-1.5 rounded-sm bg-red-500"></span>
-            {{ uiStore.direction === 'rtl'
-              ? (message.isInterrupted ? 'تولید توسط کاربر متوقف شد' : 'خطا در دریافت پاسخ')
-              : (message.isInterrupted ? 'Stopped by user' : 'Response error')
-            }}
+            {{ message.isInterrupted ? 'تولید توسط کاربر متوقف شد' : 'خطا در دریافت پاسخ' }}
           </span>
         </div>
 
@@ -144,7 +143,7 @@ function copyContent() {
               <polyline points="1 4 1 10 7 10"></polyline>
               <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
             </svg>
-            <span>{{ uiStore.direction === 'rtl' ? 'تلاش مجدد' : 'Retry' }}</span>
+            <span>تلاش مجدد</span>
           </button>
         </div>
       </div>

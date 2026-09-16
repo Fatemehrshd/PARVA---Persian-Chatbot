@@ -5,6 +5,8 @@ import {
   Settings,
   ShieldCheck,
   LogOut,
+  Moon,
+  Sun,
 } from '@lucide/vue'
 import { useAuthStore } from '../../stores/auth'
 import { useUiStore } from '../../stores/ui'
@@ -19,40 +21,42 @@ const emit = defineEmits<{
   openAdminPanel: []
   openLogout: []
 }>()
-
-const isRtl = () => uiStore.direction === 'rtl'
 </script>
 
 <template>
   <Transition name="profile-menu">
-    <div class="profile-menu-panel" role="menu" aria-label="Profile menu">
+    <div class="profile-menu-panel" role="menu" aria-label="منوی کاربری">
       <!-- Profile -->
       <button class="menu-item" role="menuitem" @click="emit('openProfile')">
         <User :size="15" class="menu-icon" />
-        <span>{{ isRtl() ? 'نمایه' : 'Profile' }}</span>
+        <span class="menu-label">نمایه کاربری</span>
       </button>
 
-      <!-- Customization -->
-      <button class="menu-item" role="menuitem" @click="emit('close')">
-        <Palette :size="15" class="menu-icon" />
-        <span>{{ isRtl() ? 'شخصی‌سازی' : 'Customization' }}</span>
+      <!-- Customization & Theme -->
+      <button class="menu-item" role="menuitem" >
+        <Palette :size="15" class="menu-icon text-primary" />
+        <span class="menu-label">شخصی‌سازی و تم</span>
+        <span class="theme-badge" :title="uiStore.theme === 'dark' ? 'حالت تیره' : 'حالت روشن'">
+          <Moon v-if="uiStore.theme === 'dark'" :size="12" />
+          <Sun v-else :size="12" />
+        </span>
       </button>
 
       <!-- Settings -->
       <button class="menu-item" role="menuitem" @click="emit('openSettings')">
         <Settings :size="15" class="menu-icon" />
-        <span>{{ isRtl() ? 'تنظیمات' : 'Settings' }}</span>
+        <span class="menu-label">تنظیمات </span>
       </button>
 
       <!-- Admin Panel (admin only) -->
       <button
         v-if="authStore.isAdmin"
-        class="menu-item"
+        class="menu-item menu-item--admin"
         role="menuitem"
         @click="emit('openAdminPanel')"
       >
-        <ShieldCheck :size="15" class="menu-icon" />
-        <span>{{ isRtl() ? 'پنل ادمین' : 'Admin Panel' }}</span>
+        <ShieldCheck :size="15" class="menu-icon text-amber-500" />
+        <span class="menu-label">پنل ادمین</span>
       </button>
 
       <div class="menu-divider" />
@@ -60,7 +64,7 @@ const isRtl = () => uiStore.direction === 'rtl'
       <!-- Sign Out -->
       <button class="menu-item menu-item--danger" role="menuitem" @click="emit('openLogout')">
         <LogOut :size="15" class="menu-icon" />
-        <span>{{ isRtl() ? 'خروج از حساب' : 'Sign Out' }}</span>
+        <span class="menu-label">خروج از حساب</span>
       </button>
     </div>
   </Transition>
@@ -69,18 +73,19 @@ const isRtl = () => uiStore.direction === 'rtl'
 <style scoped>
 .profile-menu-panel {
   position: absolute;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 10px);
   inset-inline-start: 0;
   inset-inline-end: 0;
   background-color: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 5px;
+  border-radius: 14px;
+  padding: 6px;
   box-shadow:
-    0 -8px 32px rgba(0, 0, 0, 0.35),
-    0 2px 8px rgba(0, 0, 0, 0.2);
+    0 -12px 32px rgba(0, 0, 0, 0.4),
+    0 2px 10px rgba(0, 0, 0, 0.2);
   z-index: 200;
-  min-width: 180px;
+  min-width: 190px;
+  backdrop-filter: blur(16px);
 }
 
 .menu-item {
@@ -88,14 +93,14 @@ const isRtl = () => uiStore.direction === 'rtl'
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 10px;
-  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  border-radius: 9px;
   background-color: transparent;
   border: none;
   cursor: pointer;
   color: var(--foreground);
   font-size: 13px;
-  font-weight: 400;
+  font-weight: 500;
   font-family: var(--font-sans);
   transition: background-color 150ms ease, color 150ms ease;
   text-align: start;
@@ -103,6 +108,10 @@ const isRtl = () => uiStore.direction === 'rtl'
 
 .menu-item:hover {
   background-color: var(--surface-alt, var(--secondary));
+}
+
+.menu-label {
+  flex: 1;
 }
 
 .menu-icon {
@@ -113,6 +122,27 @@ const isRtl = () => uiStore.direction === 'rtl'
 
 .menu-item:hover .menu-icon {
   color: var(--primary);
+}
+
+.theme-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background-color: var(--secondary);
+  color: var(--muted-foreground);
+  border: 1px solid var(--border);
+}
+
+.menu-item:hover .theme-badge {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.menu-item--admin:hover .menu-icon {
+  color: #f59e0b;
 }
 
 .menu-item--danger {
@@ -131,7 +161,8 @@ const isRtl = () => uiStore.direction === 'rtl'
 .menu-divider {
   height: 1px;
   background-color: var(--border);
-  margin: 4px 2px;
+  margin: 5px 2px;
+  opacity: 0.8;
 }
 
 /* Transition */

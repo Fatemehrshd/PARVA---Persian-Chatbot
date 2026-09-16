@@ -1,15 +1,22 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import {
+  Settings,
+  Palette,
+  Moon,
+  Sun,
+  ShieldCheck,
+  Check,
+  X,
+  ChevronLeft,
+  Sparkles,
+} from '@lucide/vue'
 import { useUiStore } from '../../stores/ui'
 import { useAuthStore } from '../../stores/auth'
 
 const router = useRouter()
 const uiStore = useUiStore()
 const authStore = useAuthStore()
-
-function setDirection(dir: 'rtl' | 'ltr') {
-  uiStore.direction = dir
-}
 
 function navigateToAdmin() {
   uiStore.closeSettings()
@@ -18,105 +25,290 @@ function navigateToAdmin() {
 </script>
 
 <template>
-  <div v-if="uiStore.settingsModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" @click.self="uiStore.closeSettings" :dir="uiStore.direction">
-    <div class="w-full max-w-md bg-card border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col">
+  <div
+    v-if="uiStore.settingsModalOpen"
+    class="settings-modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm p-4"
+    @click.self="uiStore.closeSettings"
+    dir="rtl"
+  >
+    <div
+      class="settings-modal-dialog w-full max-w-lg bg-card text-foreground border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-dialog-title"
+    >
       <!-- Header -->
-      <div class="px-6 py-4 border-b border-border flex items-center justify-between bg-secondary/30">
-        <h2 class="text-lg font-semibold text-foreground">
-          {{ uiStore.direction === 'rtl' ? 'تنظیمات' : 'Settings' }}
-        </h2>
-        <button 
-          @click="uiStore.closeSettings" 
-          class="text-muted-foreground hover:text-foreground hover:bg-secondary p-1.5 rounded-md transition-colors"
+      <div class="px-6 py-4 border-b border-border flex items-center justify-between bg-surface-alt">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-sm">
+            <Settings :size="18" />
+          </div>
+          <div>
+            <h2 id="settings-dialog-title" class="text-base sm:text-lg font-semibold text-foreground leading-tight">
+              تنظیمات سامانه
+            </h2>
+            <p class="text-xs text-muted-foreground mt-0.5">
+              شخصی‌سازی ظاهر و تم برنامه
+            </p>
+          </div>
+        </div>
+
+        <button
+          @click="uiStore.closeSettings"
+          class="text-muted-foreground hover:text-foreground hover:bg-secondary p-2 rounded-lg transition-colors cursor-pointer"
+          title="بستن"
           aria-label="Close"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
+          <X :size="18" />
         </button>
       </div>
 
       <!-- Content -->
-      <div class="p-6 flex flex-col gap-6">
-        <!-- Theme Selection (Dark / Light) -->
-        <div class="flex flex-col gap-3">
-          <label class="text-sm font-medium text-secondary-foreground">
-            {{ uiStore.direction === 'rtl' ? 'تم ظاهری (Theme)' : 'Theme' }}
-          </label>
-          <div class="grid grid-cols-2 gap-3">
-            <button 
-              @click="uiStore.setTheme('dark')"
-              :class="['flex items-center justify-center gap-2 py-3 px-4 rounded-lg border text-sm font-medium transition-all', uiStore.theme === 'dark' ? 'bg-primary/15 border-primary text-primary shadow-sm font-semibold' : 'bg-secondary border-border text-foreground hover:border-muted-foreground/50']"
-            >
-              <!-- Moon Icon -->
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
-              </svg>
-              <span>{{ uiStore.direction === 'rtl' ? 'حالت تیره ' : 'Dark (Grok)' }}</span>
-            </button>
-            <button 
-              @click="uiStore.setTheme('light')"
-              :class="['flex items-center justify-center gap-2 py-3 px-4 rounded-lg border text-sm font-medium transition-all', uiStore.theme === 'light' ? 'bg-primary/15 border-primary text-primary shadow-sm font-semibold' : 'bg-secondary border-border text-foreground hover:border-muted-foreground/50']"
-            >
-              <!-- Sun Icon -->
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="4"/>
-                <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
-              </svg>
-              <span>{{ uiStore.direction === 'rtl' ? 'حالت روشن' : 'Light' }}</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Language / Direction -->
-        <div class="flex flex-col gap-3">
-          <label class="text-sm font-medium text-secondary-foreground">
-            {{ uiStore.direction === 'rtl' ? 'زبان و چیدمان (Language & Layout)' : 'Language & Layout' }}
-          </label>
-          <div class="grid grid-cols-2 gap-3">
-            <button 
-              @click="setDirection('rtl')"
-              :class="['flex items-center justify-center gap-2 py-3 px-4 rounded-lg border text-sm font-medium transition-all', uiStore.direction === 'rtl' ? 'bg-primary/10 border-primary text-primary shadow-sm' : 'bg-secondary border-border text-foreground hover:border-muted-foreground/50']"
-            >
-              <svg v-if="uiStore.direction === 'rtl'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="opacity-80"><path d="M20 6L9 17l-5-5"/></svg>
-              فارسی (RTL)
-            </button>
-            <button 
-              @click="setDirection('ltr')"
-              :class="['flex items-center justify-center gap-2 py-3 px-4 rounded-lg border text-sm font-medium transition-all', uiStore.direction === 'ltr' ? 'bg-primary/10 border-primary text-primary shadow-sm' : 'bg-secondary border-border text-foreground hover:border-muted-foreground/50']"
-            >
-              <svg v-if="uiStore.direction === 'ltr'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="opacity-80"><path d="M20 6L9 17l-5-5"/></svg>
-              English (LTR)
-            </button>
-          </div>
-          <p class="text-xs text-muted-foreground mt-1">
-            {{ uiStore.direction === 'rtl' ? 'تغییر این گزینه، چیدمان کل برنامه را تحت تأثیر قرار می‌دهد.' : 'Changing this will affect the entire layout of the application.' }}
-          </p>
-        </div>
-
-        <!-- Admin Panel Access (Admin Only) -->
-        <div v-if="authStore.isAdmin" class="flex flex-col gap-2 pt-3 border-t border-border">
-          <label class="text-sm font-medium text-secondary-foreground">
-            {{ uiStore.direction === 'rtl' ? 'مدیریت سامانه (مخصوص ادمین)' : 'Administration' }}
-          </label>
-          <button 
-            @click="navigateToAdmin"
-            class="flex items-center justify-between py-2.5 px-4 rounded-lg border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary text-sm font-medium transition-all"
-          >
+      <div class="p-6 flex flex-col gap-6 overflow-y-auto max-h-[calc(85vh-130px)]">
+        
+        <!-- ═══════════════════════════════════════════
+             Theme Selection (Dark / Light)
+        ═══════════════════════════════════════════ -->
+        <div class="flex flex-col gap-3.5">
+          <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                <line x1="8" y1="21" x2="16" y2="21"></line>
-                <line x1="12" y1="17" x2="12" y2="21"></line>
-              </svg>
-              <span>{{ uiStore.direction === 'rtl' ? 'ورود به پنل مدیریت مدل‌ها' : 'Manage AI Models' }}</span>
+              <Palette :size="16" class="text-primary" />
+              <label class="text-sm font-semibold text-foreground">
+                تم و رنگ‌بندی ظاهری
+              </label>
             </div>
-            <span class="text-xs opacity-70">{{ uiStore.direction === 'rtl' ? '←' : '→' }}</span>
+            <span class="text-xs font-mono px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
+              {{ uiStore.theme === 'dark' ? 'تیره' : 'روشن' }}
+            </span>
+          </div>
+
+          <!-- Cards Grid -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            
+            <!-- Dark Theme Card -->
+            <button
+              type="button"
+              @click="uiStore.setTheme('dark')"
+              :class="[
+                'theme-card group relative text-start flex flex-col rounded-xl border p-3 transition-all duration-200 cursor-pointer overflow-hidden',
+                uiStore.theme === 'dark'
+                  ? 'border-primary ring-2 ring-primary/40 bg-primary/[0.06] shadow-md shadow-primary/5'
+                  : 'border-border/80 bg-secondary/30 hover:border-muted-foreground/40 hover:bg-secondary/50'
+              ]"
+              :aria-pressed="uiStore.theme === 'dark'"
+            >
+              <!-- Mockup Graphic: Dark -->
+              <div class="mockup-frame bg-[#0d0f18] border border-[#202336] rounded-lg p-2.5 mb-3 flex flex-col gap-1.5 shadow-inner select-none pointer-events-none">
+                <!-- Mock Top bar -->
+                <div class="flex items-center justify-between pb-1 border-b border-[#1b1e2e]">
+                  <div class="flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-[#f87171]/70" />
+                    <span class="w-1.5 h-1.5 rounded-full bg-[#fbbf24]/70" />
+                    <span class="w-1.5 h-1.5 rounded-full bg-[#34d399]/70" />
+                  </div>
+                  <span class="w-8 h-1 rounded-full bg-[#202436]" />
+                </div>
+                <!-- Mock Body -->
+                <div class="flex gap-2 items-start py-0.5">
+                  <div class="w-2.5 h-full flex flex-col gap-1 opacity-40">
+                    <div class="w-2 h-2 rounded bg-primary" />
+                    <div class="w-2 h-1 rounded bg-[#202436]" />
+                  </div>
+                  <div class="flex-1 flex flex-col gap-1.5">
+                    <!-- User bubble -->
+                    <div class="self-end bg-[#252a45] rounded px-1.5 py-0.5 text-[8px] text-[#93a2e0] max-w-[75%]">
+                      سلام، راهنمایی کن
+                    </div>
+                    <!-- Assistant bubble -->
+                    <div class="self-start bg-[#161826] border border-[#23263b] rounded px-1.5 py-0.5 text-[8px] text-[#ccd0e6] max-w-[85%] flex items-center gap-1">
+                      <span class="w-1.5 h-1.5 rounded-full bg-primary inline-block flex-shrink-0" />
+                      <span>در خدمتم!</span>
+                    </div>
+                  </div>
+                </div>
+                <!-- Mock Composer -->
+                <div class="mt-0.5 bg-[#141624] border border-[#24283d] rounded-full h-3 flex items-center px-2 justify-between">
+                  <span class="w-10 h-0.5 rounded-full bg-[#2a2f47]" />
+                  <span class="w-1.5 h-1.5 rounded-full bg-primary" />
+                </div>
+              </div>
+
+              <!-- Card Label & Info -->
+              <div class="flex items-center justify-between gap-2 mt-auto">
+                <div class="flex items-center gap-2 min-w-0">
+                  <div class="w-7 h-7 rounded-lg bg-[#1a1d2e] border border-[#2c314f] text-primary flex items-center justify-center flex-shrink-0">
+                    <Moon :size="14" />
+                  </div>
+                  <div class="min-w-0">
+                    <div class="text-xs sm:text-sm font-semibold text-foreground flex items-center gap-1.5">
+                      <span>حالت تیره</span>
+                      <span class="text-[10px] font-normal text-muted-foreground">(Slate)</span>
+                    </div>
+                    <p class="text-[11px] text-muted-foreground truncate">
+                      کنتراست نرم، حداقل خستگی چشم
+                    </p>
+                  </div>
+                </div>
+
+                <!-- Radio Check Indicator -->
+                <div
+                  :class="[
+                    'w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors',
+                    uiStore.theme === 'dark'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'border border-border text-transparent'
+                  ]"
+                >
+                  <Check :size="12" stroke-width="3" />
+                </div>
+              </div>
+            </button>
+
+            <!-- Light Theme Card -->
+            <button
+              type="button"
+              @click="uiStore.setTheme('light')"
+              :class="[
+                'theme-card group relative text-start flex flex-col rounded-xl border p-3 transition-all duration-200 cursor-pointer overflow-hidden',
+                uiStore.theme === 'light'
+                  ? 'border-primary ring-2 ring-primary/40 bg-primary/[0.06] shadow-md shadow-primary/5'
+                  : 'border-border/80 bg-secondary/30 hover:border-muted-foreground/40 hover:bg-secondary/50'
+              ]"
+              :aria-pressed="uiStore.theme === 'light'"
+            >
+              <!-- Mockup Graphic: Light -->
+              <div class="mockup-frame bg-[#F5F3EE] border border-[#ded8c4] rounded-lg p-2.5 mb-3 flex flex-col gap-1.5 shadow-inner select-none pointer-events-none">
+                <!-- Mock Top bar -->
+                <div class="flex items-center justify-between pb-1 border-b border-[#e5dfce]">
+                  <div class="flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-[#f87171]/70" />
+                    <span class="w-1.5 h-1.5 rounded-full bg-[#fbbf24]/70" />
+                    <span class="w-1.5 h-1.5 rounded-full bg-[#34d399]/70" />
+                  </div>
+                  <span class="w-8 h-1 rounded-full bg-[#ded9c7]" />
+                </div>
+                <!-- Mock Body -->
+                <div class="flex gap-2 items-start py-0.5">
+                  <div class="w-2.5 h-full flex flex-col gap-1 opacity-40">
+                    <div class="w-2 h-2 rounded bg-[#1B2F6E]" />
+                    <div class="w-2 h-1 rounded bg-[#dcd7c4]" />
+                  </div>
+                  <div class="flex-1 flex flex-col gap-1.5">
+                    <!-- User bubble -->
+                    <div class="self-end bg-[#1B2F6E]/10 rounded px-1.5 py-0.5 text-[8px] text-[#1B2F6E] max-w-[75%] font-medium">
+                      سلام، راهنمایی کن
+                    </div>
+                    <!-- Assistant bubble -->
+                    <div class="self-start bg-white border border-[#ded8c4] rounded px-1.5 py-0.5 text-[8px] text-[#2c3046] max-w-[85%] flex items-center gap-1 shadow-xs">
+                      <span class="w-1.5 h-1.5 rounded-full bg-[#1B2F6E] inline-block flex-shrink-0" />
+                      <span>در خدمتم!</span>
+                    </div>
+                  </div>
+                </div>
+                <!-- Mock Composer -->
+                <div class="mt-0.5 bg-white border border-[#ded8c4] rounded-full h-3 flex items-center px-2 justify-between">
+                  <span class="w-10 h-0.5 rounded-full bg-[#d0caba]" />
+                  <span class="w-1.5 h-1.5 rounded-full bg-[#1B2F6E]" />
+                </div>
+              </div>
+
+              <!-- Card Label & Info -->
+              <div class="flex items-center justify-between gap-2 mt-auto">
+                <div class="flex items-center gap-2 min-w-0">
+                  <div class="w-7 h-7 rounded-lg bg-[#fef8e7] border border-[#fae2a6] text-amber-600 flex items-center justify-center flex-shrink-0">
+                    <Sun :size="14" />
+                  </div>
+                  <div class="min-w-0">
+                    <div class="text-xs sm:text-sm font-semibold text-foreground flex items-center gap-1.5">
+                      <span>حالت روشن</span>
+                      <span class="text-[10px] font-normal text-muted-foreground">(Cream)</span>
+                    </div>
+                    <p class="text-[11px] text-muted-foreground truncate">
+                      پالت کرم و گرم، شفاف و پرنور
+                    </p>
+                  </div>
+                </div>
+
+                <!-- Radio Check Indicator -->
+                <div
+                  :class="[
+                    'w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors',
+                    uiStore.theme === 'light'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'border border-border text-transparent'
+                  ]"
+                >
+                  <Check :size="12" stroke-width="3" />
+                </div>
+              </div>
+            </button>
+
+          </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════
+             Admin Panel Access (Admin Only)
+        ═══════════════════════════════════════════ -->
+        <div v-if="authStore.isAdmin" class="flex flex-col gap-2 pt-3 border-t border-border">
+          <div class="flex items-center gap-2">
+            <ShieldCheck :size="16" class="text-primary" />
+            <label class="text-sm font-semibold text-foreground">
+              مدیریت و پیکربندی سامانه
+            </label>
+          </div>
+
+          <button
+            type="button"
+            @click="navigateToAdmin"
+            class="flex items-center justify-between py-2.5 px-4 rounded-xl border border-primary/30 bg-surface-alt hover:bg-secondary text-primary text-xs sm:text-sm font-medium transition-all shadow-xs group cursor-pointer"
+          >
+            <div class="flex items-center gap-2.5">
+              <Sparkles :size="15" class="text-primary group-hover:rotate-12 transition-transform" />
+              <span>ورود به پنل مدیریت مدل‌های هوش مصنوعی</span>
+            </div>
+            <ChevronLeft :size="16" class="opacity-70 group-hover:opacity-100 group-hover:translate-x-[-2px] transition-all" />
           </button>
         </div>
+
       </div>
+
+      <!-- Footer -->
+      <div class="px-6 py-3.5 border-t border-border bg-surface-alt flex items-center justify-between">
+        <div class="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <Check :size="13" class="text-emerald-500" />
+          <span>تغییرات به صورت آنی ذخیره می‌شوند</span>
+        </div>
+
+        <button
+          type="button"
+          @click="uiStore.closeSettings"
+          class="px-4 py-1.5 rounded-lg bg-card hover:bg-secondary border border-border text-foreground text-xs font-medium transition-colors shadow-xs cursor-pointer"
+        >
+          تأیید و بستن
+        </button>
+      </div>
+
     </div>
   </div>
 </template>
+
+<style scoped>
+.settings-modal-dialog {
+  background-color: var(--card);
+  color: var(--foreground);
+  border-color: var(--border);
+}
+
+.theme-card:hover {
+  transform: translateY(-1px);
+}
+
+.theme-card:active {
+  transform: translateY(0);
+}
+
+.mockup-frame {
+  height: 94px;
+}
+</style>
 

@@ -38,14 +38,30 @@ describe('Pinia Stores', () => {
     expect(modelsStore.defaultModel.id).toBe(targetModel.id)
   })
 
-  it('uiStore: toggles direction between RTL and LTR', () => {
+  it('uiStore: maintains strictly Persian RTL direction and ignores direction toggle', () => {
     const uiStore = useUiStore()
-    const startDir = uiStore.direction
+    expect(uiStore.direction).toBe('rtl')
 
     uiStore.toggleDirection()
-    expect(uiStore.direction).not.toBe(startDir)
+    expect(uiStore.direction).toBe('rtl')
+  })
 
-    uiStore.toggleDirection()
-    expect(uiStore.direction).toBe(startDir)
+  it('uiStore: showToast caps maximum visible toasts to 2 and prevents duplicate spam', () => {
+    const uiStore = useUiStore()
+    uiStore.toasts = []
+
+    uiStore.showToast('پیام ۱', 'info')
+    uiStore.showToast('پیام ۲', 'warning')
+    expect(uiStore.toasts.length).toBe(2)
+
+    // Adding 3rd toast should shift out the oldest, keeping max 2
+    uiStore.showToast('پیام ۳', 'error')
+    expect(uiStore.toasts.length).toBe(2)
+    expect(uiStore.toasts.map((t) => t.message)).toEqual(['پیام ۲', 'پیام ۳'])
+
+    // Adding exact duplicate should not create additional toast
+    uiStore.showToast('پیام ۳', 'error')
+    expect(uiStore.toasts.length).toBe(2)
   })
 })
+

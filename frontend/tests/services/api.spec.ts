@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { request, ApiError, buildUrl, getApiBaseUrl } from '../../src/services/api'
+import { request, ApiError, buildUrl, getApiBaseUrl, checkBackendHealth } from '../../src/services/api'
 
 describe('Base API Client (api.ts)', () => {
   beforeEach(() => {
@@ -72,6 +72,27 @@ describe('Base API Client (api.ts)', () => {
     } as any)
 
     await expect(request('/auth/signup', { method: 'POST' })).rejects.toThrow('Email is already registered')
+  })
+
+  it('checkBackendHealth returns true when backend /health returns 200 ok', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200
+    } as any)
+
+    const isHealthy = await checkBackendHealth(1000)
+    expect(isHealthy).toBe(true)
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/health'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('checkBackendHealth returns false when network fails or times out', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error('Connection refused'))
+
+    const isHealthy = await checkBackendHealth(1000)
+    expect(isHealthy).toBe(false)
   })
 })
 

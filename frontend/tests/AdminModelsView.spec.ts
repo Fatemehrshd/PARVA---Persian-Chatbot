@@ -22,7 +22,7 @@ describe('AdminModelsView.vue (Dashboard)', () => {
     const wrapper = mount(AdminModelsView)
 
     // Check dashboard header
-    expect(wrapper.text()).toContain('ADMIN')
+    expect(wrapper.text()).toContain('مدیریت مدل‌های هوش مصنوعی')
     expect(wrapper.find('.dashboard-table').exists()).toBe(true)
     expect(wrapper.findAll('.metric-card').length).toBe(4)
   })

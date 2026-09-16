@@ -106,3 +106,24 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
 
   return json as T
 }
+
+export async function checkBackendHealth(timeoutMs = 3500): Promise<boolean> {
+  if (typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean' && !navigator.onLine) {
+    return false
+  }
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const url = buildUrl('/health')
+    const res = await fetch(url, {
+      method: 'GET',
+      signal: controller.signal,
+      cache: 'no-cache'
+    })
+    return res.ok
+  } catch {
+    return false
+  } finally {
+    clearTimeout(timer)
+  }
+}

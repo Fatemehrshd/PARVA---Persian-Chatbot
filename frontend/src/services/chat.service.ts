@@ -156,10 +156,11 @@ export const chatService = {
       if (!response.ok) {
         throw new Error(`Resume failed: ${response.status}`)
       }
-      await readSseStream(response, { onToken, onDone }, signal)
+      await readSseStream(response, { onToken, onDone, onError }, signal)
     } catch (err: any) {
       if (err?.name === 'AbortError' || signal?.aborted) return
-      onError?.(err)
+      const msg = err?.message?.includes('fetch') ? 'خطا در برقراری ارتباط' : (err?.message || 'خطا در برقراری ارتباط')
+      onError?.(new Error(msg))
     }
   },
 
@@ -183,15 +184,33 @@ export const chatService = {
     if (token) headers['Authorization'] = `Bearer ${token}`
 
     const url = buildUrl(`/chat/conversations/${conversationId}/stream`)
+    const internalAbort = new AbortController()
+    let isTimeout = false
+    const timer = setTimeout(() => {
+      isTimeout = true
+      internalAbort.abort()
+    }, 35000)
+
+    if (signal) {
+      signal.addEventListener('abort', () => internalAbort.abort(), { once: true })
+    }
+
     try {
-      const response = await fetch(url, { method: 'GET', headers, signal })
+      const response = await fetch(url, { method: 'GET', headers, signal: internalAbort.signal })
       if (!response.ok) {
         throw new Error(`Reconnection failed: ${response.status}`)
       }
-      await readSseStream(response, { onToken, onSync, onTitle, onDone }, signal)
+      await readSseStream(response, { onToken, onSync, onTitle, onDone, onError }, internalAbort.signal)
     } catch (err: any) {
+      if (isTimeout) {
+        onError?.(new Error('زمان انتظار برای دریافت پاسخ به پایان رسید (Timeout)'))
+        return
+      }
       if (err?.name === 'AbortError' || signal?.aborted) return
-      onError?.(err)
+      const msg = err?.message?.includes('fetch') ? 'خطا در برقراری ارتباط' : (err?.message || 'خطا در برقراری ارتباط')
+      onError?.(new Error(msg))
+    } finally {
+      clearTimeout(timer)
     }
   },
 
@@ -221,16 +240,28 @@ export const chatService = {
 
     const url = buildUrl(`/chat/conversations/${conversationId}/messages`)
 
+    const clientTimeoutMs = 35000 // 35s client safety timeout
+    const internalAbort = new AbortController()
+    let isTimeout = false
+    const timer = setTimeout(() => {
+      isTimeout = true
+      internalAbort.abort()
+    }, clientTimeoutMs)
+
+    if (signal) {
+      signal.addEventListener('abort', () => internalAbort.abort(), { once: true })
+    }
+
     try {
       const response = await fetch(url, {
         method: 'POST',
         headers,
         body: JSON.stringify({ content }),
-        signal
+        signal: internalAbort.signal
       })
 
       if (!response.ok) {
-        let message = `Server responded with status ${response.status}`
+        let message = 'خطا در برقراری ارتباط'
         try {
           const text = await response.text()
           try {
@@ -251,13 +282,17 @@ export const chatService = {
         throw new Error(message)
       }
 
-      const doneReceived = await readSseStream(
+      const streamRes = await readSseStream(
         response,
-        { onToken, onSync, onTitle, onDone },
-        signal
+        { onToken, onSync, onTitle, onDone, onError },
+        internalAbort.signal
       )
 
-      if (!doneReceived && !signal?.aborted) {
+      if (streamRes.hasError) {
+        return
+      }
+
+      if (!streamRes.done && !internalAbort.signal.aborted) {
         // Stream dropped without done event (network glitch) — attempt automatic reconnection
         await this.subscribeActiveStream(
           conversationId,
@@ -270,7 +305,15 @@ export const chatService = {
         )
       }
     } catch (error: any) {
-      if (error?.name === 'AbortError' || signal?.aborted) {
+      if (isTimeout) {
+        onError(new Error('خطا در برقراری ارتباط: زمان پاسخ‌دهی سرور به پایان رسید'))
+        return
+      }
+      if (signal?.aborted) {
+        return
+      }
+      if (typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean' && !navigator.onLine) {
+        onError(new Error('خطا در برقراری ارتباط'))
         return
       }
       // If network failed during stream, try reconnecting to ongoing active stream
@@ -286,8 +329,13 @@ export const chatService = {
           onTitle
         )
       } catch {
-        onError(error)
+        const msg = error?.message?.includes('fetch') || error?.message?.includes('NetworkError')
+          ? 'خطا در برقراری ارتباط'
+          : (error?.message || 'خطا در برقراری ارتباط')
+        onError(new Error(msg))
       }
+    } finally {
+      clearTimeout(timer)
     }
   }
 }
@@ -302,9 +350,10 @@ async function readSseStream(
     onSync?: (content: string) => void
     onTitle?: (title: string) => void
     onDone?: (messageId: string) => void
+    onError?: (err: any) => void
   },
   signal?: AbortSignal
-): Promise<boolean> {
+): Promise<{ done: boolean; hasError: boolean }> {
   if (!response.body) {
     throw new Error('ReadableStream not supported by response')
   }
@@ -313,6 +362,7 @@ async function readSseStream(
   const decoder = new TextDecoder('utf-8')
   let buffer = ''
   let receivedDone = false
+  let receivedError = false
 
   while (true) {
     if (signal?.aborted) {
@@ -346,14 +396,25 @@ async function readSseStream(
           } else if (currentEvent === 'done' && data.messageId) {
             receivedDone = true
             callbacks.onDone?.(data.messageId)
+          } else if (currentEvent === 'error') {
+            receivedError = true
+            const errorMsg = data.error || data.message || 'خطا در برقراری ارتباط'
+            callbacks.onError?.(new Error(errorMsg))
+            reader.cancel().catch(() => {})
+            return { done: false, hasError: true }
           }
         } catch {
           if (currentEvent === 'token') {
             callbacks.onToken?.(dataStr)
+          } else if (currentEvent === 'error') {
+            receivedError = true
+            callbacks.onError?.(new Error(dataStr || 'خطا در برقراری ارتباط'))
+            reader.cancel().catch(() => {})
+            return { done: false, hasError: true }
           }
         }
       }
     }
   }
-  return receivedDone
+  return { done: receivedDone, hasError: receivedError }
 }

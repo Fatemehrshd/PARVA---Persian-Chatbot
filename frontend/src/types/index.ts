@@ -88,6 +88,8 @@ export interface Message {
   createdAt: string
   isInterrupted?: boolean
   stoppedByUser?: boolean
+  status?: 'sending' | 'sent' | 'error'
+  errorText?: string
 }
 
 export interface ActiveStreamStatus {

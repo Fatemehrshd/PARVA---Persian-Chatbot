@@ -104,4 +104,59 @@ describe('MessageBubble.vue', () => {
     expect(bubble.attributes('dir')).toBe('ltr')
     expect(bubble.classes()).toContain('ltr')
   })
+
+  it('does not render sending indicator text under message', () => {
+    const userMessage: Message = {
+      id: 'm-send-1',
+      conversationId: 'c-1',
+      role: 'user',
+      content: 'Sending test message...',
+      createdAt: new Date().toISOString(),
+      status: 'sending'
+    }
+
+    const wrapper = mount(MessageBubble, {
+      props: { message: userMessage }
+    })
+
+    expect(wrapper.find('.status-sending').exists()).toBe(false)
+  })
+
+  it('does not render status indicator or sent text under user message', () => {
+    const userMessage: Message = {
+      id: 'm-sent-1',
+      conversationId: 'c-1',
+      role: 'user',
+      content: 'Sent test message',
+      createdAt: new Date().toISOString(),
+      status: 'sent'
+    }
+
+    const wrapper = mount(MessageBubble, {
+      props: { message: userMessage }
+    })
+
+    expect(wrapper.find('.status-sent').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('ارسال شد')
+  })
+
+  it('does not render retry button under user message (handled by bottom composer banner)', () => {
+    const userMessage: Message = {
+      id: 'm-err-1',
+      conversationId: 'c-1',
+      role: 'user',
+      content: 'Failed message',
+      createdAt: new Date().toISOString(),
+      status: 'error'
+    }
+
+    const wrapper = mount(MessageBubble, {
+      props: { message: userMessage }
+    })
+
+    // Retry button is deliberately not inside message bubble
+    expect(wrapper.find('.retry-bubble-btn').exists()).toBe(false)
+    expect(wrapper.find('.bubble').classes()).toContain('border-destructive/50')
+  })
 })
+

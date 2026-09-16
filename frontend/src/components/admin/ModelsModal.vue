@@ -32,7 +32,7 @@ const {
     })
   },
   {
-    successMessage: uiStore.direction === 'rtl' ? 'مدل با موفقیت ثبت شد.' : 'Model created successfully.',
+    successMessage: 'مدل با موفقیت ثبت شد.',
     onSuccess: () => {
       newName.value = ''
       newApiIdentifier.value = ''
@@ -50,7 +50,7 @@ async function handleAddModel() {
 async function handleMakeDefault(id: string) {
   try {
     await modelsStore.makeDefault(id)
-    uiStore.showToast(uiStore.direction === 'rtl' ? 'مدل پیش‌فرض با موفقیت تغییر یافت.' : 'Default model updated.', 'success')
+    uiStore.showToast('مدل پیش‌فرض با موفقیت تغییر یافت.', 'success')
   } catch (err: any) {
     uiStore.showToast(err?.message || 'خطا در تغییر مدل پیش‌فرض', 'error')
   }
@@ -59,7 +59,7 @@ async function handleMakeDefault(id: string) {
 async function handleDelete(id: string) {
   try {
     await modelsStore.removeModel(id)
-    uiStore.showToast(uiStore.direction === 'rtl' ? 'مدل با موفقیت حذف شد.' : 'Model deleted.', 'success')
+    uiStore.showToast('مدل با موفقیت حذف شد.', 'success')
   } catch (err: any) {
     uiStore.showToast(err?.message || 'خطا در حذف مدل', 'error')
   }
@@ -68,15 +68,15 @@ async function handleDelete(id: string) {
 
 <template>
   <div v-if="uiStore.adminModelsModalOpen" class="modal-backdrop" @click.self="uiStore.closeAdminModels">
-    <div class="modal-card" :dir="uiStore.direction">
+    <div class="modal-card" dir="rtl">
       <div class="modal-header">
         <div class="header-title-group">
           <h2 class="modal-title">
-            {{ uiStore.direction === 'rtl' ? 'مدیریت مدل‌های هوش مصنوعی' : 'AI Models Management' }}
+            مدیریت مدل‌های هوش مصنوعی
           </h2>
           <span class="badge-role font-mono">ADMIN</span>
         </div>
-        <button class="close-btn" @click="uiStore.closeAdminModels" aria-label="Close modal">
+        <button class="close-btn" @click="uiStore.closeAdminModels" aria-label="بستن">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -95,7 +95,7 @@ async function handleDelete(id: string) {
             <div class="model-name-row">
               <span class="model-name">{{ model.name }}</span>
               <span v-if="model.isDefault" class="default-badge font-mono">
-                {{ uiStore.direction === 'rtl' ? 'پیش‌فرض' : 'DEFAULT' }}
+                پیش‌فرض
               </span>
             </div>
             <div class="model-meta font-mono">
@@ -110,12 +110,12 @@ async function handleDelete(id: string) {
               class="action-btn text-btn"
               @click="handleMakeDefault(model.id)"
             >
-              {{ uiStore.direction === 'rtl' ? 'انتخاب به عنوان پیش‌فرض' : 'Set Default' }}
+              انتخاب به عنوان پیش‌فرض
             </button>
             <button
               class="action-btn delete-btn"
               @click="handleDelete(model.id)"
-              :title="uiStore.direction === 'rtl' ? 'حذف مدل' : 'Delete model'"
+              title="حذف مدل"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
@@ -132,32 +132,32 @@ async function handleDelete(id: string) {
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          <span>{{ uiStore.direction === 'rtl' ? 'افزودن مدل جدید' : 'Add New Model' }}</span>
+          <span>افزودن مدل جدید</span>
         </button>
       </div>
 
       <!-- Add Model Form -->
       <form v-else class="add-model-form" @submit.prevent="handleAddModel">
         <h3 class="form-title font-mono">
-          {{ uiStore.direction === 'rtl' ? 'افزودن مدل جدید' : 'NEW MODEL SPECIFICATION' }}
+          افزودن مدل جدید
         </h3>
         <div v-if="addModelError" class="bg-destructive/15 border border-destructive/40 text-destructive px-3 py-2 rounded-lg text-xs mb-3">
           {{ addModelError }}
         </div>
         <div class="form-grid">
           <div class="form-group">
-            <label class="form-label">Name</label>
+            <label class="form-label">نام مدل</label>
             <input
               v-model="newName"
               type="text"
               required
               :disabled="isRegisteringModel"
               class="form-input"
-              placeholder="e.g. Gemini 1.5 Pro"
+              placeholder="مثال: Gemini 1.5 Pro"
             />
           </div>
           <div class="form-group">
-            <label class="form-label">Provider</label>
+            <label class="form-label">سرویس‌دهنده (Provider)</label>
             <select v-model="newProvider" class="form-input" :disabled="isRegisteringModel">
               <option value="anthropic">anthropic</option>
               <option value="openai">openai</option>
@@ -166,18 +166,18 @@ async function handleDelete(id: string) {
             </select>
           </div>
           <div class="form-group span-2">
-            <label class="form-label">API Identifier</label>
+            <label class="form-label">شناسه API (apiIdentifier)</label>
             <input
               v-model="newApiIdentifier"
               type="text"
               required
               :disabled="isRegisteringModel"
               class="form-input font-mono"
-              placeholder="e.g. gemini-1.5-pro-latest"
+              placeholder="مثال: gemini-1.5-pro-latest"
             />
           </div>
           <div class="form-group">
-            <label class="form-label">Base URL (Optional)</label>
+            <label class="form-label">آدرس Base URL (اختیاری)</label>
             <input
               v-model="newBaseUrl"
               type="text"
@@ -187,7 +187,7 @@ async function handleDelete(id: string) {
             />
           </div>
           <div class="form-group">
-            <label class="form-label">API Key (Optional)</label>
+            <label class="form-label">کلید API Key (اختیاری)</label>
             <input
               v-model="newApiKey"
               type="password"
@@ -198,56 +198,32 @@ async function handleDelete(id: string) {
           </div>
         </div>
         <div class="form-actions flex items-center justify-between w-full">
-          <template v-if="uiStore.direction === 'rtl'">
-            <button type="submit" class="confirm-btn flex items-center gap-1.5" :disabled="isRegisteringModel">
-              <svg
-                v-if="isRegisteringModel"
-                class="animate-spin h-3.5 w-3.5 text-current inline-block"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span>
-                {{ isRegisteringModel ? 'در حال ثبت...' : 'ثبت مدل' }}
-              </span>
-            </button>
+          <button type="submit" class="confirm-btn flex items-center gap-1.5" :disabled="isRegisteringModel">
+            <svg
+              v-if="isRegisteringModel"
+              class="animate-spin h-3.5 w-3.5 text-current inline-block"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>
+              {{ isRegisteringModel ? 'در حال ثبت...' : 'ثبت مدل' }}
+            </span>
+          </button>
 
-            <button type="button" class="cancel-btn" :disabled="isRegisteringModel" @click="isAdding = false">
-              انصراف
-            </button>
-          </template>
-
-          <template v-else>
-            <button type="button" class="cancel-btn" :disabled="isRegisteringModel" @click="isAdding = false">
-              Cancel
-            </button>
-
-            <button type="submit" class="confirm-btn flex items-center gap-1.5" :disabled="isRegisteringModel">
-              <svg
-                v-if="isRegisteringModel"
-                class="animate-spin h-3.5 w-3.5 text-current inline-block"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span>
-                {{ isRegisteringModel ? 'Adding...' : 'Add Model' }}
-              </span>
-            </button>
-          </template>
+          <button type="button" class="cancel-btn" :disabled="isRegisteringModel" @click="isAdding = false">
+            انصراف
+          </button>
         </div>
       </form>
 
       <!-- Link to full admin page -->
       <div class="modal-footer-nav">
         <router-link to="/admin/models" class="full-page-nav-link" @click="uiStore.closeAdminModels">
-          {{ uiStore.direction === 'rtl' ? 'مشاهده و تست در صفحه اختصاصی پنل ادمین (/admin/models) ↗' : 'Open Dedicated Admin Page (/admin/models) ↗' }}
+          مشاهده و تست در صفحه اختصاصی پنل ادمین (/admin/models) ↗
         </router-link>
       </div>
     </div>

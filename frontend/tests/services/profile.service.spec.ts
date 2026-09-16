@@ -19,6 +19,7 @@ describe('Profile Service', () => {
 
     const result = await profileService.uploadAvatar(new File(['image'], 'avatar.png', { type: 'image/png' }))
 
-    expect(result.avatarUrl).toBe('http://localhost:3000/static/avatars/u-1/avatar.png')
+    const expectedOrigin = new URL(apiModule.getApiBaseUrl()).origin
+    expect(result.avatarUrl).toBe(`${expectedOrigin}/static/avatars/u-1/avatar.png`)
   })
 })

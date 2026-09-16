@@ -16,14 +16,9 @@ const userName = computed(() => {
 })
 
 const fullGreeting = computed(() => {
-  if (uiStore.direction === 'rtl') {
-    return userName.value
-      ? `سلام ${userName.value} عزیز، چطور می‌توانم کمکتان کنم؟`
-      : 'سلام، چطور می‌توانم کمکتان کنم؟'
-  }
   return userName.value
-    ? `Hello ${userName.value}, how can I help you today?`
-    : 'How can I help you today?'
+    ? `سلام ${userName.value} عزیز، چطور می‌توانم کمکتان کنم؟`
+    : 'سلام، چطور می‌توانم کمکتان کنم؟'
 })
 
 const displayedGreeting = ref('')
@@ -59,34 +54,25 @@ watch(fullGreeting, () => {
 
 const suggestions = [
   {
-    fa: 'نوشتن و بهینه‌سازی کدهای فرانت‌اند',
-    en: 'Write and optimize frontend code',
-    descFa: 'تولید کدهای استاندارد Vue 3 با تایپ‌اسکریپت',
-    descEn: 'Generate clean Vue 3 + TypeScript components'
+    title: 'نوشتن و بهینه‌سازی کدهای فرانت‌اند',
+    desc: 'تولید کدهای استاندارد Vue 3 با تایپ‌اسکریپت'
   },
   {
-    fa: 'توضیح مفاهیم مهندسی نرم‌افزار',
-    en: 'Explain software engineering concepts',
-    descFa: 'بررسی معماری‌های ماژولار و میکروسرویس',
-    descEn: 'Deep-dive into modular systems & APIs'
+    title: 'توضیح مفاهیم مهندسی نرم‌افزار',
+    desc: 'بررسی معماری‌های ماژولار و میکروسرویس'
   },
   {
-    fa: 'ایده‌پردازی برای طراحی تجربه کاربری',
-    en: 'Brainstorm UX & product design',
-    descFa: 'ایجاد الگوهای تعاملی و پالت‌های رنگی مدرن',
-    descEn: 'Explore clean layout patterns & tokens'
+    title: 'ایده‌پردازی برای طراحی تجربه کاربری',
+    desc: 'ایجاد الگوهای تعاملی و پالت‌های رنگی مدرن'
   },
   {
-    fa: 'طراحی قرارداد API و تست‌نویسی',
-    en: 'Draft API contracts & unit tests',
-    descFa: 'طراحی تست‌های Vitest و ساختاردهی REST/SSE',
-    descEn: 'Write robust acceptance and edge-case tests'
+    title: 'طراحی قرارداد API و تست‌نویسی',
+    desc: 'طراحی تست‌های Vitest و ساختاردهی REST/SSE'
   }
 ]
 
-function handleSelect(prompt: { fa: string; en: string }) {
-  const text = uiStore.direction === 'rtl' ? prompt.fa : prompt.en
-  chatStore.sendMessage(text)
+function handleSelect(prompt: { title: string; desc: string }) {
+  chatStore.sendMessage(prompt.title)
 }
 </script>
 
@@ -101,7 +87,7 @@ function handleSelect(prompt: { fa: string; en: string }) {
       <span class="typing-cursor" :class="{ 'is-blinking': !isTyping }">|</span>
     </h1>
     <p class="subheadline">
-      {{ uiStore.direction === 'rtl' ? 'پلتفرم گفتگوی هوشمند پروا با پشتیبانی از مدل‌های پیشرفته' : 'Parva multi-model intelligent workspace' }}
+      پلتفرم گفتگوی هوشمند پروا با پشتیبانی از مدل‌های پیشرفته
     </p>
 
     <div class="suggestion-grid">
@@ -112,10 +98,10 @@ function handleSelect(prompt: { fa: string; en: string }) {
         @click="handleSelect(item)"
       >
         <span class="suggestion-title">
-          {{ uiStore.direction === 'rtl' ? item.fa : item.en }}
+          {{ item.title }}
         </span>
         <span class="suggestion-desc">
-          {{ uiStore.direction === 'rtl' ? item.descFa : item.descEn }}
+          {{ item.desc }}
         </span>
       </button>
     </div>

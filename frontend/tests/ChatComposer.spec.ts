@@ -62,4 +62,46 @@ describe('ChatComposer.vue', () => {
     // Dropdown closes after selection
     expect(wrapper.find('.composer-model-dropdown').exists()).toBe(false)
   })
+
+  it('renders stream error alert banner and triggers retry when retry button is clicked', async () => {
+    const wrapper = mount(ChatComposer)
+    const chatStore = useChatStore()
+    chatStore.currentConversationId = 'conv-err'
+    chatStore.messages = [
+      {
+        id: 'msg-user-1',
+        conversationId: 'conv-err',
+        role: 'user',
+        content: 'سلام این یک پیام تست است',
+        createdAt: new Date().toISOString(),
+        status: 'error'
+      }
+    ]
+    // Set stream error state via the Map (streamError/isStreaming are computed from Map)
+    chatStore.convStreamStates.set('conv-err', {
+      isStreaming: false, isThinking: false,
+      streamError: 'زمان انتظار برای دریافت پاسخ به پایان رسید (تایم‌اوت)',
+      currentStreamingText: '', abortController: null, watchdogTimer: null,
+      lastUserPrompt: 'سلام این یک پیام تست است'
+    })
+
+    await wrapper.vm.$nextTick()
+
+    // Alert banner exists and shows the error message
+    const alertBanner = wrapper.find('.stream-error-banner')
+    expect(alertBanner.exists()).toBe(true)
+    expect(alertBanner.text()).toContain('زمان انتظار برای دریافت پاسخ به پایان رسید')
+
+    // Find retry button
+    const retryBtn = wrapper.find('.stream-error-retry-btn')
+    expect(retryBtn.exists()).toBe(true)
+
+    // Click retry
+    await retryBtn.trigger('click')
+
+    // Expect streamError to be cleared and message re-sent
+    expect(chatStore.streamError).toBeNull()
+    expect(chatStore.messages.length).toBe(1)
+    expect(chatStore.messages[0].content).toBe('سلام این یک پیام تست است')
+  })
 })

@@ -36,9 +36,7 @@ watch(
 async function handleSave() {
   const trimmed = titleInput.value.trim()
   if (!trimmed) {
-    errorMessage.value = uiStore.direction === 'rtl' 
-      ? 'عنوان گفتگو نمی‌تواند خالی باشد.' 
-      : 'Conversation title cannot be empty.'
+    errorMessage.value = 'عنوان گفتگو نمی‌تواند خالی باشد.'
     return
   }
 
@@ -70,14 +68,14 @@ async function handleSave() {
             </svg>
           </div>
           <h3 class="text-base font-semibold text-foreground">
-            {{ uiStore.direction === 'rtl' ? 'ویرایش عنوان گفتگو' : 'Edit Chat Title' }}
+            ویرایش عنوان گفتگو
           </h3>
         </div>
 
         <button
           @click="emit('close')"
           class="text-muted-foreground hover:text-foreground hover:bg-secondary p-1.5 rounded-md transition-colors"
-          aria-label="Close"
+          aria-label="بستن"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -90,7 +88,7 @@ async function handleSave() {
       <form @submit.prevent="handleSave" class="p-6 space-y-4">
         <div class="space-y-1.5">
           <label class="text-xs font-medium text-secondary-foreground block">
-            {{ uiStore.direction === 'rtl' ? 'عنوان جدید گفتگو:' : 'New Chat Title:' }}
+            عنوان جدید گفتگو:
           </label>
           <input
             ref="inputRef"
@@ -98,7 +96,7 @@ async function handleSave() {
             type="text"
             maxlength="100"
             class="w-full px-3.5 py-2.5 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all placeholder:text-muted-foreground"
-            :placeholder="uiStore.direction === 'rtl' ? 'عنوان دلخواه را وارد کنید...' : 'Enter a conversation title...'"
+            placeholder="عنوان دلخواه را وارد کنید..."
           />
           <p v-if="errorMessage" class="text-xs text-destructive mt-1 font-medium">
             {{ errorMessage }}
@@ -106,58 +104,31 @@ async function handleSave() {
         </div>
 
         <p class="text-xs text-muted-foreground">
-          {{ uiStore.direction === 'rtl' 
-            ? 'این نام در سایدبار و تاریخچه گفتگوهای شما نمایش داده خواهد شد.' 
-            : 'This title will be displayed in your sidebar and chat history.' }}
+          این نام در سایدبار و تاریخچه گفتگوهای شما نمایش داده خواهد شد.
         </p>
 
         <!-- Footer Actions -->
         <div class="pt-3 border-t border-border flex items-center justify-between gap-3 w-full">
-          <template v-if="uiStore.direction === 'rtl'">
-            <button
-              type="submit"
-              :disabled="isSaving || !titleInput.trim()"
-              class="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs sm:text-sm font-medium shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <svg v-if="isSaving" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span>{{ uiStore.direction === 'rtl' ? 'ذخیره عنوان' : 'Save Title' }}</span>
-            </button>
+          <button
+            type="submit"
+            :disabled="isSaving || !titleInput.trim()"
+            class="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs sm:text-sm font-medium shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <svg v-if="isSaving" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>ذخیره عنوان</span>
+          </button>
 
-            <button
-              type="button"
-              @click="emit('close')"
-              :disabled="isSaving"
-              class="px-4 py-2 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-secondary-foreground text-xs sm:text-sm font-medium transition-colors"
-            >
-              {{ uiStore.direction === 'rtl' ? 'انصراف' : 'Cancel' }}
-            </button>
-          </template>
-
-          <template v-else>
-            <button
-              type="button"
-              @click="emit('close')"
-              :disabled="isSaving"
-              class="px-4 py-2 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-secondary-foreground text-xs sm:text-sm font-medium transition-colors"
-            >
-              Cancel
-            </button>
-
-            <button
-              type="submit"
-              :disabled="isSaving || !titleInput.trim()"
-              class="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs sm:text-sm font-medium shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <svg v-if="isSaving" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span>Save Title</span>
-            </button>
-          </template>
+          <button
+            type="button"
+            @click="emit('close')"
+            :disabled="isSaving"
+            class="px-4 py-2 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-secondary-foreground text-xs sm:text-sm font-medium transition-colors"
+          >
+            انصراف
+          </button>
         </div>
       </form>
     </div>

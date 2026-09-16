@@ -14,6 +14,7 @@ export interface ChatChunk {
   sync?: string;
   saved?: Message;
   title?: string;
+  error?: string;
 }
 
 const SYSTEM_PROMPT = 'You are a helpful and knowledgeable AI assistant.';
@@ -164,11 +165,21 @@ export class ChatService {
   async *generate(userId: string, id: string, content: string): AsyncGenerator<ChatChunk> {
     const conversation = await this.assertOwned(userId, id);
 
-    // If there is already an active ongoing generation for this conversation, attach to it!
+    // Global token quota enforcement
+    if (this.settings) {
+      const globalLimit = await this.settings.getGlobalTokenLimit();
+      if (globalLimit > 0 && typeof this.users?.findById === 'function') {
+        const user = await this.users.findById(userId);
+        if ((user?.usedTokens || 0) >= globalLimit) {
+          throw new BadRequestException('سقف مجاز مصرف توکن به پایان رسیده است');
+        }
+      }
+    }
+
+    // If there is already an active ongoing generation for this conversation, abort it so the new send / retry starts fresh
     const existing = this.activeStream?.getSession(id);
     if (existing && (existing.status === 'thinking' || existing.status === 'streaming')) {
-      yield* this.attachToActiveStream(id, existing);
-      return;
+      this.activeStream?.abortSession(id);
     }
 
     // Validate active model status (same resolution order as before)
@@ -204,7 +215,24 @@ export class ChatService {
     const shouldGenerateTitle = isDefaultTitle && existingMsgCount === 0;
 
     const session = this.activeStream?.startSession(id, userId, content);
-    await this.msg.save(this.msg.create({ conversationId: id, role: 'user', content }));
+
+    // If the last message in DB is already an unanswered user message with the exact same content (e.g. from retry),
+    // avoid saving duplicate user messages in DB.
+    let lastMsg: Message | null = null;
+    if (typeof this.msg.findOne === 'function') {
+      try {
+        lastMsg = await this.msg.findOne({
+          where: { conversationId: id },
+          order: { createdAt: 'DESC' },
+        });
+      } catch {
+        lastMsg = null;
+      }
+    }
+
+    if (!lastMsg || lastMsg.role !== 'user' || lastMsg.content !== content) {
+      await this.msg.save(this.msg.create({ conversationId: id, role: 'user', content }));
+    }
 
     const target = this.forwarder.resolveTarget(model, provider);
     const titlePromise = shouldGenerateTitle ? this.generateTitle(target, content) : null;
@@ -267,7 +295,9 @@ export class ChatService {
     let failedMidStream = false;
     try {
       try {
-        for await (const token of this.forwarder.stream(target, messages)) {
+        for await (const token of this.forwarder.stream(target, messages, {
+          signal: session?.abortController.signal,
+        })) {
           if (session?.abortController.signal.aborted) break;
           full += token;
           this.activeStream?.appendToken(id, token);
@@ -275,11 +305,9 @@ export class ChatService {
         }
       } catch (err) {
         if (!full) {
-          this.activeStream?.failSession(
-            id,
-            err instanceof Error ? err.message : String(err),
-          );
-          throw err; // failed before the first token -> plain 502 upstream
+          const errMessage = err instanceof Error ? err.message : String(err);
+          this.activeStream?.failSession(id, errMessage);
+          throw err;
         }
         failedMidStream = true;
         this.logger.warn(
@@ -466,6 +494,10 @@ export class ChatService {
     if (session.title) {
       yield { title: session.title };
     }
+    if (session.status === 'error') {
+      yield { error: session.error || 'زمان انتظار برای پردازش پیام به پایان رسید (Timeout)' };
+      return;
+    }
 
     const queue: ChatChunk[] = [];
     let resolveNext: (() => void) | null = null;
@@ -480,6 +512,7 @@ export class ChatService {
         queue.push({ saved: { id: event.messageId } as any });
         isDone = true;
       } else if (event.type === 'error') {
+        queue.push({ error: event.message });
         isDone = true;
       }
       if (resolveNext) {

@@ -1,4 +1,9 @@
-import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadGatewayException,
+  GatewayTimeoutException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { AiModel } from '../models-admin/ai-model.entity';
 import { AiProvider } from '../models-admin/ai-provider.entity';
 
@@ -11,6 +16,12 @@ export interface ResolvedTarget {
   apiIdentifier: string;
   apiKey: string;
   baseUrl: string;
+}
+
+export interface StreamOptions {
+  signal?: AbortSignal;
+  connectTimeoutMs?: number;
+  stallTimeoutMs?: number;
 }
 
 /**
@@ -38,10 +49,32 @@ export class OpenAiCompatForwarder {
   }
 
   /** Streams assistant deltas token-by-token from the upstream SSE response. */
-  async *stream(target: ResolvedTarget, messages: ChatMessage[]): AsyncGenerator<string> {
+  async *stream(
+    target: ResolvedTarget,
+    messages: ChatMessage[],
+    options?: StreamOptions,
+  ): AsyncGenerator<string> {
     const url = target.baseUrl.endsWith('/chat/completions')
       ? target.baseUrl
       : `${target.baseUrl}/chat/completions`;
+
+    const connectTimeoutMs = options?.connectTimeoutMs ?? 35000;
+    const stallTimeoutMs = options?.stallTimeoutMs ?? 25000;
+
+    const connectAbortCtrl = new AbortController();
+    let timedOutReason: string | null = null;
+    const connectTimer = setTimeout(() => {
+      timedOutReason = 'connect_timeout';
+      connectAbortCtrl.abort();
+    }, connectTimeoutMs);
+
+    const onUserAbort = () => {
+      connectAbortCtrl.abort();
+    };
+    if (options?.signal) {
+      options.signal.addEventListener('abort', onUserAbort, { once: true });
+    }
+
     let res: Response;
     try {
       res = await fetch(url, {
@@ -55,12 +88,33 @@ export class OpenAiCompatForwarder {
           messages,
           stream: true,
         }),
+        signal: connectAbortCtrl.signal,
       });
-    } catch (err) {
+    } catch (err: any) {
+      clearTimeout(connectTimer);
+      if (options?.signal) {
+        options.signal.removeEventListener('abort', onUserAbort);
+      }
+      if (timedOutReason === 'connect_timeout') {
+        throw new GatewayTimeoutException(
+          'زمان پاسخگویی مدل هوش مصنوعی به پایان رسید (Timeout)',
+        );
+      }
+      if (options?.signal?.aborted) {
+        return;
+      }
       throw new BadGatewayException(
-        `AI provider "${target.apiIdentifier}" unreachable: ${err instanceof Error ? err.message : String(err)}`,
+        `خطا در برقراری ارتباط با مدل هوش مصنوعی (${target.apiIdentifier}): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
       );
+    } finally {
+      clearTimeout(connectTimer);
+      if (options?.signal) {
+        options.signal.removeEventListener('abort', onUserAbort);
+      }
     }
+
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
       throw new BadGatewayException(
@@ -75,29 +129,59 @@ export class OpenAiCompatForwarder {
     const decoder = new TextDecoder();
     let buf = '';
     let emitted = false;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      let idx: number;
-      while ((idx = buf.indexOf('\n')) >= 0) {
-        const line = buf.slice(0, idx).trim();
-        buf = buf.slice(idx + 1);
-        if (!line.startsWith('data:')) continue;
-        const payload = line.slice(5).trim();
-        if (payload === '[DONE]') return;
-        let delta: unknown;
-        try {
-          delta = JSON.parse(payload)?.choices?.[0]?.delta?.content;
-        } catch {
-          continue; // keep-alives / partial frames from the upstream
+
+    try {
+      while (true) {
+        if (options?.signal?.aborted) {
+          await reader.cancel().catch(() => {});
+          break;
         }
-        if (typeof delta === 'string' && delta) {
-          emitted = true;
-          yield delta;
+
+        let stallTimer: any;
+        const stallPromise = new Promise<{ isTimeout: true }>((resolve) => {
+          stallTimer = setTimeout(() => resolve({ isTimeout: true }), stallTimeoutMs);
+        });
+
+        const readPromise = reader.read();
+        const result = await Promise.race([readPromise, stallPromise]);
+        clearTimeout(stallTimer);
+
+        if ('isTimeout' in result) {
+          await reader.cancel().catch(() => {});
+          throw new GatewayTimeoutException(
+            'پاسخگویی مدل هوش مصنوعی به دلیل وقفه طولانی متوقف شد (Timeout)',
+          );
+        }
+
+        const { done, value } = result;
+        if (done) break;
+
+        buf += decoder.decode(value, { stream: true });
+        let idx: number;
+        while ((idx = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, idx).trim();
+          buf = buf.slice(idx + 1);
+          if (!line.startsWith('data:')) continue;
+          const payload = line.slice(5).trim();
+          if (payload === '[DONE]') return;
+          let delta: unknown;
+          try {
+            delta = JSON.parse(payload)?.choices?.[0]?.delta?.content;
+          } catch {
+            continue; // keep-alives / partial frames from the upstream
+          }
+          if (typeof delta === 'string' && delta) {
+            emitted = true;
+            yield delta;
+          }
         }
       }
+    } finally {
+      if (typeof reader.cancel === 'function') {
+        reader.cancel().catch(() => {});
+      }
     }
+
     if (!emitted) {
       this.logger.warn(`Provider "${target.apiIdentifier}" completed without any content`);
     }

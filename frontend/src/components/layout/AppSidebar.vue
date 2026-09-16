@@ -282,17 +282,7 @@ const userInitial = computed(() => {
 
         <template v-if="authStore.isAuthenticated">
           <!-- Direct Admin Panel Link (Admin Only) -->
-          <router-link
-            v-if="authStore.isAdmin"
-            to="/admin/models"
-            class="sb-admin-direct-link"
-            title="ورود به پنل مدیریت مدل‌ها و کاربران"
-          >
-            <ShieldCheck :size="15" class="text-amber-500 flex-shrink-0" />
-            <span class="sb-admin-link-text">پنل ادمین</span>
-            <span class="sb-admin-badge font-mono">ADMIN</span>
-          </router-link>
-
+          
           <!-- Profile popup menu -->
           <ProfileMenu
             v-if="profileMenuOpen"

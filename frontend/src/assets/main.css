@@ -178,6 +178,20 @@ html, body {
   flex-direction: column;
 }
 
+/* Shared responsive axis for the chat transcript and composer. */
+:root {
+  --chat-gutter: clamp(1rem, 3vw, 2rem);
+  --chat-max-width: 56rem;
+}
+
+.chat-content-wrapper {
+  width: 100%;
+  max-width: var(--chat-max-width);
+  padding-inline: var(--chat-gutter);
+  box-sizing: border-box;
+  margin-inline: auto;
+}
+
 /* Custom Minimal Scrollbar: 4px, surface on hover */
 ::-webkit-scrollbar {
   width: 4px;

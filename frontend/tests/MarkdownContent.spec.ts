@@ -49,6 +49,31 @@ interface UserConfig {
     expect(wrapper.text()).toContain('قالب‌بندی کد')
   })
 
+  it('sets RTL direction for Persian tables and LTR direction for English tables', () => {
+    const persianWrapper = mount(MarkdownContent, {
+      props: { content: '| نام | وضعیت |\n| --- | --- |\n| مدل | فعال |' }
+    })
+    expect(persianWrapper.find('.table-responsive').attributes('dir')).toBe('rtl')
+    expect(persianWrapper.find('table').attributes('dir')).toBe('rtl')
+
+    const englishWrapper = mount(MarkdownContent, {
+      props: { content: '| Name | Status |\n| --- | --- |\n| Model | Active |' }
+    })
+    expect(englishWrapper.find('.table-responsive').attributes('dir')).toBe('ltr')
+    expect(englishWrapper.find('table').attributes('dir')).toBe('ltr')
+  })
+
+  it('keeps bold Persian text after a table RTL', () => {
+    const wrapper = mount(MarkdownContent, {
+      props: {
+        content: '| نام | وضعیت |\n| --- | --- |\n| مدل | فعال |\n\n**توضیح فارسی بعد از جدول**'
+      }
+    })
+
+    const paragraphs = wrapper.findAll('p')
+    expect(paragraphs.at(-1)?.attributes('dir')).toBe('rtl')
+  })
+
   it('renders README elements including headings, blockquotes, lists, and inline code', () => {
     const readmeMarkdown = `
 # عنوان سطح یک

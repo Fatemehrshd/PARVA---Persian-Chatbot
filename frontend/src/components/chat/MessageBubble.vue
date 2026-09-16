@@ -155,9 +155,17 @@ function copyContent() {
 <style scoped>
 .message-row {
   display: flex;
-  gap: 14px;
-  margin-bottom: 24px;
+  gap: clamp(0.625rem, 2vw, 0.875rem);
+  margin-bottom: clamp(1rem, 3vw, 1.5rem);
   width: 100%;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex: 0 0 32px;
+  overflow: hidden;
 }
 
 /* User & Assistant Flow (ChatGPT Style):

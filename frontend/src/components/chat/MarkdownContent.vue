@@ -47,14 +47,16 @@ markedInstance.use({
 `
     },
     table(token: any) {
+      const tableText = [...token.header, ...token.rows.flat()].map((cell: any) => cell.text || '').join(' ')
+      const direction = getTextDirection(tableText)
       const headerHtml = token.header
-        .map((cell: any) => `<th class="px-4 py-2.5 text-right md:text-start font-semibold text-foreground border-b border-border/50">${this.parser.parseInline(cell.tokens)}</th>`)
+        .map((cell: any) => `<th dir="${getTextDirection(cell.text)}" class="px-4 py-2.5 text-right md:text-start font-semibold text-foreground border-b border-border/50">${this.parser.parseInline(cell.tokens)}</th>`)
         .join('')
 
       const rowsHtml = token.rows
         .map((row: any, idx: number) => {
           const cellsHtml = row
-            .map((cell: any) => `<td class="px-4 py-2.5 text-foreground/90 border-b border-border/30">${this.parser.parseInline(cell.tokens)}</td>`)
+            .map((cell: any) => `<td dir="${getTextDirection(cell.text)}" class="px-4 py-2.5 text-foreground/90 border-b border-border/30">${this.parser.parseInline(cell.tokens)}</td>`)
             .join('')
           const rowBg = idx % 2 === 0 ? 'bg-card/40' : 'bg-muted/20'
           return `<tr class="${rowBg} hover:bg-muted/40 transition-colors">${cellsHtml}</tr>`
@@ -62,8 +64,8 @@ markedInstance.use({
         .join('')
 
       return `
-<div class="table-responsive my-4 overflow-x-auto rounded-xl border border-border/50 shadow-sm" dir="ltr">
-  <table class="markdown-table min-w-full border-collapse text-xs md:text-sm text-start">
+<div class="table-responsive my-4 overflow-x-auto rounded-xl border border-border/50 shadow-sm ${direction}" dir="${direction}">
+  <table class="markdown-table min-w-full border-collapse text-xs md:text-sm text-start" dir="${direction}">
     <thead class="bg-muted/60 border-b border-border/60">
       <tr>${headerHtml}</tr>
     </thead>
@@ -76,7 +78,7 @@ markedInstance.use({
     },
     heading({ tokens, depth }: { tokens: any[]; depth: number }) {
       const content = this.parser.parseInline(tokens)
-      const dir = getTextDirection(content)
+      const dir = getTextDirection(tokens.map((token: any) => token.text ?? token.raw ?? '').join(' '))
       const classesByDepth: Record<number, string> = {
         1: 'text-2xl font-bold mt-6 mb-3 pb-2 border-b border-border/50 text-foreground',
         2: 'text-xl font-bold mt-5 mb-2.5 pb-1.5 border-b border-border/40 text-foreground',
@@ -105,7 +107,7 @@ markedInstance.use({
     },
     paragraph({ tokens }: { tokens: any[] }) {
       const text = this.parser.parseInline(tokens)
-      const dir = getTextDirection(text)
+      const dir = getTextDirection(tokens.map((token: any) => token.text ?? token.raw ?? '').join(' '))
       return `<p class="leading-relaxed mb-3 last:mb-0 ${dir}" dir="${dir}">${text}</p>`
     },
     list(token: any) {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useChatStore } from '../../stores/chat'
 import { getTextDirection } from '../../utils/textDirection'
 import MessageBubble from './MessageBubble.vue'
@@ -9,38 +9,97 @@ import ThinkingIndicator from './ThinkingIndicator.vue'
 
 const chatStore = useChatStore()
 const containerRef = ref<HTMLElement | null>(null)
+const shouldAutoScroll = ref(true)
+const isUserScrolling = ref(false)
 const streamingDirection = computed(() => getTextDirection(chatStore.currentStreamingText))
 
-function scrollToBottom(smooth = true) {
-  nextTick(() => {
-    if (containerRef.value) {
-      if (!smooth) {
-        containerRef.value.scrollTop = containerRef.value.scrollHeight
-        return
-      }
+let scrollTimeout: ReturnType<typeof setTimeout> | undefined
 
-      containerRef.value.scrollTo({
-        top: containerRef.value.scrollHeight,
-        behavior: 'smooth'
-      })
+function isNearBottom(container: HTMLElement, threshold = 100): boolean {
+  const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+  return distanceFromBottom <= threshold
+}
+
+function handleUserInteraction() {
+  // کاربر شروع به اسکرول دستی کرد
+  isUserScrolling.value = true
+}
+
+function handleScroll() {
+  const container = containerRef.value
+  if (!container) return
+
+  // بعد از هر scroll event، بعد از 50ms چک کن که آیا کاربر نزدیک پایین است
+  if (scrollTimeout) {
+    clearTimeout(scrollTimeout)
+  }
+  
+  scrollTimeout = setTimeout(() => {
+    isUserScrolling.value = false
+    if (container) {
+      shouldAutoScroll.value = isNearBottom(container, 100)
     }
+  }, 50)
+}
+
+function scrollToBottom() {
+  nextTick(() => {
+    const container = containerRef.value
+    if (!container) return
+    container.scrollTop = container.scrollHeight
   })
 }
 
 watch(
-  () => [chatStore.messages.length, chatStore.isStreaming],
-  () => scrollToBottom(false),
+  () => [chatStore.messages.length, chatStore.currentStreamingText, chatStore.isStreaming],
+  (currentState, previousState) => {
+    const messagesChanged = currentState[0] !== previousState?.[0]
+    const streamingTextChanged = currentState[1] !== previousState?.[1]
+    const isCurrentlyStreaming = currentState[2]
+
+    // اگر پیام جدیدی اضافه شد، auto-scroll را فعال کن و به پایین برو
+    if (messagesChanged) {
+      shouldAutoScroll.value = true
+      isUserScrolling.value = false
+      scrollToBottom()
+      return
+    }
+
+    // در حین streaming فقط اگر shouldAutoScroll فعال و کاربر در حال اسکرول دستی نباشد
+    if (isCurrentlyStreaming && streamingTextChanged && shouldAutoScroll.value && !isUserScrolling.value) {
+      scrollToBottom()
+    }
+  },
   { flush: 'post' }
 )
 
 onMounted(() => {
-  scrollToBottom(false)
+  const container = containerRef.value
+  if (container) {
+    // تشخیص شروع اسکرول دستی
+    container.addEventListener('wheel', handleUserInteraction, { passive: true })
+    container.addEventListener('touchstart', handleUserInteraction, { passive: true })
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    scrollToBottom()
+  }
+})
+
+onBeforeUnmount(() => {
+  const container = containerRef.value
+  if (scrollTimeout) {
+    clearTimeout(scrollTimeout)
+  }
+  if (container) {
+    container.removeEventListener('wheel', handleUserInteraction)
+    container.removeEventListener('touchstart', handleUserInteraction)
+    container.removeEventListener('scroll', handleScroll)
+  }
 })
 </script>
 
 <template>
-  <div ref="containerRef" class="message-list-viewport flex-1 overflow-y-auto overflow-x-hidden flex flex-col py-6 scroll-smooth">
-    <div class="message-list-content w-full max-w-3xl lg:max-w-4xl mx-auto px-4 sm:px-6 md:px-8 flex flex-col">
+  <div ref="containerRef" class="message-list-viewport flex-1 overflow-y-auto overflow-x-hidden flex flex-col scroll-smooth">
+    <div class="chat-content-wrapper message-list-content flex flex-col">
       <!-- Empty State -->
       <EmptyState v-if="chatStore.messages.length === 0 && !chatStore.isStreaming" />
 
@@ -64,7 +123,7 @@ onMounted(() => {
           ]"
         >
           <!-- Assistant Avatar -->
-          <div class="avatar avatar-assistant w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-xs shadow-sm select-none mt-0.5">
+          <div class="avatar avatar-assistant streaming-avatar flex-shrink-0 flex items-center justify-center font-bold text-xs shadow-sm select-none mt-0.5">
             <svg class="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 2C6.477 2 2 6.477 2 12C2 17.523 6.477 22 12 22C17.523 22 22 17.523 22 12C22 6.477 17.523 2 12 2Z"/>
               <circle cx="9" cy="11" r="1.5" fill="currentColor"/>
@@ -99,36 +158,40 @@ onMounted(() => {
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  padding: 24px 0 16px;
+  padding-block: clamp(1rem, 3vw, 1.5rem) 1rem;
   scroll-behavior: auto;
 }
 
 .message-list-content {
   width: 100%;
-  margin: 0 auto;
   min-height: 100%;
-  padding-bottom: 48px;
+  padding-bottom: clamp(4rem, 6vw, 5rem);
 }
 
 .streaming-row {
   display: flex;
   width: 100%;
-  gap: 14px;
-  margin-bottom: 24px;
+  gap: clamp(0.625rem, 2vw, 0.875rem);
+  margin-bottom: clamp(1rem, 3vw, 1.5rem);
   animation: stream-enter 200ms ease-out;
 }
 
 .streaming-row-thinking {
-  margin-top: auto;
+  margin-top: 0;
 }
 
 @media (max-width: 767px) {
   .message-list-content {
-    padding-top: 58px; /* Clearance for floating mobile hamburger button */
+    padding-top: clamp(3.5rem, 12vw, 4.5rem); /* Keep messages below the hamburger */
   }
 }
 
 .avatar-assistant {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 50%;
+  overflow: hidden;
   background-color: var(--card);
   border: 1px solid var(--border);
 }

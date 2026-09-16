@@ -92,7 +92,7 @@ onUnmounted(() => {
 
 <template>
   <div class="composer-outer">
-    <div class="composer-container">
+    <div class="chat-content-wrapper composer-container">
       <div :class="['composer-card', { focused: isFocused }]">
         <textarea
           ref="textareaRef"
@@ -184,14 +184,11 @@ onUnmounted(() => {
 <style scoped>
 .composer-outer {
   width: 100%;
-  padding: 0 16px 16px;
+  padding: 0 0 16px;
   background: linear-gradient(180deg, transparent 0%, var(--background) 25%);
 }
 
 .composer-container {
-  width: 100%;
-  max-width: 672px;
-  margin: 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;

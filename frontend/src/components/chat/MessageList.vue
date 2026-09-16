@@ -133,9 +133,28 @@ watch(
       return
     }
 
+    // 2b. Streaming just started — reset auto-scroll so user sees the response
+    const wasStreaming = previousState?.[2] === true
+    if (isCurrentlyStreaming && !wasStreaming) {
+      shouldAutoScroll.value = true
+      isUserScrolling.value = false
+    }
+
     // 3. During streaming / thinking
-    if (isCurrentlyStreaming && (streamingTextChanged || isThinking) && shouldAutoScroll.value && !isUserScrolling.value) {
-      scrollToBottom(false)
+    if (isCurrentlyStreaming && (streamingTextChanged || isThinking)) {
+      // اگر کاربر دستی اسکرول نکرده، همیشه follow کن
+      if (!isUserScrolling.value) {
+        if (!shouldAutoScroll.value) {
+          // بررسی کن آیا واقعاً کاربر پایین است یا فقط flag اشتباه است
+          const container = containerRef.value
+          if (container && isNearBottom(container, 120)) {
+            shouldAutoScroll.value = true
+          }
+        }
+        if (shouldAutoScroll.value) {
+          scrollToBottom(false)
+        }
+      }
     }
   },
   { flush: 'post' }

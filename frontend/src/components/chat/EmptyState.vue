@@ -1,22 +1,48 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
-import { useChatStore } from '../../stores/chat'
+import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../../stores/auth'
 import { useThemeLogo } from '../../composables/useThemeLogo'
 
-const chatStore = useChatStore()
 const authStore = useAuthStore()
-
 const { activeLogo } = useThemeLogo()
 
-const userName = computed(() => {
-  return authStore.user?.displayName || authStore.user?.email?.split('@')[0] || ''
-})
+// Use the app's own locale (html[lang]) rather than the browser locale —
+// a user may have an English browser but still want Persian greetings,
+// and the app controls its own language via document.documentElement.lang.
+const currentLang = typeof document !== 'undefined' ? document.documentElement.lang : 'fa'
+const isPersian = currentLang.toLowerCase().startsWith('fa')
 
+const greetingsFa = [
+  'سلام {name}، شروع کنیم؟',
+  'سلام {name}، هر چیزی می‌خوای، اینجا بنویس!',
+  'سلام {name}، هرچه دل تنگت می‌خواهد، بگو!',
+  'سلام {name}، از کجا شروع کنیم؟',
+  'سلام {name}، چطور می‌تونم کمکت کنم؟',
+  'سلام {name}، چه کاری ازم ساخته‌ست؟'
+]
+
+const greetingsEn = [
+  "Hello {name}, let's get started!",
+  "Hello {name}, what's in your mind?",
+  "Hello {name}, shall we start?",
+  "Hello {name}, how can I help you?",
+  "Hello {name}, what can I help you with?"
+]
+
+// Pick once at setup so the random selection stays stable for the session.
+const randomGreeting = ref(
+  (isPersian ? greetingsFa : greetingsEn)[
+    Math.floor(Math.random() * (isPersian ? greetingsFa.length : greetingsEn.length))
+  ]
+)
+
+// {name} placeholder is filled reactively so it tracks the current user
+// without re-rolling the random pick.
 const fullGreeting = computed(() => {
-  return userName.value
-    ? `سلام ${userName.value} عزیز، چطور می‌توانم کمکتان کنم؟`
-    : 'سلام، چطور می‌توانم کمکتان کنم؟'
+  const name =
+    authStore.user?.displayName || authStore.user?.email?.split('@')[0]
+  const fallback = isPersian ? 'دوست من' : 'friend'
+  return randomGreeting.value.replace('{name}', name || fallback)
 })
 
 const displayedGreeting = ref('')
@@ -45,33 +71,6 @@ function typeGreeting() {
 onMounted(() => {
   typeGreeting()
 })
-
-watch(fullGreeting, () => {
-  typeGreeting()
-})
-
-const suggestions = [
-  {
-    title: 'نوشتن و بهینه‌سازی کدهای فرانت‌اند',
-    desc: 'تولید کدهای استاندارد Vue 3 با تایپ‌اسکریپت'
-  },
-  {
-    title: 'توضیح مفاهیم مهندسی نرم‌افزار',
-    desc: 'بررسی معماری‌های ماژولار و میکروسرویس'
-  },
-  {
-    title: 'ایده‌پردازی برای طراحی تجربه کاربری',
-    desc: 'ایجاد الگوهای تعاملی و پالت‌های رنگی مدرن'
-  },
-  {
-    title: 'طراحی قرارداد API و تست‌نویسی',
-    desc: 'طراحی تست‌های Vitest و ساختاردهی REST/SSE'
-  }
-]
-
-function handleSelect(prompt: { title: string; desc: string }) {
-  chatStore.sendMessage(prompt.title)
-}
 </script>
 
 <template>
@@ -84,30 +83,13 @@ function handleSelect(prompt: { title: string; desc: string }) {
       <span class="gradient-text">{{ displayedGreeting }}</span>
       <span class="typing-cursor" :class="{ 'is-blinking': !isTyping }">|</span>
     </h1>
-    <p class="subheadline">
-      پلتفرم گفتگوی هوشمند پروا با پشتیبانی از مدل‌های پیشرفته
-    </p>
-
-    <div class="suggestion-grid">
-      <button
-        v-for="(item, idx) in suggestions"
-        :key="idx"
-        class="suggestion-card"
-        @click="handleSelect(item)"
-      >
-        <span class="suggestion-title">
-          {{ item.title }}
-        </span>
-        <span class="suggestion-desc">
-          {{ item.desc }}
-        </span>
-      </button>
-    </div>
+    
   </div>
 </template>
 
 <style scoped>
 .empty-state {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;

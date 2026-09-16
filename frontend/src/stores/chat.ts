@@ -352,7 +352,8 @@ export const useChatStore = defineStore('chat', () => {
     try {
       const created = await chatService.createConversation(modelId, title)
       if (created && created.id) {
-        conversations.value.unshift(created)
+        // Don't add to conversations list yet — the chat only joins the sidebar
+        // when the assistant responds to the first message (see sendMessage).
         currentConversationId.value = created.id
         if (created.modelId) {
           modelsStore.selectModel(created.modelId)
@@ -370,7 +371,7 @@ export const useChatStore = defineStore('chat', () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
-    conversations.value.unshift(newConv)
+    // Same as above — keep the placeholder off the sidebar until a message is sent.
     currentConversationId.value = newConv.id
     messages.value = []
     return newConv.id
@@ -541,6 +542,20 @@ export const useChatStore = defineStore('chat', () => {
         s.currentStreamingText += token
         convStreamStates.value.set(convId, { ...s })
         resetWatchdog(convId, 25000)
+
+        // First token from the assistant means the conversation is real now —
+        // add it to the sidebar so the user can find it again later. Until the
+        // model responds, the chat stays off the list (see createNewConversation).
+        if (!conversations.value.find((c) => c.id === convId)) {
+          const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
+          conversations.value.unshift({
+            id: convId,
+            title: content.slice(0, 30),
+            modelId,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          })
+        }
       },
       (messageId: string) => {
         clearWatchdog(convId)

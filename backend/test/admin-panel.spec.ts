@@ -167,13 +167,14 @@ describe('Admin Panel Suite', () => {
       }),
     };
 
-    const fakeUsers = [
+    const fakeUsers: any[] = [
       {
         id: 'admin-id',
         email: 'admin@test.com',
         displayName: 'Admin User',
         username: 'admin',
         role: 'admin',
+        isActive: true,
         avatarUrl: null,
         usedTokens: 150,
         conversationsCount: 2,
@@ -185,6 +186,7 @@ describe('Admin Panel Suite', () => {
         displayName: 'Regular User',
         username: 'user1',
         role: 'user',
+        isActive: true,
         avatarUrl: null,
         usedTokens: 800,
         conversationsCount: 5,
@@ -198,6 +200,12 @@ describe('Admin Panel Suite', () => {
         const u = fakeUsers.find((x) => x.id === id);
         if (!u) throw new NotFoundException('User not found');
         Object.assign(u, dto);
+        return u;
+      },
+      updateStatusByAdmin: async (id: string, isActive: boolean) => {
+        const u = fakeUsers.find((x) => x.id === id);
+        if (!u) throw new NotFoundException('User not found');
+        u.isActive = isActive;
         return u;
       },
       deleteByAdmin: async (id: string) => {
@@ -330,6 +338,18 @@ describe('Admin Panel Suite', () => {
         .send({ role: 'admin', usedTokens: 0 });
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
+    });
+
+    it('PATCH /admin/users/:id/status disables a user without deleting them', async () => {
+      currentUserRole = 'admin';
+      const res = await request(app.getHttpServer())
+        .patch('/admin/users/user-id/status')
+        .set('Authorization', 'Bearer token')
+        .send({ isActive: false });
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toMatchObject({ id: 'user-id', isActive: false });
+      expect(fakeUsers.some((user) => user.id === 'user-id')).toBe(true);
     });
 
     it('DELETE /admin/users/:id prevents self-deletion and deletes other users', async () => {

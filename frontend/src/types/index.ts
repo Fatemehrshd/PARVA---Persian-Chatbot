@@ -13,6 +13,7 @@ export interface User {
   username?: string | null
   avatarUrl?: string | null
   role: 'user' | 'admin'
+  isActive?: boolean
   createdAt?: string
 }
 
@@ -136,6 +137,31 @@ export interface UpdateProviderRequest {
   baseUrl?: string
   apiKey?: string
   isActive?: boolean
+}
+
+export interface AdminDashboardStats {
+  totalUsers: number
+  totalModels: number
+  activeModels: number
+  totalProviders: number
+  activeProviders: number
+  totalConversations: number
+  totalMessages: number
+  totalTokensUsed: number
+  globalTokenLimit: number
+  systemPrompt: string
+}
+
+export interface AdminUser extends User {
+  usedTokens: number
+  conversationsCount: number
+}
+
+export interface UpdateAdminUserRequest {
+  role?: 'user' | 'admin'
+  displayName?: string
+  email?: string
+  usedTokens?: number
 }
 
 // ========================

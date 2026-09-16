@@ -14,6 +14,7 @@ export class User {
   @Column({ nullable: true }) avatarKey?: string;
   @Column({ default: 0 }) usedTokens: number;
   @Column({ default: 'user' }) role: string;
+  @Column({ default: true }) isActive: boolean;
   @CreateDateColumn() createdAt: Date;
   @OneToMany(() => Conversation, (c) => c.user) conversations: Conversation[];
 }

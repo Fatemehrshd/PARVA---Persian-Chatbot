@@ -392,14 +392,7 @@ const userInitial = computed(() => {
       <!-- Profile (collapsed) -->
       <div class="sb-collapsed-profile flex flex-col gap-2 items-center" v-if="authStore.isAuthenticated">
         <!-- Direct Admin Icon Link (collapsed) -->
-        <router-link
-          v-if="authStore.isAdmin"
-          to="/admin/models"
-          class="sb-icon-btn sb-icon-btn--lg sb-admin-icon-btn"
-          title="ورود به پنل ادمین"
-        >
-          <ShieldCheck :size="17" class="text-amber-500" />
-        </router-link>
+        
         <!-- Profile popup (positioned to the left of icon in RTL) -->
         <div v-if="profileMenuOpen" class="sb-collapsed-menu-wrapper">
           <ProfileMenu

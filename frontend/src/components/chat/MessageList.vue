@@ -244,7 +244,7 @@ onBeforeUnmount(() => {
               >
                 <div v-if="chatStore.currentStreamingText" class="message-text relative">
                   <MarkdownContent :content="chatStore.currentStreamingText" :streaming="true" />
-                  <span class="streaming-cursor"></span>
+                  
                 </div>
                 <ThinkingIndicator v-else />
               </div>
@@ -336,17 +336,6 @@ onBeforeUnmount(() => {
   padding: 4px 0 !important;
   border-radius: 0 !important;
   word-break: break-word;
-}
-
-.streaming-cursor {
-  display: inline-block;
-  width: 7px;
-  height: 15px;
-  background-color: var(--primary);
-  margin-inline-start: 4px;
-  vertical-align: text-bottom;
-  animation: blink 0.8s infinite;
-  border-radius: 2px;
 }
 
 .scroll-to-bottom-btn {

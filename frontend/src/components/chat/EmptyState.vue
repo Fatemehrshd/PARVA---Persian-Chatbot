@@ -81,7 +81,6 @@ onMounted(() => {
 
     <h1 class="headline">
       <span class="gradient-text">{{ displayedGreeting }}</span>
-      <span class="typing-cursor" :class="{ 'is-blinking': !isTyping }">|</span>
     </h1>
     
   </div>
@@ -134,10 +133,6 @@ onMounted(() => {
   display: inline-block;
   margin-inline-start: 2px;
   animation: blink 0.7s infinite;
-}
-
-.typing-cursor.is-blinking {
-  animation: blink 1.1s infinite;
 }
 
 @keyframes blink {

@@ -191,3 +191,9 @@
 - **Verification**:
   - 100% test pass rate: **109 backend tests** (15 test suites) + **82 frontend tests** (17 test suites, including new unit tests in `MarkdownContent.spec.ts`) — 191/191 total passing tests.
   - Production build (`vue-tsc -b && vite build`) compiles with zero errors.
+
+## Task 23: Responsive Admin Console (Frontend)
+- Replaced the model-only admin screen with a theme-aware admin console while preserving `/admin/models`.
+- Added a responsive sidebar with Dashboard, Providers, Models, and Users & Usage sections plus a mobile drawer.
+- Connected dashboard statistics, provider CRUD/status/default actions, model CRUD/status/default actions, and user token usage/status to the existing API contract.
+- Added typed frontend admin services and regression coverage for navigation, filtering, model creation, and loading states.

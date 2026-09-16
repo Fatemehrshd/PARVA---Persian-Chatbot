@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import { useUiStore } from '../../stores/ui'
 import { useModelsStore } from '../../stores/models'
 import { useFormSubmit } from '../../composables/useFormSubmit'
+import BaseButton from '../ui/BaseButton.vue'
+import BaseToggle from '../ui/BaseToggle.vue'
 
 const uiStore = useUiStore()
 const modelsStore = useModelsStore()
@@ -56,6 +58,14 @@ async function handleMakeDefault(id: string) {
   }
 }
 
+async function handleToggleActive(id: string, currentStatus: boolean) {
+  try {
+    await modelsStore.toggleModelStatus(id, !currentStatus)
+  } catch (err: any) {
+    uiStore.showToast(err?.message || 'خطا در تغییر وضعیت مدل', 'error')
+  }
+}
+
 async function handleDelete(id: string) {
   try {
     await modelsStore.removeModel(id)
@@ -105,35 +115,43 @@ async function handleDelete(id: string) {
           </div>
 
           <div class="model-actions">
-            <button
+            <BaseToggle 
+              :model-value="model.isActive" 
+              size="sm"
+              @update:model-value="handleToggleActive(model.id, model.isActive)"
+            />
+            <BaseButton
               v-if="!model.isDefault"
-              class="action-btn text-btn"
+              variant="ghost"
+              size="sm"
               @click="handleMakeDefault(model.id)"
             >
-              {{ uiStore.direction === 'rtl' ? 'انتخاب به عنوان پیش‌فرض' : 'Set Default' }}
-            </button>
-            <button
-              class="action-btn delete-btn"
-              @click="handleDelete(model.id)"
+              {{ uiStore.direction === 'rtl' ? 'پیش‌فرض' : 'Set Default' }}
+            </BaseButton>
+            <BaseButton
+              variant="danger"
+              size="sm"
+              icon
               :title="uiStore.direction === 'rtl' ? 'حذف مدل' : 'Delete model'"
+              @click="handleDelete(model.id)"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
               </svg>
-            </button>
+            </BaseButton>
           </div>
         </div>
       </div>
 
       <!-- Add Model Form Toggle -->
       <div v-if="!isAdding" class="add-section-toggle">
-        <button class="add-toggle-btn" @click="isAdding = true">
+        <BaseButton variant="secondary" size="md" @click="isAdding = true">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
           <span>{{ uiStore.direction === 'rtl' ? 'افزودن مدل جدید' : 'Add New Model' }}</span>
-        </button>
+        </BaseButton>
       </div>
 
       <!-- Add Model Form -->
@@ -199,47 +217,47 @@ async function handleDelete(id: string) {
         </div>
         <div class="form-actions flex items-center justify-between w-full">
           <template v-if="uiStore.direction === 'rtl'">
-            <button type="submit" class="confirm-btn flex items-center gap-1.5" :disabled="isRegisteringModel">
-              <svg
-                v-if="isRegisteringModel"
-                class="animate-spin h-3.5 w-3.5 text-current inline-block"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span>
-                {{ isRegisteringModel ? 'در حال ثبت...' : 'ثبت مدل' }}
-              </span>
-            </button>
+            <BaseButton 
+              variant="primary" 
+              size="md" 
+              type="submit" 
+              :loading="isRegisteringModel" 
+              :disabled="isRegisteringModel"
+            >
+              {{ isRegisteringModel ? 'در حال ثبت...' : 'ثبت مدل' }}
+            </BaseButton>
 
-            <button type="button" class="cancel-btn" :disabled="isRegisteringModel" @click="isAdding = false">
+            <BaseButton 
+              variant="ghost" 
+              size="md" 
+              type="button" 
+              :disabled="isRegisteringModel" 
+              @click="isAdding = false"
+            >
               انصراف
-            </button>
+            </BaseButton>
           </template>
 
           <template v-else>
-            <button type="button" class="cancel-btn" :disabled="isRegisteringModel" @click="isAdding = false">
+            <BaseButton 
+              variant="ghost" 
+              size="md" 
+              type="button" 
+              :disabled="isRegisteringModel" 
+              @click="isAdding = false"
+            >
               Cancel
-            </button>
+            </BaseButton>
 
-            <button type="submit" class="confirm-btn flex items-center gap-1.5" :disabled="isRegisteringModel">
-              <svg
-                v-if="isRegisteringModel"
-                class="animate-spin h-3.5 w-3.5 text-current inline-block"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span>
-                {{ isRegisteringModel ? 'Adding...' : 'Add Model' }}
-              </span>
-            </button>
+            <BaseButton 
+              variant="primary" 
+              size="md" 
+              type="submit" 
+              :loading="isRegisteringModel" 
+              :disabled="isRegisteringModel"
+            >
+              {{ isRegisteringModel ? 'Adding...' : 'Add Model' }}
+            </BaseButton>
           </template>
         </div>
       </form>
@@ -269,10 +287,10 @@ async function handleDelete(id: string) {
 
 .modal-card {
   width: 100%;
-  max-width: 560px;
+  max-width: 580px;
   background-color: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: 12px;
   padding: 24px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
 }
@@ -307,8 +325,15 @@ async function handleDelete(id: string) {
 
 .close-btn {
   color: var(--muted-foreground);
-  padding: 4px;
-  border-radius: var(--radius-sm);
+  padding: 6px;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .close-btn:hover {
@@ -319,32 +344,42 @@ async function handleDelete(id: string) {
 .models-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   max-height: 280px;
   overflow-y: auto;
   margin-bottom: 16px;
+  padding-inline-end: 4px;
 }
 
 .model-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  gap: 12px;
+  padding: 12px 14px;
   background-color: var(--secondary);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 10px;
+  transition: background-color 0.15s ease;
+}
+
+.model-row:hover {
+  background-color: color-mix(in srgb, var(--secondary) 80%, var(--foreground));
 }
 
 .model-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
 }
 
 .model-name-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .model-name {
@@ -355,7 +390,7 @@ async function handleDelete(id: string) {
 
 .default-badge {
   font-size: 10px;
-  padding: 1px 6px;
+  padding: 2px 6px;
   border-radius: 4px;
   background-color: rgba(124, 106, 247, 0.15);
   color: var(--primary);
@@ -368,6 +403,7 @@ async function handleDelete(id: string) {
   gap: 8px;
   font-size: 11px;
   color: var(--muted-foreground);
+  flex-wrap: wrap;
 }
 
 .provider-tag {
@@ -378,65 +414,20 @@ async function handleDelete(id: string) {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.action-btn {
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-}
-
-.text-btn {
-  background-color: var(--card);
-  color: var(--secondary-foreground);
-  border: 1px solid var(--border);
-}
-
-.text-btn:hover {
-  color: var(--foreground);
-  border-color: var(--muted-foreground);
-}
-
-.delete-btn {
-  color: var(--muted-foreground);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-}
-
-.delete-btn:hover {
-  color: #ef4444;
-  background-color: rgba(239, 68, 68, 0.1);
+  flex-shrink: 0;
 }
 
 .add-section-toggle {
   display: flex;
   justify-content: flex-end;
-}
-
-.add-toggle-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background-color: var(--secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  color: var(--foreground);
-}
-
-.add-toggle-btn:hover {
-  border-color: var(--primary);
+  margin-bottom: 16px;
 }
 
 .add-model-form {
   margin-top: 16px;
   padding: 16px;
   background-color: var(--secondary);
-  border-radius: var(--radius);
+  border-radius: 10px;
   border: 1px solid var(--border);
 }
 
@@ -470,8 +461,18 @@ async function handleDelete(id: string) {
 
 .form-input {
   width: 100%;
-  padding: 6px 10px;
+  padding: 8px 10px;
   font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  color: var(--foreground);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.form-input:focus {
+  border-color: var(--primary);
 }
 
 .form-actions {
@@ -480,21 +481,6 @@ async function handleDelete(id: string) {
   justify-content: space-between;
   width: 100%;
   gap: 8px;
-}
-
-.cancel-btn {
-  padding: 6px 12px;
-  font-size: 12px;
-  color: var(--muted-foreground);
-}
-
-.confirm-btn {
-  padding: 6px 14px;
-  background-color: var(--primary);
-  color: var(--primary-foreground);
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  font-weight: 500;
 }
 
 .modal-footer-nav {
@@ -515,5 +501,35 @@ async function handleDelete(id: string) {
 .full-page-nav-link:hover {
   text-decoration: underline;
   opacity: 0.9;
+}
+
+@media (max-width: 640px) {
+  .modal-card {
+    max-width: 100%;
+    padding: 18px;
+  }
+
+  .models-list {
+    max-height: 240px;
+  }
+
+  .model-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .model-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .span-2 {
+    grid-column: span 1;
+  }
 }
 </style>

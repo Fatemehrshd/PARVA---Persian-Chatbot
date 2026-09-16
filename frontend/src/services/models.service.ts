@@ -34,6 +34,13 @@ export const modelsService = {
     })
   },
 
+  async updateModel(modelId: string, data: Partial<CreateModelRequest>): Promise<Model> {
+    return request<Model>(`/admin/models/${modelId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    })
+  },
+
   /**
    * Remove an existing AI model from the platform (admin only).
    * DELETE /admin/models/{modelId}

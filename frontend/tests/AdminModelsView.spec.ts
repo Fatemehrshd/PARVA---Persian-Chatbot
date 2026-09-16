@@ -27,6 +27,21 @@ describe('AdminModelsView.vue (Dashboard)', () => {
     expect(wrapper.findAll('.metric-card').length).toBe(4)
   })
 
+  it('renders admin navigation and switches to the users view', async () => {
+    const wrapper = mount(AdminModelsView)
+
+    expect(wrapper.find('.admin-sidebar').exists()).toBe(true)
+    expect(wrapper.find('[data-admin-section="dashboard"]').exists()).toBe(true)
+    expect(wrapper.find('[data-admin-section="providers"]').exists()).toBe(true)
+    expect(wrapper.find('[data-admin-section="models"]').exists()).toBe(true)
+    expect(wrapper.find('[data-admin-section="users"]').exists()).toBe(true)
+
+    await wrapper.find('[data-admin-section="users"]').trigger('click')
+
+    expect(wrapper.find('.users-panel').exists()).toBe(true)
+    expect(wrapper.text()).toContain('کاربران')
+  })
+
   it('filters models using the search box', async () => {
     const wrapper = mount(AdminModelsView)
 

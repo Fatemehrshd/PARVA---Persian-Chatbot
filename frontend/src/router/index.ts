@@ -34,6 +34,11 @@ const router = createRouter({
       meta: { guestOnly: true }
     },
     {
+      path: '/admin',
+      redirect: '/admin/models',
+      meta: { requiresAuth: true, requiresAdmin: true }
+    },
+    {
       path: '/admin/models',
       name: 'admin-models',
       component: () => import('../views/AdminModelsView.vue'),

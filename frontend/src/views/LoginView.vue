@@ -11,7 +11,6 @@ import { Label } from '@/components/ui/label'
 
 import { useFormSubmit } from '../composables/useFormSubmit'
 import { useThemeLogo } from '../composables/useThemeLogo'
-import GrokAurora from '@/components/ui/GrokAurora.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()

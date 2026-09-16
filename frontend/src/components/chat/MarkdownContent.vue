@@ -92,7 +92,10 @@ markedInstance.use({
     },
     blockquote({ tokens }: { tokens: any[] }) {
       const content = this.parser.parse(tokens)
-      return `<blockquote class="my-3 py-1.5 px-4 rounded-r-lg border-s-4 border-primary bg-muted/30 text-muted-foreground italic">${content}</blockquote>`
+      const quoteText = tokens.map((t: any) => t.text ?? t.raw ?? '').join(' ')
+      const dir = getTextDirection(quoteText)
+      const borderClass = dir === 'rtl' ? 'border-r-4 rounded-l-lg' : 'border-l-4 rounded-r-lg'
+      return `<blockquote class="my-3 py-1.5 px-4 ${borderClass} border-primary bg-muted/30 text-muted-foreground italic ${dir}" dir="${dir}">${content}</blockquote>`
     },
     codespan({ text }: { text: string }) {
       return `<code class="inline-code font-mono text-[12.5px] px-1.5 py-0.5 rounded-md bg-secondary/80 text-primary-foreground/90 border border-border/40 font-medium" dir="ltr">${escapeHtml(text)}</code>`
@@ -107,7 +110,20 @@ markedInstance.use({
     },
     paragraph({ tokens }: { tokens: any[] }) {
       const text = this.parser.parseInline(tokens)
-      const dir = getTextDirection(tokens.map((token: any) => token.text ?? token.raw ?? '').join(' '))
+      const fullText = tokens.map((token: any) => token.text ?? token.raw ?? '').join(' ')
+      const dir = getTextDirection(fullText)
+
+      // If paragraph contains hard linebreaks (<br>), break into directional lines
+      if (text.includes('<br')) {
+        const lines = text.split(/<br\s*\/?>/i)
+        const linesHtml = lines.map(line => {
+          const raw = line.replace(/<[^>]+>/g, '')
+          const lineDir = getTextDirection(raw, dir)
+          return `<span class="block ${lineDir}" dir="${lineDir}">${line}</span>`
+        }).join('')
+        return `<p class="leading-relaxed mb-3 last:mb-0">${linesHtml}</p>`
+      }
+
       return `<p class="leading-relaxed mb-3 last:mb-0 ${dir}" dir="${dir}">${text}</p>`
     },
     list(token: any) {
@@ -128,7 +144,9 @@ markedInstance.use({
       } else {
         itemBody = this.parser.parse(item.tokens)
       }
-      return `<li class="my-1">${itemBody}</li>`
+      const itemRawText = item.tokens ? item.tokens.map((token: any) => token.text ?? token.raw ?? '').join(' ') : ''
+      const dir = getTextDirection(itemRawText)
+      return `<li class="my-1 ${dir}" dir="${dir}">${itemBody}</li>`
     }
   }
 })
@@ -235,21 +253,51 @@ onBeforeUnmount(() => {
   border-color: var(--border);
 }
 
-/* Persian BiDi rules */
-.markdown-content p.rtl,
-.markdown-content h1.rtl,
-.markdown-content h2.rtl,
-.markdown-content h3.rtl,
-.markdown-content h4.rtl {
+/* BiDi directional rules for markdown elements */
+.markdown-content .rtl,
+.markdown-content [dir="rtl"] {
   text-align: right;
   direction: rtl;
 }
 
-.markdown-content p.ltr,
-.markdown-content h1.ltr,
-.markdown-content h2.ltr,
-.markdown-content h3.ltr,
-.markdown-content h4.ltr {
+.markdown-content .ltr,
+.markdown-content [dir="ltr"] {
+  text-align: left;
+  direction: ltr;
+}
+
+.markdown-content li.rtl,
+.markdown-content li[dir="rtl"] {
+  text-align: right;
+  direction: rtl;
+}
+
+.markdown-content li.ltr,
+.markdown-content li[dir="ltr"] {
+  text-align: left;
+  direction: ltr;
+}
+
+.markdown-content blockquote.rtl,
+.markdown-content blockquote[dir="rtl"] {
+  text-align: right;
+  direction: rtl;
+}
+
+.markdown-content blockquote.ltr,
+.markdown-content blockquote[dir="ltr"] {
+  text-align: left;
+  direction: ltr;
+}
+
+.markdown-content th[dir="rtl"],
+.markdown-content td[dir="rtl"] {
+  text-align: right;
+  direction: rtl;
+}
+
+.markdown-content th[dir="ltr"],
+.markdown-content td[dir="ltr"] {
   text-align: left;
   direction: ltr;
 }

@@ -3,8 +3,7 @@ import { computed, ref } from 'vue'
 import type { Message } from '../../types'
 import { useAuthStore } from '../../stores/auth'
 import { useChatStore } from '../../stores/chat'
-import { useUiStore } from '../../stores/ui'
-import { getTextDirection } from '../../utils/textDirection'
+import { getTextDirection, getLineDirection } from '../../utils/textDirection'
 import MarkdownContent from './MarkdownContent.vue'
 
 const props = defineProps<{
@@ -14,11 +13,15 @@ const props = defineProps<{
 
 const authStore = useAuthStore()
 const chatStore = useChatStore()
-const uiStore = useUiStore()
 const copied = ref(false)
 
 const isUser = computed(() => props.message.role === 'user')
 const textDirection = computed(() => getTextDirection(props.message.content))
+
+const userMessageLines = computed(() => {
+  if (!props.message.content) return []
+  return props.message.content.split('\n')
+})
 
 const formattedTime = computed(() => {
   if (!props.message.createdAt) return ''
@@ -95,9 +98,16 @@ function copyContent() {
         ]"
         :dir="textDirection"
       >
-        <!-- User: Plain text with proper line breaks -->
-        <div v-if="isUser" class="message-text whitespace-pre-wrap leading-relaxed text-[14px] md:text-[15px]">
-          {{ message.content }}
+        <!-- User: Plain text with per-line hybrid directional alignment -->
+        <div v-if="isUser" class="message-text leading-relaxed text-[14px] md:text-[15px] space-y-0.5">
+          <div
+            v-for="(line, idx) in userMessageLines"
+            :key="idx"
+            :dir="getLineDirection(line, textDirection)"
+            :class="['user-msg-line', getLineDirection(line, textDirection)]"
+          >
+            {{ line || '\u00A0' }}
+          </div>
         </div>
 
         <!-- Assistant: Rich Markdown -->
@@ -210,6 +220,19 @@ function copyContent() {
 
 .bubble.ltr,
 .bubble[dir="ltr"] {
+  text-align: left;
+  direction: ltr;
+}
+
+/* Hybrid per-line alignment for user messages */
+.user-msg-line.rtl,
+.user-msg-line[dir="rtl"] {
+  text-align: right;
+  direction: rtl;
+}
+
+.user-msg-line.ltr,
+.user-msg-line[dir="ltr"] {
   text-align: left;
   direction: ltr;
 }

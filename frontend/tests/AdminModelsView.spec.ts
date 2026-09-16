@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import AdminModelsView from '../src/views/AdminModelsView.vue'
 import { useModelsStore } from '../src/stores/models'
@@ -22,22 +22,50 @@ describe('AdminModelsView.vue (Dashboard)', () => {
     const wrapper = mount(AdminModelsView)
 
     // Check dashboard header
-    expect(wrapper.text()).toContain('مدیریت مدل‌های هوش مصنوعی')
+    expect(wrapper.text()).toContain('ADMIN')
     expect(wrapper.find('.dashboard-table').exists()).toBe(true)
     expect(wrapper.findAll('.metric-card').length).toBe(4)
   })
 
-  it('filters models using the search box', async () => {
+  it('renders admin navigation and switches to the users view', async () => {
     const wrapper = mount(AdminModelsView)
+
+    expect(wrapper.find('.admin-sidebar').exists()).toBe(true)
+    expect(wrapper.find('[data-admin-section="dashboard"]').exists()).toBe(true)
+    expect(wrapper.find('[data-admin-section="providers"]').exists()).toBe(true)
+    expect(wrapper.find('[data-admin-section="models"]').exists()).toBe(true)
+    expect(wrapper.find('[data-admin-section="users"]').exists()).toBe(true)
+    expect(wrapper.find('[data-admin-section="prompts"]').exists()).toBe(true)
+    expect(wrapper.find('[data-admin-section="chats"]').exists()).toBe(true)
+
+    await wrapper.find('[data-admin-section="users"]').trigger('click')
+
+    expect(wrapper.find('.users-panel').exists()).toBe(true)
+    expect(wrapper.text()).toContain('کاربران')
+  })
+
+  it('filters models using the search box with 3s debounce and confirms no search on dashboard', async () => {
+    const wrapper = mount(AdminModelsView)
+
+    // Search bar is removed from Dashboard per user request
+    expect(wrapper.find('.search-input').exists()).toBe(false)
+
+    // Switch to models section where search is available
+    await wrapper.find('[data-admin-section="models"]').trigger('click')
 
     const searchInput = wrapper.find('.search-input')
     expect(searchInput.exists()).toBe(true)
 
+    vi.useFakeTimers()
     await searchInput.setValue('gpt')
+    vi.advanceTimersByTime(3000)
+    await wrapper.vm.$nextTick()
+
     // Table rows should filter to gpt models
     const rows = wrapper.findAll('.dashboard-table tbody tr.table-row')
     expect(rows.length).toBeGreaterThanOrEqual(1)
     expect(rows[0].text().toLowerCase()).toContain('gpt')
+    vi.useRealTimers()
   })
 
   it('can toggle the new model registration form', async () => {
@@ -92,8 +120,7 @@ describe('AdminModelsView.vue (Dashboard)', () => {
     // Finish adding model
     resolveAddModel()
     await addModelPromise
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
+    await flushPromises()
 
     // Form is closed on success
     expect(wrapper.find('form').exists()).toBe(false)

@@ -158,5 +158,34 @@ describe('MessageBubble.vue', () => {
     expect(wrapper.find('.retry-bubble-btn').exists()).toBe(false)
     expect(wrapper.find('.bubble').classes()).toContain('border-destructive/50')
   })
+
+  it('renders mixed/hybrid multi-line user message with independent direction per line', () => {
+    const hybridMessage: Message = {
+      id: 'm-hybrid-1',
+      conversationId: 'c-1',
+      role: 'user',
+      content: 'Line 1 in English\nخط دوم به زبان فارسی\nLine 3 in English again',
+      createdAt: new Date().toISOString()
+    }
+
+    const wrapper = mount(MessageBubble, {
+      props: { message: hybridMessage }
+    })
+
+    const lines = wrapper.findAll('.user-msg-line')
+    expect(lines.length).toBe(3)
+
+    // Line 1: English -> ltr
+    expect(lines[0].attributes('dir')).toBe('ltr')
+    expect(lines[0].classes()).toContain('ltr')
+
+    // Line 2: Persian -> rtl
+    expect(lines[1].attributes('dir')).toBe('rtl')
+    expect(lines[1].classes()).toContain('rtl')
+
+    // Line 3: English -> ltr
+    expect(lines[2].attributes('dir')).toBe('ltr')
+    expect(lines[2].classes()).toContain('ltr')
+  })
 })
 

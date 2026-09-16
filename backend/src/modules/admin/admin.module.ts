@@ -10,6 +10,7 @@ import { SettingsService } from './settings.service';
 import { AdminSettingsController } from './admin-settings.controller';
 import { AdminUsersController } from './admin-users.controller';
 import { AdminDashboardController } from './admin-dashboard.controller';
+import { AdminConversationsController } from './admin-conversations.controller';
 import { UsersModule } from '../users/users.module';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
@@ -32,6 +33,7 @@ import { AdminGuard } from '../../shared/admin.guard';
     AdminSettingsController,
     AdminUsersController,
     AdminDashboardController,
+    AdminConversationsController,
   ],
   providers: [SettingsService, JwtAuthGuard, AdminGuard],
   exports: [SettingsService],

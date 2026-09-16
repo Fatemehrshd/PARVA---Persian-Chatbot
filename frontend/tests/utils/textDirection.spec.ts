@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getTextDirection } from '../../src/utils/textDirection'
+import { getTextDirection, getActiveTypingDirection, getLineDirection } from '../../src/utils/textDirection'
 
 describe('getTextDirection utility', () => {
   it('detects Persian text as rtl', () => {
@@ -44,3 +44,46 @@ describe('getTextDirection utility', () => {
   })
 })
 
+describe('getActiveTypingDirection utility (hybrid real-time input direction)', () => {
+  it('defaults to rtl for empty or whitespace text', () => {
+    expect(getActiveTypingDirection('')).toBe('rtl')
+    expect(getActiveTypingDirection('   ')).toBe('rtl')
+    expect(getActiveTypingDirection(null)).toBe('rtl')
+    expect(getActiveTypingDirection(undefined)).toBe('rtl')
+  })
+
+  it('correctly sets direction to ltr for pure English and rtl whenever Persian is present (mixed or pure)', () => {
+    // 1. User types English: "H" -> goes left (ltr)
+    expect(getActiveTypingDirection('H', 1)).toBe('ltr')
+    // User types "Hello " -> stays left (ltr)
+    expect(getActiveTypingDirection('Hello ', 6)).toBe('ltr')
+
+    // 2. User then types Persian character: "س" -> flips right (rtl)
+    expect(getActiveTypingDirection('Hello س', 7)).toBe('rtl')
+    // User types "Hello سلام " -> stays right (rtl)
+    expect(getActiveTypingDirection('Hello سلام ', 11)).toBe('rtl')
+
+    // 3. User then types English word alongside Persian -> MUST stay right (rtl) per rule
+    expect(getActiveTypingDirection('Hello سلام w', 12)).toBe('rtl')
+    expect(getActiveTypingDirection('Hello سلام world', 16)).toBe('rtl')
+
+    // 4. Persian mixed with English code/terms
+    expect(getActiveTypingDirection('این ارور چیه: TypeError: undefined', 30)).toBe('rtl')
+    expect(getActiveTypingDirection('React یک کتابخانه جاوااسکریپت است', 15)).toBe('rtl')
+  })
+
+  it('keeps rtl direction when multi-line text contains Persian', () => {
+    const text = 'Line one in English\nخط دوم به فارسی\nLine three in English'
+
+    // Contains Persian -> always rtl in input
+    expect(getActiveTypingDirection(text, 10)).toBe('rtl')
+    expect(getActiveTypingDirection(text, 25)).toBe('rtl')
+    expect(getActiveTypingDirection(text, 45)).toBe('rtl')
+  })
+
+  it('determines line direction with getLineDirection', () => {
+    expect(getLineDirection('یک خط کاملاً فارسی')).toBe('rtl')
+    expect(getLineDirection('An entirely English line')).toBe('ltr')
+    expect(getLineDirection('')).toBe('rtl')
+  })
+})

@@ -2,8 +2,6 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  PanelLeftClose,
-  PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
   Search,
@@ -15,8 +13,7 @@ import {
   ChevronUp,
   LogIn,
   Settings,
-  Moon,
-  Sun,
+  ShieldCheck,
 } from '@lucide/vue'
 import { useUiStore } from '../../stores/ui'
 import { useChatStore } from '../../stores/chat'
@@ -147,8 +144,8 @@ function openProfile() {
 }
 
 function openAdminPanel() {
-  uiStore.openAdminModels()
   profileMenuOpen.value = false
+  router.push('/admin/models')
 }
 
 function openLogoutModal() {
@@ -284,6 +281,18 @@ const userInitial = computed(() => {
       
 
         <template v-if="authStore.isAuthenticated">
+          <!-- Direct Admin Panel Link (Admin Only) -->
+          <router-link
+            v-if="authStore.isAdmin"
+            to="/admin/models"
+            class="sb-admin-direct-link"
+            title="ورود به پنل مدیریت مدل‌ها و کاربران"
+          >
+            <ShieldCheck :size="15" class="text-amber-500 flex-shrink-0" />
+            <span class="sb-admin-link-text">پنل ادمین</span>
+            <span class="sb-admin-badge font-mono">ADMIN</span>
+          </router-link>
+
           <!-- Profile popup menu -->
           <ProfileMenu
             v-if="profileMenuOpen"
@@ -391,7 +400,16 @@ const userInitial = computed(() => {
       </button>
 
       <!-- Profile (collapsed) -->
-      <div class="sb-collapsed-profile" v-if="authStore.isAuthenticated">
+      <div class="sb-collapsed-profile flex flex-col gap-2 items-center" v-if="authStore.isAuthenticated">
+        <!-- Direct Admin Icon Link (collapsed) -->
+        <router-link
+          v-if="authStore.isAdmin"
+          to="/admin/models"
+          class="sb-icon-btn sb-icon-btn--lg sb-admin-icon-btn"
+          title="ورود به پنل ادمین"
+        >
+          <ShieldCheck :size="17" class="text-amber-500" />
+        </router-link>
         <!-- Profile popup (positioned to the left of icon in RTL) -->
         <div v-if="profileMenuOpen" class="sb-collapsed-menu-wrapper">
           <ProfileMenu
@@ -1043,6 +1061,55 @@ const userInitial = computed(() => {
 @keyframes stream-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%       { opacity: 0.4; transform: scale(0.75); }
+}
+
+/* ════════════════════════════════════════
+   ADMIN DIRECT LINK
+════════════════════════════════════════ */
+.sb-admin-direct-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  margin-bottom: 6px;
+  border-radius: 9px;
+  background-color: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 150ms ease;
+  cursor: pointer;
+}
+
+.sb-admin-direct-link:hover {
+  background-color: rgba(245, 158, 11, 0.16);
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
+.sb-admin-link-text {
+  flex: 1;
+}
+
+.sb-admin-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4.5px;
+  border-radius: 4px;
+  background-color: #f59e0b;
+  color: #111;
+}
+
+.sb-admin-icon-btn {
+  color: #f59e0b;
+  background-color: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.sb-admin-icon-btn:hover {
+  background-color: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
 }
 
 </style>

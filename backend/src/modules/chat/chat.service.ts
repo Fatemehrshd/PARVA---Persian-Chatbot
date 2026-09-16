@@ -165,8 +165,21 @@ export class ChatService {
   async *generate(userId: string, id: string, content: string): AsyncGenerator<ChatChunk> {
     const conversation = await this.assertOwned(userId, id);
 
-    // Global token quota enforcement
-    if (this.settings) {
+    // Two-tier token quota enforcement (User-specific limit overrides global limit)
+    if (typeof this.users?.findById === 'function') {
+      const user = await this.users.findById(userId);
+      const usedTokens = user?.usedTokens || 0;
+      if (user && user.tokenLimit !== null && user.tokenLimit !== undefined) {
+        if (user.tokenLimit > 0 && usedTokens >= user.tokenLimit) {
+          throw new BadRequestException('سقف مجاز مصرف توکن به پایان رسیده است');
+        }
+      } else if (this.settings) {
+        const globalLimit = await this.settings.getGlobalTokenLimit();
+        if (globalLimit > 0 && usedTokens >= globalLimit) {
+          throw new BadRequestException('سقف مجاز مصرف توکن به پایان رسیده است');
+        }
+      }
+    } else if (this.settings) {
       const globalLimit = await this.settings.getGlobalTokenLimit();
       if (globalLimit > 0 && typeof this.users?.findById === 'function') {
         const user = await this.users.findById(userId);
@@ -327,6 +340,10 @@ export class ChatService {
             stoppedByUser: false,
           }),
         );
+        const consumedTokens = Math.ceil((content.length + full.length) / 4);
+        if (typeof this.users?.incrementUsedTokens === 'function') {
+          await this.users.incrementUsedTokens(userId, consumedTokens);
+        }
         await this.conv.update(id, {});
         this.activeStream?.completeSession(id, savedAssistant.id);
       }

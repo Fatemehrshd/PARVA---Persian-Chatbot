@@ -274,10 +274,7 @@ function navigateToAdmin() {
 
       <!-- Footer -->
       <div class="px-6 py-3.5 border-t border-border bg-surface-alt flex items-center justify-between">
-        <div class="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <Check :size="13" class="text-emerald-500" />
-          <span>تغییرات به صورت آنی ذخیره می‌شوند</span>
-        </div>
+       
 
         <button
           type="button"

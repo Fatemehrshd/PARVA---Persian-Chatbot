@@ -12,6 +12,7 @@ import { SettingsService, DEFAULT_GLOBAL_TOKEN_LIMIT, DEFAULT_SYSTEM_PROMPT } fr
 import { AdminSettingsController } from '../src/modules/admin/admin-settings.controller';
 import { AdminUsersController } from '../src/modules/admin/admin-users.controller';
 import { AdminDashboardController } from '../src/modules/admin/admin-dashboard.controller';
+import { AdminConversationsController } from '../src/modules/admin/admin-conversations.controller';
 import { ModelsAdminController } from '../src/modules/models-admin/models-admin.controller';
 import { ModelsAdminService } from '../src/modules/models-admin/models-admin.service';
 import { UsersService } from '../src/modules/users/users.service';
@@ -101,6 +102,47 @@ describe('Admin Panel Suite', () => {
       await expect(gen.next()).rejects.toThrow('سقف مجاز مصرف توکن به پایان رسیده است');
     });
 
+    it('throws BadRequestException when user reaches custom per-user token limit', async () => {
+      const fakeUser = { id: 'u1', usedTokens: 250, tokenLimit: 200 };
+      const usersService: any = {
+        findById: async () => fakeUser,
+        incrementUsedTokens: async () => {},
+      };
+      const settingsService: any = {
+        getGlobalTokenLimit: async () => 10000,
+        getSystemPrompt: async () => 'Custom system prompt',
+      };
+      const convRepo: any = {
+        findOne: async () => ({ id: 'c1', userId: 'u1', modelId: 'm1' }),
+      };
+      const msgRepo: any = {
+        count: async () => 1,
+        create: (dto: any) => dto,
+        save: async (dto: any) => dto,
+        find: async () => [],
+      };
+      const modelsService: any = {
+        getRawById: async () => ({ id: 'm1', isActive: true }),
+        getDefault: async () => ({ id: 'm1' }),
+        resolveProvider: async () => ({ isActive: true }),
+      };
+      const forwarder: any = {
+        resolveTarget: () => null,
+      };
+
+      const chatService = new ChatService(
+        convRepo,
+        msgRepo,
+        modelsService,
+        forwarder,
+        settingsService,
+        usersService,
+      );
+
+      const gen = chatService.generate('u1', 'c1', 'Hello');
+      await expect(gen.next()).rejects.toThrow('سقف مجاز مصرف توکن به پایان رسیده است');
+    });
+
     it('increments user token usage and uses dynamic system prompt on chat generation', async () => {
       let incremented = 0;
       const fakeUser = { id: 'u1', usedTokens: 100 };
@@ -167,13 +209,14 @@ describe('Admin Panel Suite', () => {
       }),
     };
 
-    const fakeUsers = [
+    const fakeUsers: any[] = [
       {
         id: 'admin-id',
         email: 'admin@test.com',
         displayName: 'Admin User',
         username: 'admin',
         role: 'admin',
+        isActive: true,
         avatarUrl: null,
         usedTokens: 150,
         conversationsCount: 2,
@@ -185,6 +228,7 @@ describe('Admin Panel Suite', () => {
         displayName: 'Regular User',
         username: 'user1',
         role: 'user',
+        isActive: true,
         avatarUrl: null,
         usedTokens: 800,
         conversationsCount: 5,
@@ -198,6 +242,12 @@ describe('Admin Panel Suite', () => {
         const u = fakeUsers.find((x) => x.id === id);
         if (!u) throw new NotFoundException('User not found');
         Object.assign(u, dto);
+        return u;
+      },
+      updateStatusByAdmin: async (id: string, isActive: boolean) => {
+        const u = fakeUsers.find((x) => x.id === id);
+        if (!u) throw new NotFoundException('User not found');
+        u.isActive = isActive;
         return u;
       },
       deleteByAdmin: async (id: string) => {
@@ -226,8 +276,45 @@ describe('Admin Panel Suite', () => {
       },
       models: { count: async () => 3 },
       providers: { count: async () => 2 },
-      convs: { count: async () => 7 },
-      messages: { count: async () => 25 },
+      convs: {
+        count: async () => 7,
+        find: async () => [
+          {
+            id: 'c1',
+            title: 'React Advice',
+            userId: 'user-id',
+            user: { id: 'user-id', email: 'user@test.com', displayName: 'Regular User' },
+            messages: [
+              { id: 'm1', conversationId: 'c1', role: 'user', content: 'Help with React', createdAt: new Date() },
+              { id: 'm2', conversationId: 'c1', role: 'assistant', content: 'Sure, here is how...', createdAt: new Date() },
+            ],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+        findOne: async ({ where }: any) => {
+          if (where?.id === 'c1') {
+            return {
+              id: 'c1',
+              title: 'React Advice',
+              userId: 'user-id',
+              user: { id: 'user-id', email: 'user@test.com', displayName: 'Regular User' },
+              messages: [
+                { id: 'm1', conversationId: 'c1', role: 'user', content: 'Help with React', createdAt: new Date() },
+                { id: 'm2', conversationId: 'c1', role: 'assistant', content: 'Sure, here is how...', createdAt: new Date() },
+              ],
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+          }
+          return null;
+        },
+        delete: async () => ({ affected: 1 }),
+      },
+      messages: {
+        count: async () => 25,
+        find: async () => [],
+      },
     };
 
     beforeAll(async () => {
@@ -236,6 +323,7 @@ describe('Admin Panel Suite', () => {
           AdminSettingsController,
           AdminUsersController,
           AdminDashboardController,
+          AdminConversationsController,
           ModelsAdminController,
         ],
         providers: [
@@ -327,9 +415,21 @@ describe('Admin Panel Suite', () => {
       const res = await request(app.getHttpServer())
         .patch('/admin/users/user-id')
         .set('Authorization', 'Bearer token')
-        .send({ role: 'admin', usedTokens: 0 });
+        .send({ role: 'admin', usedTokens: 0, tokenLimit: 50000 });
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
+    });
+
+    it('PATCH /admin/users/:id/status disables a user without deleting them', async () => {
+      currentUserRole = 'admin';
+      const res = await request(app.getHttpServer())
+        .patch('/admin/users/user-id/status')
+        .set('Authorization', 'Bearer token')
+        .send({ isActive: false });
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toMatchObject({ id: 'user-id', isActive: false });
+      expect(fakeUsers.some((user) => user.id === 'user-id')).toBe(true);
     });
 
     it('DELETE /admin/users/:id prevents self-deletion and deletes other users', async () => {
@@ -375,6 +475,50 @@ describe('Admin Panel Suite', () => {
         .send({ name: 'GPT-4o Updated' });
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
+    });
+
+    it('GET /admin/conversations lists conversations for admin', async () => {
+      currentUserRole = 'admin';
+      const res = await request(app.getHttpServer())
+        .get('/admin/conversations')
+        .set('Authorization', 'Bearer token');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.data[0]).toMatchObject({
+        id: 'c1',
+        title: 'React Advice',
+        messageCount: 2,
+        user: { email: 'user@test.com' },
+      });
+    });
+
+    it('GET /admin/conversations/:id returns conversation details with sorted messages', async () => {
+      currentUserRole = 'admin';
+      const res = await request(app.getHttpServer())
+        .get('/admin/conversations/c1')
+        .set('Authorization', 'Bearer token');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.id).toBe('c1');
+      expect(res.body.data.messages.length).toBe(2);
+      expect(res.body.data.messages[0].role).toBe('user');
+    });
+
+    it('DELETE /admin/conversations/:id removes conversation as admin', async () => {
+      currentUserRole = 'admin';
+      const res = await request(app.getHttpServer())
+        .delete('/admin/conversations/c1')
+        .set('Authorization', 'Bearer token');
+      expect(res.status).toBe(204);
+    });
+
+    it('GET /admin/conversations returns 403 Forbidden for non-admin user', async () => {
+      currentUserRole = 'user';
+      const res = await request(app.getHttpServer())
+        .get('/admin/conversations')
+        .set('Authorization', 'Bearer token');
+      expect(res.status).toBe(403);
     });
   });
 });

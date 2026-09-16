@@ -7,9 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [1.1.0] - 2026-09-16
 
 ### Added
+- **Admin Chat Viewer & Inspection (`backend` & `frontend`)**:
+  - Added `AdminConversationsController` (`GET /admin/conversations`, `GET /admin/conversations/:id`, `DELETE /admin/conversations/:id`) secured with AdminGuard.
+  - Added dedicated "گفتگوها" (Chats) section in `AdminPanelView.vue` displaying total conversations, user details, message count, creation dates, and full message history viewer modal with individual timestamps and message bubbles.
+- **Dedicated System Prompt Section (`AdminPanelView.vue`)**:
+  - Added a dedicated "پرامپت سیستم" (System Prompt) section in the admin sidebar with ready-to-use presets, real-time character/word/line count metrics, reset button, and direct backend persistence.
+- **Fixed & Rigid Admin Sidebar**:
+  - Sidebar is permanently pinned (`position: fixed; inset-inline-start: 0; height: 100vh; overflow: hidden;`) with zero page-scroll interference, while main content scrolls independently.
+- **Strictly Uniform Provider Cards & Connected Models Badge**:
+  - Standardized provider cards with identical height (`min-height: 250px`), flex distribution, and pinned footer action buttons.
+  - Removed "سیستمی" badge from provider cards as requested.
+  - Added connected models list chips underneath each provider card displaying associated models.
+- **3-Second Debounce on Search Operations**:
+  - Applied 3000ms delay to both sidebar chat search (`SearchModal.vue`) and admin panel search (`AdminPanelView.vue`) to prevent aggressive API requests on every keystroke.
+- **Mixed Persian & English RTL Text Direction Rule**:
+  - Updated `getActiveTypingDirection` in `utils/textDirection.ts` so that whenever text contains Persian characters (even when mixed with English), the text direction strictly evaluates to `rtl`. Pure English remains `ltr`.
+- **RTL Search Input & Modal Styling Cleanups**:
+  - Removed all `box-shadow` across modals (`AdminModal.vue`, `ModelsModal.vue`, `SearchModal.vue`).
+  - Switched search input padding to logical CSS properties (`padding-inline-start: 38px; padding-inline-end: 36px;`), completely resolving placeholder overlap with the search icon.
+  - Removed search bar from the Dashboard tab (`v-if="activeSection !== 'dashboard' && activeSection !== 'prompts'"`).
+- **Admin Panel Overhaul, Custom AdminTable, Edit/Delete Modals, & Two-Tier Token Quota System (`frontend` & `backend`)**:
+  - **Minimal & Standardized Cards Layout**: Refined KPI metric cards with sleek borders, soft background contrast, subtle hover elevations, and standard `gap-5` (20px) spacing in `AdminPanelView.vue`.
+  - **Fixed & Sticky Admin Sidebar**: Set `.admin-sidebar` to `position: sticky; top: 0; height: 100vh; overflow-y: auto;` so navigation remains permanently pinned and accessible while scrolling through lengthy tables and cards.
+  - **Dedicated Reusable Table Component (`AdminTable.vue`)**: Built a modular, clean table component with custom headers, row slots, smooth hover rows, and localized empty states with Vazirmatn typography.
+  - **Pre-filled Edit & Delete Modals**:
+    - Replaced browser `window.confirm` with `DeleteConfirmModal.vue` featuring loading spinner and disabled state during deletion.
+    - Model and Provider creation/editing transitioned into pre-filled modal forms (`AdminModal.vue`).
+    - Added user editing modal (`UserEditModal`) with pre-filled display name, email, role, token limits, and token usage reset.
+    - In users table, completely removed user deletion button, retaining solely the deactivation/activation toggle (`BaseToggle`) and edit modal button.
+  - **100% Pure Persian Typography with Vazirmatn**:
+    - Completely removed all English uppercase eyebrows (`CATALOG`, `REGISTRY`, `ACCESS & USAGE`, `SYSTEM STATUS`, `USAGE`, `PARVA / ADMIN`, `ADMIN CONSOLE`).
+    - Standardized all titles, descriptions, buttons, tooltips, and badges strictly to Persian RTL with Vazirmatn font.
+  - **Universal Search**: Integrated live reactive search filtering across all sections (models by name/provider/apiId, providers by name/url, users by name/email/username/role) with one-click clear button.
+  - **Two-Tier Token Quota System & Real-Streaming Accounting Fix (`backend`)**:
+    - Added `tokenLimit` column to `users` table via migration `1761200000000-AddUserTokenLimit.ts` and updated `User` entity and `UpdateUserAdminDto`.
+    - Enhanced `chat.service.ts` to enforce user-specific token limits first (with `0` representing explicitly unlimited), falling back to `globalTokenLimit` when no user limit is set.
+    - Fixed a critical backend bug where token consumption was never recorded during real LLM streaming (now reliably persisted in `finally` block).
+    - Added global system settings modal in the Admin Panel to configure `globalTokenLimit` and `systemPrompt` on demand.
+  - **Comprehensive Test Coverage**: 100% green on all 23 frontend test suites (124/124 tests passing) including new `AdminTable.spec.ts`, and all 18 backend test suites (127/127 tests passing).
+- **Hybrid & Dynamic Bidirectional Text Direction (`frontend`)**:
+  - Implemented `getActiveTypingDirection` and `getLineDirection` in `utils/textDirection.ts` to detect text direction character-by-character and line-by-line.
+  - `ChatComposer.vue`: The message input now responds dynamically in real-time as the user types; typing English characters immediately aligns left (`ltr`), typing Persian characters immediately switches to right (`rtl`), and typing English again switches back to left (`ltr`), with immediate reset to default RTL on message clear/submit.
+  - `MessageBubble.vue`: User messages with multi-line or mixed content are rendered line-by-line with independent directional alignment (`.user-msg-line.rtl` for Persian lines and `.user-msg-line.ltr` for English lines).
+  - `MarkdownContent.vue`: Assistant responses handle hybrid Markdown content with per-block and per-line directional styling, including list items (`<li>`), blockquotes (`<blockquote>`), paragraphs with breaks (`<br>`), and table cells (`<th>`/`<td>`).
+  - Added new unit tests in `textDirection.spec.ts`, `ChatComposer.spec.ts`, and `MessageBubble.spec.ts` (all 22 frontend suites / 120 tests passing).
 - **Per-Conversation Streaming State (`frontend`)**:
   - Refactored `chat.ts` to use a `Map<convId, ConvStreamState>` instead of global `isStreaming`/`isThinking`/`streamError`/`currentStreamingText`/`lastUserPrompt`/`abortController` refs.
   - Each conversation now has fully independent streaming state — switching conversations no longer aborts background streams.

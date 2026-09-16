@@ -1,20 +1,36 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useChatStore } from '../../stores/chat'
 import { useModelsStore } from '../../stores/models'
 import { useUiStore } from '../../stores/ui'
-import { getTextDirection } from '../../utils/textDirection'
+import { getActiveTypingDirection } from '../../utils/textDirection'
 
 const chatStore = useChatStore()
 const modelsStore = useModelsStore()
 const uiStore = useUiStore()
 
 const inputContent = ref('')
-const inputDirection = computed(() => getTextDirection(inputContent.value, uiStore.direction))
+const inputDirection = ref<'rtl' | 'ltr'>('rtl')
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isFocused = ref(false)
 const modelMenuOpen = ref(false)
 const modelPickerRef = ref<HTMLElement | null>(null)
+
+function updateDirection() {
+  inputDirection.value = getActiveTypingDirection(
+    inputContent.value,
+    textareaRef.value ? textareaRef.value.selectionStart : null,
+    'rtl'
+  )
+}
+
+watch(inputContent, (newVal) => {
+  if (!newVal || !newVal.trim()) {
+    inputDirection.value = 'rtl'
+  } else {
+    updateDirection()
+  }
+})
 
 const canSend = computed(() => {
   return inputContent.value.trim().length > 0 && !chatStore.isStreaming
@@ -31,7 +47,12 @@ function adjustHeight() {
 }
 
 function handleInput() {
+  updateDirection()
   adjustHeight()
+}
+
+function handleCursorMove() {
+  updateDirection()
 }
 
 function handleKeydown(event: KeyboardEvent) {
@@ -45,6 +66,7 @@ function handleSubmit() {
   if (!canSend.value) return
   const text = inputContent.value
   inputContent.value = ''
+  inputDirection.value = 'rtl'
   if (textareaRef.value) {
     textareaRef.value.style.height = 'auto'
   }
@@ -137,10 +159,13 @@ onUnmounted(() => {
           :dir="inputDirection"
           placeholder="پیام خود را بنویسید... (Enter برای ارسال)"
           rows="1"
-          @focus="isFocused = true"
+          @focus="isFocused = true; updateDirection()"
           @blur="isFocused = false"
           @input="handleInput"
           @keydown="handleKeydown"
+          @keyup="handleCursorMove"
+          @click="handleCursorMove"
+          @select="handleCursorMove"
         ></textarea>
 
         <div class="composer-footer">
@@ -342,6 +367,7 @@ onUnmounted(() => {
   min-height: 24px;
   max-height: 180px;
   padding: 0;
+  transition: text-align 100ms ease;
 }
 
 .composer-textarea.rtl,

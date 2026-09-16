@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useUiStore } from '../../stores/ui'
 import { useChatStore } from '../../stores/chat'
 import { useAuthStore } from '../../stores/auth'
 import { useThemeLogo } from '../../composables/useThemeLogo'
 
-const uiStore = useUiStore()
 const chatStore = useChatStore()
 const authStore = useAuthStore()
 

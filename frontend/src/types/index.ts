@@ -13,6 +13,7 @@ export interface User {
   username?: string | null
   avatarUrl?: string | null
   role: 'user' | 'admin'
+  isActive?: boolean
   createdAt?: string
 }
 
@@ -139,6 +140,49 @@ export interface UpdateProviderRequest {
   apiKey?: string
   isActive?: boolean
 }
+
+export interface AdminDashboardStats {
+  totalUsers: number
+  totalModels: number
+  activeModels: number
+  totalProviders: number
+  activeProviders: number
+  totalConversations: number
+  totalMessages: number
+  totalTokensUsed: number
+  globalTokenLimit: number
+  systemPrompt: string
+}
+
+export interface AdminUser extends User {
+  usedTokens: number
+  tokenLimit?: number | null
+  conversationsCount: number
+}
+
+export interface UpdateAdminUserRequest {
+  role?: 'user' | 'admin'
+  displayName?: string
+  email?: string
+  usedTokens?: number
+  tokenLimit?: number | null
+}
+
+export interface AdminConversationSummary {
+  id: string
+  title: string
+  userId: string
+  user: { id: string; email: string; displayName?: string } | null
+  messageCount: number
+  createdAt: string
+  updatedAt: string
+  modelId?: string | null
+}
+
+export interface AdminConversationDetail extends AdminConversationSummary {
+  messages: Message[]
+}
+
 
 // ========================
 // Model Schemas (Admin & Chat)

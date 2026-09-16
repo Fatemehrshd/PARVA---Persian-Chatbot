@@ -18,22 +18,22 @@ import logoFallback from '@/assets/logo.jpg'
 // (`*-white` for dark, `*-blue` for light) is always picked first
 // regardless of file-system ordering returned by Vite.
 const darkPreferredLogos = import.meta.glob(
-  '@/assets/*-white.{jpg,jpeg,png,webp,svg}',
+  '@/assets/logo*-white.{jpg,jpeg,png,webp,svg}',
   { eager: true, query: '?url', import: 'default' }
 ) as Record<string, string>
 
 const darkFallbackLogos = import.meta.glob(
-  '@/assets/*-dark.{jpg,jpeg,png,webp,svg}',
+  '@/assets/logo*-dark.{jpg,jpeg,png,webp,svg}',
   { eager: true, query: '?url', import: 'default' }
 ) as Record<string, string>
 
 const lightPreferredLogos = import.meta.glob(
-  '@/assets/*-blue.{jpg,jpeg,png,webp,svg}',
+  '@/assets/logo*-blue.{jpg,jpeg,png,webp,svg}',
   { eager: true, query: '?url', import: 'default' }
 ) as Record<string, string>
 
 const lightFallbackLogos = import.meta.glob(
-  '@/assets/*-light.{jpg,jpeg,png,webp,svg}',
+  '@/assets/logo*-light.{jpg,jpeg,png,webp,svg}',
   { eager: true, query: '?url', import: 'default' }
 ) as Record<string, string>
 

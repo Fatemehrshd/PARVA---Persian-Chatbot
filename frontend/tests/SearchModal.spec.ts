@@ -82,13 +82,20 @@ describe('SearchModal.vue', () => {
       },
     })
 
+    vi.useFakeTimers()
     const input = wrapper.find('input.search-input')
     await input.setValue('NestJS')
 
-    // Wait for debounce
-    await new Promise((r) => setTimeout(r, 260))
+    // Before 3000ms, search has not triggered
+    vi.advanceTimersByTime(1000)
+    expect(chatService.searchConversations).not.toHaveBeenCalled()
+
+    // After 3000ms, debounce fires
+    vi.advanceTimersByTime(2000)
+    await wrapper.vm.$nextTick()
 
     expect(chatService.searchConversations).toHaveBeenCalledWith('NestJS')
+    vi.useRealTimers()
   })
 
   it('emits close event on backdrop click or ESC', async () => {

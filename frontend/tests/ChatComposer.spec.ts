@@ -104,4 +104,33 @@ describe('ChatComposer.vue', () => {
     expect(chatStore.messages.length).toBe(1)
     expect(chatStore.messages[0].content).toBe('سلام این یک پیام تست است')
   })
+
+  it('switches text direction dynamically between LTR and RTL as user types English and Persian characters', async () => {
+    const wrapper = mount(ChatComposer)
+    const textarea = wrapper.find('textarea')
+
+    // Initially empty: default RTL
+    expect(textarea.attributes('dir')).toBe('rtl')
+    expect(textarea.classes()).toContain('rtl')
+
+    // 1. User types English: "Hello" -> LTR
+    await textarea.setValue('Hello')
+    expect(textarea.attributes('dir')).toBe('ltr')
+    expect(textarea.classes()).toContain('ltr')
+
+    // 2. User then adds Persian: "Hello سلام" -> RTL
+    await textarea.setValue('Hello سلام')
+    expect(textarea.attributes('dir')).toBe('rtl')
+    expect(textarea.classes()).toContain('rtl')
+
+    // 3. User then adds English: "Hello سلام world" -> MUST stay RTL per rule (اگر کلمه فارسی و انگلیسی بود میبایست rtl باشه)
+    await textarea.setValue('Hello سلام world')
+    expect(textarea.attributes('dir')).toBe('rtl')
+    expect(textarea.classes()).toContain('rtl')
+
+    // 4. Cleared -> back to RTL
+    await textarea.setValue('')
+    expect(textarea.attributes('dir')).toBe('rtl')
+    expect(textarea.classes()).toContain('rtl')
+  })
 })

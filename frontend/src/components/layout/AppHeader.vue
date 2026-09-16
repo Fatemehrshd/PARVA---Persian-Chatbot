@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
 import { useUiStore } from '../../stores/ui'
 import { useAuthStore } from '../../stores/auth'
 
+const router = useRouter()
 const uiStore = useUiStore()
 const authStore = useAuthStore()
 </script>
@@ -44,7 +46,7 @@ const authStore = useAuthStore()
       <button
         v-if="authStore.isAdmin"
         class="icon-text-btn px-2 sm:px-3"
-        @click="uiStore.openAdminModels"
+        @click="router.push('/admin/models')"
         title="پنل ادمین (مدیریت مدل‌ها)"
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

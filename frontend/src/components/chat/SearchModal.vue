@@ -3,7 +3,6 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search, X, MessageSquare, Loader2, Calendar } from '@lucide/vue'
 import { useChatStore } from '../../stores/chat'
-import { useUiStore } from '../../stores/ui'
 import { chatService } from '../../services/chat.service'
 import type { SearchResult } from '../../types'
 
@@ -18,7 +17,6 @@ const emit = defineEmits<{
 
 const router = useRouter()
 const chatStore = useChatStore()
-const uiStore = useUiStore()
 
 const inputRef = ref<HTMLInputElement | null>(null)
 const query = ref('')
@@ -79,9 +77,15 @@ async function performSearch(searchVal: string) {
 
 watch(query, (val) => {
   if (debounceTimer) clearTimeout(debounceTimer)
+  if (!val.trim()) {
+    isSearching.value = false
+    searchResults.value = []
+    return
+  }
+  isSearching.value = true
   debounceTimer = setTimeout(() => {
     performSearch(val)
-  }, 220)
+  }, 3000)
 })
 
 watch(
@@ -266,7 +270,7 @@ function formatDate(dateStr?: string) {
   background-color: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg, 16px);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border);
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;

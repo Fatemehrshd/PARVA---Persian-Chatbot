@@ -56,8 +56,10 @@ export class UsersService {
           'u.displayName AS "displayName"',
           'u.username AS username',
           'u.role AS role',
+          'u.isActive AS "isActive"',
           'u.avatarUrl AS "avatarUrl"',
           'u.usedTokens AS "usedTokens"',
+          'u.tokenLimit AS "tokenLimit"',
           'u.createdAt AS "createdAt"',
           'COUNT(c.id) AS "conversationsCount"',
         ])
@@ -71,8 +73,10 @@ export class UsersService {
         displayName: u.displayName ?? null,
         username: u.username ?? null,
         role: u.role,
+        isActive: u.isActive !== false,
         avatarUrl: u.avatarUrl ?? null,
         usedTokens: Number(u.usedTokens || 0),
+        tokenLimit: u.tokenLimit !== null && u.tokenLimit !== undefined ? Number(u.tokenLimit) : null,
         createdAt: u.createdAt,
         conversationsCount: Number(u.conversationsCount || 0),
       }));
@@ -84,8 +88,10 @@ export class UsersService {
         displayName: u.displayName ?? null,
         username: u.username ?? null,
         role: u.role,
+        isActive: u.isActive !== false,
         avatarUrl: u.avatarUrl ?? null,
         usedTokens: Number(u.usedTokens || 0),
+        tokenLimit: u.tokenLimit !== null && u.tokenLimit !== undefined ? Number(u.tokenLimit) : null,
         createdAt: u.createdAt,
         conversationsCount: u.conversations?.length ?? 0,
       }));
@@ -105,6 +111,7 @@ export class UsersService {
     if (data.displayName !== undefined) user.displayName = data.displayName || (null as any);
     if (data.email !== undefined) user.email = data.email;
     if (data.usedTokens !== undefined) user.usedTokens = data.usedTokens;
+    if (data.tokenLimit !== undefined) user.tokenLimit = data.tokenLimit;
     return this.repo.save(user);
   }
 
@@ -118,6 +125,19 @@ export class UsersService {
     }
     if (!user) throw new NotFoundException('Resource not found');
     await this.repo.remove(user);
+  }
+
+  async updateStatusByAdmin(userId: string, isActive: boolean) {
+    let user;
+    try {
+      user = await this.repo.findOne({ where: { id: userId } });
+    } catch (err: any) {
+      if (err?.code === '22P02') throw new NotFoundException('Resource not found');
+      throw err;
+    }
+    if (!user) throw new NotFoundException('Resource not found');
+    user.isActive = isActive;
+    return this.repo.save(user);
   }
 }
 

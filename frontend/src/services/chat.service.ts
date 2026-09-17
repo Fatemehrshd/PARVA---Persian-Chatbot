@@ -255,13 +255,21 @@ export const chatService = {
 
     const url = buildUrl(`/chat/conversations/${conversationId}/messages`)
 
-    const clientTimeoutMs = 35000 // 35s client safety timeout
+    // 35s INACTIVITY safety timeout — reset on every received stream event.
+    // (A total-duration timeout would kill long smooth-paced answers mid-way
+    // and force a reconnect whose sync event dumps the remaining text at once.)
+    const clientTimeoutMs = 35000
     const internalAbort = new AbortController()
     let isTimeout = false
-    const timer = setTimeout(() => {
-      isTimeout = true
-      internalAbort.abort()
-    }, clientTimeoutMs)
+    let inactivityTimer: ReturnType<typeof setTimeout> | undefined
+    const armInactivityTimer = () => {
+      if (inactivityTimer) clearTimeout(inactivityTimer)
+      inactivityTimer = setTimeout(() => {
+        isTimeout = true
+        internalAbort.abort()
+      }, clientTimeoutMs)
+    }
+    armInactivityTimer()
 
     if (signal) {
       signal.addEventListener('abort', () => internalAbort.abort(), { once: true })
@@ -303,7 +311,7 @@ export const chatService = {
 
       const streamRes = await readSseStream(
         response,
-        { onToken, onSync, onTitle, onDone, onError },
+        { onToken, onSync, onTitle, onDone, onError, onActivity: armInactivityTimer },
         internalAbort.signal
       )
 
@@ -354,7 +362,7 @@ export const chatService = {
         onError(new Error(msg))
       }
     } finally {
-      clearTimeout(timer)
+      if (inactivityTimer) clearTimeout(inactivityTimer)
     }
   }
 }
@@ -370,6 +378,7 @@ async function readSseStream(
     onTitle?: (title: string) => void
     onDone?: (messageId: string) => void
     onError?: (err: any) => void
+    onActivity?: () => void
   },
   signal?: AbortSignal
 ): Promise<{ done: boolean; hasError: boolean }> {
@@ -390,6 +399,9 @@ async function readSseStream(
     }
     const { done, value } = await reader.read()
     if (done) break
+
+    // Any received bytes prove the server is alive — re-arm the inactivity timer.
+    callbacks.onActivity?.()
 
     buffer += decoder.decode(value, { stream: true })
     const lines = buffer.split('\n')

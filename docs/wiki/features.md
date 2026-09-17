@@ -321,3 +321,31 @@
 - Fixed pre-existing branch issues to restore the green gate: removed duplicate `UpdateUserStatusDto` in backend `admin/dto.ts`, removed two unused imports (ProfileModal `DialogDescription`, AdminPanelView `authStore`), and updated stale test expectations in `LoginView.spec.ts` / `SettingsModal.spec.ts` to the current Persian UI strings.
 - Verification: frontend suite 126/126 green (23 files) and production build (`vue-tsc -b && vite build`) passes.
 - Mobile layout fix: below 768px the admin sidebar goes off-canvas, so `margin-inline-start: 260px` on `.admin-main` is now reset (it previously stayed applied, pushing all admin content sideways on phones); topbar and content padding are also compacted on small screens.
+
+## Task 27: Immediate Avatar Sync on Login (Frontend)
+- The auth (login/signup) response carries no `avatarUrl`, so the sidebar avatar only appeared after the profile modal was opened (which fetches `/users/me`).
+- `authStore` now refreshes the full profile right after login/signup (fire-and-forget, session already usable) and on store init when a saved session exists (page refresh / direct URL).
+- Failure-safe: a failed profile refresh keeps the session untouched (401 is handled globally with auto-logout).
+- Covered by `tests/AvatarSync.spec.ts` (login path, refresh path, failure path).
+
+## Task 28: New Chat Gating & Sidebar Visibility (Frontend)
+- "New Chat" is now disabled both when no conversation is selected at all and when the current conversation is still empty (previously only the latter), so duplicate empty conversations can no longer be created.
+- A chat typed directly into the composer (without selecting a conversation) stays OFF the sidebar until the assistant's first token arrives — same contract as `createNewConversation` (see `executeMessageStream`'s first-token hook).
+- Covered by `tests/NewChatGating.spec.ts` (button gating x2, sidebar visibility on first token).
+- Known pre-existing issue on this branch (unchanged): `stores/chat.ts` carries merged-in dead stream code inside `deleteMessage` (~35 pre-existing tsc errors; `deleteMessage` would throw at runtime after its toast) — needs a separate cleanup task.
+
+## Task 29: Admin Dashboard Polish & Smooth Word-Paced Streaming (Frontend & Backend)
+- Admin dashboard "connected providers" rows now use a fixed 4-column grid so the model-count column lines up vertically across all rows (was flex with competing auto margins).
+- Admin sidebar navigation icons unified on lucide (`LayoutDashboard`, `Network`, `Boxes`, `Users`, `Sparkles`, `MessageSquare`, `FileText`); the per-theme PNG/SVG image icons were removed along with their imports.
+- Dashboard "top token consumers" list is now sorted by usage (highest first, capped at 5) via a `topTokenConsumers` computed; token value column is fixed-width left-aligned and the panel heading action button sits flush with the panel edge.
+- Admin sidebar back button: label shortened to «بازگشت» and its arrow now points outward (right in RTL).
+- Streaming pacing: the backend now splits provider chunks into word/whitespace pieces and paces each non-whitespace piece (~25ms in dev/prod, 0 in tests), in both `generate()` and `resume()`. Clients render a smooth word-by-word flow instead of sudden bulk text. Auto-scroll-follow behavior in `MessageList` is untouched (user scroll-up still pauses following).
+- Message list bottom breathing room increased globally (`padding-bottom: clamp(10rem, 22vh, 14rem)`; streaming row margin-bottom bumped) so the last message's time/copy row and the streaming line never sit flush against the composer.
+- Verification: backend `tsc --noEmit` clean; frontend type-check unchanged vs branch baseline (only the pre-existing 37 errors in MessageBubble/chat.ts). Tests intentionally deferred (user request).
+
+## Task 30: Chat Deletion & Send 404 Fixes (Frontend & Backend)
+- Root cause chain: deletion is soft (`isDeleted`), but `ConversationService.create()` reused the user's latest empty conversation WITHOUT the `isDeleted` filter — so right after deleting a chat, creating a new one returned the soft-deleted conversation's id, and sending to it hit `assertOwned` (which filters `isDeleted: false`) → 404 with no model reply.
+- Fix: `create()` now filters `isDeleted: false` on both the latest-conversation lookup and its message count (the earlier fix filtered `list()` the same way).
+- Frontend hardening: if a local placeholder conversation (`c-*`) cannot be persisted before streaming, `sendMessage` fails fast with a Persian toast/inline error instead of firing a request that is guaranteed to 404.
+- Verification: backend `tsc --noEmit` clean; frontend type-check unchanged vs branch baseline. Tests deferred per user request.
+- Follow-up (Task 30b): the client 35s stream timeout is now INACTIVITY-based (re-armed on every received SSE chunk via an `onActivity` hook in `readSseStream`) instead of total-duration — long word-paced answers no longer get aborted mid-way and dumped as one bulk sync. Composer gains a permanent 14px top gap above the input box.

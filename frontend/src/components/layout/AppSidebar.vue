@@ -47,9 +47,12 @@ const profileMenuOpen = ref(false)
 const SidebarCollapseIcon = PanelRightClose
 const SidebarExpandIcon = PanelRightOpen
 
-// Disable "New Chat" when user is already on an empty (fresh) conversation
+// Disable "New Chat" when the user has no conversation selected at all, or is
+// already sitting on an empty (fresh) conversation — both would create a
+// duplicate empty chat.
 const isOnEmptyChat = computed(() =>
-  chatStore.currentConversationId !== null && chatStore.messages.length === 0 && !chatStore.isStreaming
+  chatStore.currentConversationId === null ||
+  (chatStore.messages.length === 0 && !chatStore.isStreaming)
 )
 
 // ──────────────────────────────────────────
@@ -320,7 +323,7 @@ const userInitial = computed(() => {
             <div class="sb-user-info">
               <span class="sb-user-name">{{ authStore.user?.displayName || authStore.user?.email }}</span>
             </div>
-            <ChevronUp :size="13" class="sb-chevron" :class="{ 'is-flipped': !profileMenuOpen }" />
+                        <ChevronUp :size="13" class="sb-chevron" :class="{ 'is-flipped': profileMenuOpen }" />
           </button>
         </template>
 

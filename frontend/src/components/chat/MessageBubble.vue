@@ -121,7 +121,7 @@ function copyContent() {
         <!-- Attachments if any -->
         <div
           v-if="isUser && message.attachments && message.attachments.length > 0"
-          class="message-attachments flex flex-wrap gap-2"
+          class="message-attachments flex flex-wrap gap-2.5"
           :class="{ 'mb-3': !!props.message.content?.trim() }"
         >
           <FilePreviewCard
@@ -129,7 +129,7 @@ function copyContent() {
             :key="file.id"
             :file="file"
             read-only
-            compact
+            @retry="(f) => chatStore.retryFailedMessageFile(message.id, f.id)"
           />
         </div>
 

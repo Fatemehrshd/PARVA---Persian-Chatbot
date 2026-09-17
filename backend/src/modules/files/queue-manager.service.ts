@@ -7,6 +7,7 @@ import { FileProcessorService } from './file-processor.service';
 export class QueueManagerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(QueueManagerService.name);
   private redisClient?: IORedis;
+  private workerClient?: IORedis;
   private isRedisAvailable = false;
 
   private fileQueue?: Queue;
@@ -56,13 +57,14 @@ export class QueueManagerService implements OnModuleInit, OnModuleDestroy {
 
       // 1. File Processing Queue & Worker
       this.fileQueue = new Queue('file-processing', { connection: this.redisClient });
+      this.workerClient = this.redisClient.duplicate();
       this.fileWorker = new Worker(
         'file-processing',
         async (job: Job<{ fileId: string }>) => {
           this.logger.log(`Processing file job ${job.id} for fileId: ${job.data.fileId}`);
           await this.fileProcessor.processFile(job.data.fileId);
         },
-        { connection: this.redisClient, concurrency: 5 },
+        { connection: this.workerClient, concurrency: 5 },
       );
 
       this.fileWorker.on('failed', (job, err) => {
@@ -144,6 +146,7 @@ export class QueueManagerService implements OnModuleInit, OnModuleDestroy {
     if (this.fileQueue) await this.fileQueue.close();
     if (this.messageWorker) await this.messageWorker.close();
     if (this.messageQueue) await this.messageQueue.close();
+    if (this.workerClient) await this.workerClient.quit().catch(() => {});
     if (this.redisClient) await this.redisClient.quit().catch(() => {});
   }
 }

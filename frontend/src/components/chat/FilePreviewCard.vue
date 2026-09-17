@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import type { FileAttachmentItem } from '../../types'
+import { buildUrl } from '../../services/api'
 
 const props = defineProps<{
   file: FileAttachmentItem
@@ -26,9 +27,8 @@ const imageSource = computed(() => {
   if (props.file.metadata?.dataUrl) return props.file.metadata.dataUrl
   if (props.file.id && !props.file.id.startsWith('temp-')) {
     const token = localStorage.getItem('token')
-    return token
-      ? `/api/v1/files/${props.file.id}/content?token=${token}`
-      : `/api/v1/files/${props.file.id}/content`
+    const qs = token ? `?token=${encodeURIComponent(token)}` : ''
+    return buildUrl(`/files/${props.file.id}/content${qs}`)
   }
   return ''
 })
@@ -240,7 +240,7 @@ function handleRetryClick(e: MouseEvent) {
         <template v-if="isError">
           <span class="status-tag error" :title="file.errorMessage || 'خطا در پردازش'">خطا در پردازش</span>
           <button
-            v-if="!readOnly"
+            v-if="!readOnly || $attrs.onRetry"
             type="button"
             class="btn-retry-file"
             @click.stop="handleRetryClick"

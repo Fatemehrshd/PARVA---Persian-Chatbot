@@ -11,7 +11,7 @@ import { StorageService } from '../storage/storage.service';
 import { MalwareScannerService } from './malware-scanner.service';
 import { QueueManagerService } from './queue-manager.service';
 import { SettingsService } from '../admin/settings.service';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 export interface UploadedFileInfo {
   id: string;
@@ -133,7 +133,7 @@ export class FilesService {
 
     // 4. Store in MinIO with Server-Side Encryption
     const safeExt = file.originalname.split('.').pop() || '';
-    const minioKey = `attachments/${userId}/${uuidv4()}.${safeExt}`;
+    const minioKey = `attachments/${userId}/${randomUUID()}.${safeExt}`;
     await this.storage.put(minioKey, file.buffer, file.mimetype);
 
     // 5. Persist record in database

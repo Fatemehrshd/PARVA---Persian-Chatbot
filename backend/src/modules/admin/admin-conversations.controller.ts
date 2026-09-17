@@ -84,8 +84,14 @@ export class AdminConversationsController {
     const conversation = await this.convRepo
       .findOne({
         where: { id, isDeleted: false },
-        relations: ['user', 'messages'],
+        relations: ['user', 'messages', 'messages.attachments'],
       })
+      .catch(async () =>
+        this.convRepo.findOne({
+          where: { id, isDeleted: false },
+          relations: ['user', 'messages'],
+        }),
+      )
       .catch(async () => this.convRepo.findOne({ where: { id, isDeleted: false } }));
 
     if (!conversation) {
@@ -96,6 +102,7 @@ export class AdminConversationsController {
     if (!messages && this.msgRepo) {
       messages = await this.msgRepo.find({
         where: { conversationId: id, isDeleted: false },
+        relations: ['attachments'],
         order: { createdAt: 'ASC' },
       });
     }

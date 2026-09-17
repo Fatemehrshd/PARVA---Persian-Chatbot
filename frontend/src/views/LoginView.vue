@@ -98,7 +98,6 @@ async function handleSubmit() {
           </div>
           <div class="text-start">
             <span class="text-2xl font-bold tracking-tight text-foreground block leading-tight">پروا</span>
-            <span class="text-[11px] font-mono text-muted-foreground">سامانه هوش مصنوعی پروا</span>
           </div>
         </div>
 
@@ -137,12 +136,6 @@ async function handleSubmit() {
           <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
             {{ isSignup ? 'ساخت حساب کاربری' : 'ورود به حساب کاربری' }}
           </h1>
-          <p class="text-xs sm:text-sm text-muted-foreground mt-1.5 leading-relaxed">
-            {{ isSignup 
-              ? 'مشخصات خود را برای دسترسی به پنل و مدل‌ها وارد کنید.' 
-              : 'ایمیل و رمز عبور خود را برای ورود به سامانه وارد کنید.' 
-            }}
-          </p>
         </div>
 
         <!-- Error Alert Banner (Single Borderless Message) -->

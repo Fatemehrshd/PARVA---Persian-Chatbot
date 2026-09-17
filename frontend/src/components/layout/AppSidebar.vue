@@ -13,7 +13,6 @@ import {
   ChevronUp,
   LogIn,
   Settings,
-  ShieldCheck,
 } from '@lucide/vue'
 import { useUiStore } from '../../stores/ui'
 import { useChatStore } from '../../stores/chat'
@@ -188,14 +187,8 @@ const userInitial = computed(() => {
     ═══════════════════════════════════ -->
     <div v-if="uiStore.sidebarOpen" class="sidebar-expanded">
 
-      <!-- Top: Brand + Collapse -->
+      <!-- Top: Collapse + Brand -->
       <div class="sb-top-row">
-        <div class="sb-brand">
-          <div class="sb-brand-logo">
-            <img :src="activeLogo" alt="پروا" class="sb-brand-logo-img" />
-          </div>
-          <span class="sb-brand-name">پروا</span>
-        </div>
         <button
           class="sb-icon-btn"
           title="بستن نوار کناری"
@@ -203,6 +196,9 @@ const userInitial = computed(() => {
         >
           <component :is="SidebarCollapseIcon" :size="17" />
         </button>
+        <div class="sb-brand">
+          <span class="sb-brand-name" dir="ltr">PARVA</span>
+        </div>
       </div>
 
       <!-- Actions: Search / New Chat / Temp Chat — stacked vertically -->
@@ -510,17 +506,22 @@ const userInitial = computed(() => {
 
 /* Top row */
 .sb-top-row {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 2px 12px 10px;
   flex-shrink: 0;
 }
 
 .sb-brand {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 8px;
+  pointer-events: none;
 }
 
 .sb-brand-logo {
@@ -539,10 +540,11 @@ const userInitial = computed(() => {
 }
 
 .sb-brand-name {
-  font-size: 14px;
+  font-family: var(--font-brand);
+  font-size: 19px;
   font-weight: 700;
   color: var(--foreground);
-  letter-spacing: -0.01em;
+  letter-spacing: 0.08em;
   white-space: nowrap;
 }
 

@@ -89,6 +89,32 @@ describe('Chat Routing and Refresh Persistence', () => {
     wrapper.unmount()
   })
 
+  it('shows PARVA without a logo when expanded and only the logo when collapsed', async () => {
+    const { useUiStore } = await import('../src/stores/ui')
+    useUiStore().sidebarOpen = true
+    await router.push('/')
+    await router.isReady()
+
+    const wrapper = mount(AppSidebar, {
+      global: { plugins: [router] }
+    })
+
+    try {
+      expect(wrapper.get('.sb-brand').text()).toBe('PARVA')
+      expect(wrapper.find('.sb-brand img').exists()).toBe(false)
+
+      await wrapper.get('button[title="بستن نوار کناری"]').trigger('click')
+      expect(wrapper.get('.sb-collapsed-logo img').attributes('src')).toBeTruthy()
+      expect(wrapper.find('.sb-brand-name').exists()).toBe(false)
+
+      await wrapper.get('button[title="باز کردن نوار کناری"]').trigger('click')
+      expect(wrapper.get('.sb-brand').text()).toBe('PARVA')
+      expect(wrapper.find('.sb-brand img').exists()).toBe(false)
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
   it('navigates route when selecting conversation in AppSidebar', async () => {
     const chatStore = useChatStore()
     chatStore.conversations = [

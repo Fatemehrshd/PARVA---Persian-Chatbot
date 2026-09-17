@@ -1,5 +1,14 @@
 # Features
 
+## Task 32: Sidebar Brand Simplification (PARVA Wordmark)
+- **برند سایدبار (`AppSidebar.vue`)**:
+  - در حالت باز سایدبار، به جای لوگو + «پروا» فقط واژه‌نشان `PARVA` نمایش داده می‌شود (LTR با فاصله‌گذاری حروف).
+  - در حالت بسته سایدبار فقط لوگو باقی می‌ماند (بدون تغییر نسبت به قبل).
+- **فونت برند (`main.css`)**:
+  - افزودن فونت **Carlito** از Google Fonts (وزن‌های 400/700 + ایتالیک) به ایمپورت‌های فونت.
+  - متغیر جدید `--font-brand: 'Carlito', 'Instrument Sans', sans-serif` برای تایپوگرافی برند.
+- **تست‌ها**: تست جدید «نمایش PARVA در حالت باز و فقط لوگو در حالت بسته» در `ChatRouting.spec.ts` (RED→GREEN؛ ۱۲۵/۱۲۵ تست فرانت سبز).
+
 ## Task 31: Version 1.1.0 Release — Admin Chat Viewer, System Prompt Section, Fixed Sidebar, 3s Search Debounce, Uniform Provider Cards & RTL Enhancements
 - **مشاهده و بازرسی چت‌ها در پنل ادمین (`Admin Chat Viewer`)**:
   - ایجاد کنترلر اختصاصی `AdminConversationsController` در بک‌اند با اندپوینت‌های `GET /admin/conversations`، `GET /admin/conversations/:id` و `DELETE /admin/conversations/:id` محافظت شده با `AdminGuard`.

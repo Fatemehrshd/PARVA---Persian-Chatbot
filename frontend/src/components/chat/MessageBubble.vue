@@ -35,10 +35,6 @@ function handleRemoveFilesAndSend() {
   }
 }
 
-function handleDeleteMessage() {
-  chatStore.deleteMessage(props.message.id)
-}
-
 const isUser = computed(() => props.message.role === 'user')
 const textDirection = computed(() => getTextDirection(props.message.content))
 
@@ -202,16 +198,6 @@ function copyContent() {
           </svg>
           <span v-else class="copied-text font-sans text-primary text-xs font-semibold">✓</span>
           <span class="text-[11px]">{{ copied ? 'کپی شد' : 'کپی' }}</span>
-        </button>
-        <button
-          class="delete-button inline-flex items-center gap-1 px-2 py-0.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive text-xs font-sans transition-colors cursor-pointer opacity-0 group-hover:opacity-100"
-          @click="handleDeleteMessage"
-          title="حذف پیام"
-        >
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-          </svg>
-          <span class="text-[11px]">حذف</span>
         </button>
       </div>
 

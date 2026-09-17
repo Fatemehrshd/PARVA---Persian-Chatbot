@@ -17,13 +17,13 @@ describe('ChatComposer.vue', () => {
     expect(sendBtn.attributes('disabled')).toBeDefined()
 
     const textarea = wrapper.find('textarea')
-    await textarea.setValue('Hello NeuralChat')
+    await textarea.setValue('Hello PARVA')
 
     expect(sendBtn.attributes('disabled')).toBeUndefined()
 
     await sendBtn.trigger('click')
     expect(chatStore.messages.length).toBeGreaterThan(0)
-    expect(chatStore.messages[chatStore.messages.length - 1].content).toBe('Hello NeuralChat')
+    expect(chatStore.messages[chatStore.messages.length - 1].content).toBe('Hello PARVA')
     expect((textarea.element as HTMLTextAreaElement).value).toBe('')
   })
 

@@ -48,8 +48,8 @@ describe('Network Resilience and Recovery Actions', () => {
     const chatStore = useChatStore()
     chatStore.currentConversationId = 'conv-1'
 
-    await chatStore.sendMessage('Hello NeuralChat')
-    expect(chatStore.lastUserPrompt).toBe('Hello NeuralChat')
+    await chatStore.sendMessage('Hello PARVA')
+    expect(chatStore.lastUserPrompt).toBe('Hello PARVA')
     expect(typeof chatStore.retryLastMessage).toBe('function')
     expect(typeof chatStore.continueLastMessage).toBe('function')
   })

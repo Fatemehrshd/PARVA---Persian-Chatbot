@@ -13,7 +13,6 @@ import {
   ChevronUp,
   LogIn,
   Settings,
-  ShieldCheck,
 } from '@lucide/vue'
 import { useUiStore } from '../../stores/ui'
 import { useChatStore } from '../../stores/chat'
@@ -188,14 +187,8 @@ const userInitial = computed(() => {
     ═══════════════════════════════════ -->
     <div v-if="uiStore.sidebarOpen" class="sidebar-expanded">
 
-      <!-- Top: Brand + Collapse -->
+      <!-- Top: Collapse + Brand -->
       <div class="sb-top-row">
-        <div class="sb-brand">
-          <div class="sb-brand-logo">
-            <img :src="activeLogo" alt="پروا" class="sb-brand-logo-img" />
-          </div>
-          <span class="sb-brand-name">پروا</span>
-        </div>
         <button
           class="sb-icon-btn"
           title="بستن نوار کناری"
@@ -203,6 +196,9 @@ const userInitial = computed(() => {
         >
           <component :is="SidebarCollapseIcon" :size="17" />
         </button>
+        <div class="sb-brand">
+          <span class="sb-brand-name" dir="ltr">PARVA</span>
+        </div>
       </div>
 
       <!-- Actions: Search / New Chat / Temp Chat — stacked vertically -->
@@ -282,17 +278,7 @@ const userInitial = computed(() => {
 
         <template v-if="authStore.isAuthenticated">
           <!-- Direct Admin Panel Link (Admin Only) -->
-          <router-link
-            v-if="authStore.isAdmin"
-            to="/admin/models"
-            class="sb-admin-direct-link"
-            title="ورود به پنل مدیریت مدل‌ها و کاربران"
-          >
-            <ShieldCheck :size="15" class="text-amber-500 flex-shrink-0" />
-            <span class="sb-admin-link-text">پنل ادمین</span>
-            <span class="sb-admin-badge font-mono">ADMIN</span>
-          </router-link>
-
+          
           <!-- Profile popup menu -->
           <ProfileMenu
             v-if="profileMenuOpen"
@@ -313,7 +299,6 @@ const userInitial = computed(() => {
             <div v-else class="sb-avatar">{{ userInitial }}</div>
             <div class="sb-user-info">
               <span class="sb-user-name">{{ authStore.user?.displayName || authStore.user?.email }}</span>
-              <span v-if="authStore.isAdmin" class="sb-user-role">ادمین</span>
             </div>
             <ChevronUp :size="13" class="sb-chevron" :class="{ 'is-flipped': !profileMenuOpen }" />
           </button>
@@ -366,50 +351,13 @@ const userInitial = computed(() => {
         <MessageCircleDashed :size="17" />
       </button>
 
-      <div class="sb-divider-mini" />
-
-      <!-- Collapsed Chat List (shows icons with tooltips so sidebar is not empty) -->
-      <div class="sb-collapsed-chats" v-if="chatStore.conversations.length > 0">
-        <button
-          v-for="conv in chatStore.conversations"
-          :key="conv.id"
-          class="sb-icon-btn sb-icon-btn--conv"
-          :class="{ 'is-active': conv.id === chatStore.currentConversationId }"
-          @click="handleSelect(conv.id)"
-          :title="conv.title"
-        >
-          <span
-            v-if="chatStore.getConvIsStreaming(conv.id)"
-            class="sb-conv-streaming-dot sb-conv-streaming-dot--sm"
-            title="در حال دریافت پاسخ..."
-          />
-          <MessageSquare v-else :size="14" />
-        </button>
-      </div>
-
       <!-- Spacer -->
       <div class="sb-spacer" />
-
-      <!-- Settings in collapsed state -->
-      <button
-        class="sb-icon-btn sb-icon-btn--lg"
-        @click="openSettings"
-        title="تنظیمات و تم"
-      >
-        <Settings :size="17" />
-      </button>
 
       <!-- Profile (collapsed) -->
       <div class="sb-collapsed-profile flex flex-col gap-2 items-center" v-if="authStore.isAuthenticated">
         <!-- Direct Admin Icon Link (collapsed) -->
-        <router-link
-          v-if="authStore.isAdmin"
-          to="/admin/models"
-          class="sb-icon-btn sb-icon-btn--lg sb-admin-icon-btn"
-          title="ورود به پنل ادمین"
-        >
-          <ShieldCheck :size="17" class="text-amber-500" />
-        </router-link>
+        
         <!-- Profile popup (positioned to the left of icon in RTL) -->
         <div v-if="profileMenuOpen" class="sb-collapsed-menu-wrapper">
           <ProfileMenu
@@ -548,17 +496,22 @@ const userInitial = computed(() => {
 
 /* Top row */
 .sb-top-row {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 2px 12px 10px;
   flex-shrink: 0;
 }
 
 .sb-brand {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 8px;
+  pointer-events: none;
 }
 
 .sb-brand-logo {
@@ -577,10 +530,11 @@ const userInitial = computed(() => {
 }
 
 .sb-brand-name {
-  font-size: 14px;
+  font-family: var(--font-brand);
+  font-size: 19px;
   font-weight: 700;
   color: var(--foreground);
-  letter-spacing: -0.01em;
+  letter-spacing: 0.08em;
   white-space: nowrap;
 }
 
@@ -912,48 +866,6 @@ const userInitial = computed(() => {
   flex-shrink: 0;
 }
 
-.sb-divider-mini {
-  width: 24px;
-  height: 1px;
-  background: var(--border);
-  margin: 4px 0;
-  flex-shrink: 0;
-}
-
-.sb-collapsed-chats {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  width: 100%;
-  max-height: 40vh;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 2px 0;
-}
-
-.sb-collapsed-chats::-webkit-scrollbar {
-  width: 2px;
-}
-.sb-collapsed-chats::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 2px;
-}
-
-.sb-icon-btn--conv {
-  color: var(--muted-foreground);
-}
-
-.sb-icon-btn--conv:hover {
-  color: var(--foreground);
-}
-
-.sb-icon-btn--conv.is-active {
-  background-color: var(--surface-alt, var(--secondary));
-  color: var(--primary);
-  box-shadow: 0 0 0 1px var(--border);
-}
-
 .sb-spacer { flex: 1; }
 
 /* Icon buttons */
@@ -1050,12 +962,6 @@ const userInitial = computed(() => {
   background-color: var(--primary);
   animation: stream-pulse 1.1s ease-in-out infinite;
   flex-shrink: 0;
-}
-
-.sb-conv-streaming-dot--sm {
-  width: 7px;
-  height: 7px;
-  min-width: 7px;
 }
 
 @keyframes stream-pulse {

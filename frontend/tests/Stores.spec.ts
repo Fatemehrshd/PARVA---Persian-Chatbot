@@ -14,16 +14,19 @@ describe('Pinia Stores', () => {
     const initialCount = chatStore.conversations.length
 
     const newId = await chatStore.createNewConversation('تست آزمایشی')
-    expect(chatStore.conversations.length).toBe(initialCount + 1)
+    // New conversations stay off the sidebar until the assistant responds,
+    // so an empty chat should not appear in the list yet.
+    expect(chatStore.conversations.length).toBe(initialCount)
     expect(chatStore.currentConversationId).toBe(newId)
     expect(chatStore.messages.length).toBe(0)
 
-    await chatStore.updateConversationTitle(newId, 'عنوان جدید تست')
-    const updated = chatStore.conversations.find((c) => c.id === newId)
-    expect(updated?.title).toBe('عنوان جدید تست')
-
-    await chatStore.deleteConversation(newId)
-    expect(chatStore.conversations.some((c) => c.id === newId)).toBe(false)
+    // Sending a message alone does not add the conversation either — only
+    // the first token from the assistant (handled inside sendMessageStream's
+    // onToken callback) joins it to the sidebar. In this test there is no
+    // backend, so the conv stays off the list.
+    await chatStore.sendMessage('سلام')
+    expect(chatStore.conversations.length).toBe(initialCount)
+    expect(chatStore.messages.length).toBe(1)
   })
 
   it('modelsStore: can select active model and make default', async () => {

@@ -133,9 +133,28 @@ watch(
       return
     }
 
+    // 2b. Streaming just started — reset auto-scroll so user sees the response
+    const wasStreaming = previousState?.[2] === true
+    if (isCurrentlyStreaming && !wasStreaming) {
+      shouldAutoScroll.value = true
+      isUserScrolling.value = false
+    }
+
     // 3. During streaming / thinking
-    if (isCurrentlyStreaming && (streamingTextChanged || isThinking) && shouldAutoScroll.value && !isUserScrolling.value) {
-      scrollToBottom(false)
+    if (isCurrentlyStreaming && (streamingTextChanged || isThinking)) {
+      // اگر کاربر دستی اسکرول نکرده، همیشه follow کن
+      if (!isUserScrolling.value) {
+        if (!shouldAutoScroll.value) {
+          // بررسی کن آیا واقعاً کاربر پایین است یا فقط flag اشتباه است
+          const container = containerRef.value
+          if (container && isNearBottom(container, 120)) {
+            shouldAutoScroll.value = true
+          }
+        }
+        if (shouldAutoScroll.value) {
+          scrollToBottom(false)
+        }
+      }
     }
   },
   { flush: 'post' }
@@ -225,7 +244,7 @@ onBeforeUnmount(() => {
               >
                 <div v-if="chatStore.currentStreamingText" class="message-text relative">
                   <MarkdownContent :content="chatStore.currentStreamingText" :streaming="true" />
-                  <span class="streaming-cursor"></span>
+                  
                 </div>
                 <ThinkingIndicator v-else />
               </div>
@@ -317,17 +336,6 @@ onBeforeUnmount(() => {
   padding: 4px 0 !important;
   border-radius: 0 !important;
   word-break: break-word;
-}
-
-.streaming-cursor {
-  display: inline-block;
-  width: 7px;
-  height: 15px;
-  background-color: var(--primary);
-  margin-inline-start: 4px;
-  vertical-align: text-bottom;
-  animation: blink 0.8s infinite;
-  border-radius: 2px;
 }
 
 .scroll-to-bottom-btn {

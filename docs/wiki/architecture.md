@@ -1,6 +1,6 @@
 # Architecture Overview
 
-پلتفرم **CODELESS / NeuralChat** یک سامانه تمام‌عیار هوش مصنوعی چندمدلی (Multi-Model AI Chat Platform) بر پایه معماری Monorepo و سرویس‌های مستقل فرانت‌اند و بک‌اند است.
+پلتفرم **CODELESS / PARVA** یک سامانه تمام‌عیار هوش مصنوعی چندمدلی (Multi-Model AI Chat Platform) بر پایه معماری Monorepo و سرویس‌های مستقل فرانت‌اند و بک‌اند است.
 
 ## Environment Variables
 - **Frontend**: Vite-based variables prefixed with `VITE_` (e.g. `VITE_API_BASE_URL`). Types declared in `src/env.d.ts`.

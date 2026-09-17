@@ -208,7 +208,7 @@ watch(
             <Skeleton class="h-10 w-2/3" />
           </div>
 
-          <form v-else-if="activeTab === 'profile'" class="profile-form" @submit.prevent="profileSubmit.submit()">
+          <form v-else-if="activeTab === 'profile'" id="form-profile" class="profile-form" @submit.prevent="profileSubmit.submit()">
             <div class="profile-avatar-row">
               <div class="profile-avatar-picker">
                 <img v-if="avatarPreviewUrl || profile?.avatarUrl" :src="avatarPreviewUrl || profile?.avatarUrl || undefined" alt="" class="profile-avatar profile-avatar-image" />
@@ -247,14 +247,9 @@ watch(
               <Input id="profile-username" v-model="username" :loading="profileSubmit.isSubmitting.value" placeholder="username" />
               <span class="profile-helper">۳ تا ۳۰ کاراکتر انگلیسی، عدد یا _</span>
             </div>
-            <div class="profile-form-actions">
-              <Button type="submit" :loading="profileSubmit.isSubmitting.value" :disabled="isLoadingProfile">
-                ذخیره اطلاعات
-              </Button>
-            </div>
           </form>
 
-          <form v-else-if="activeTab === 'email'" class="profile-form" @submit.prevent="emailSubmit.submit()">
+          <form v-else-if="activeTab === 'email'" id="form-email" class="profile-form" @submit.prevent="emailSubmit.submit()">
             <div class="profile-tab-intro"><Mail :size="20" /><span>برای تغییر ایمیل، رمز عبور فعلی لازم است.</span></div>
             <div class="profile-field">
               <Label for="profile-email">ایمیل جدید</Label>
@@ -264,12 +259,9 @@ watch(
               <Label for="profile-email-password">رمز عبور فعلی</Label>
               <Input id="profile-email-password" v-model="emailPassword" type="password" :loading="emailSubmit.isSubmitting.value" required />
             </div>
-            <div class="profile-form-actions">
-              <Button type="submit" :loading="emailSubmit.isSubmitting.value">تغییر ایمیل</Button>
-            </div>
           </form>
 
-          <form v-else class="profile-form" @submit.prevent="passwordSubmit.submit()">
+          <form v-else id="form-password" class="profile-form" @submit.prevent="passwordSubmit.submit()">
             <div class="profile-tab-intro"><LockKeyhole :size="20" /><span>رمز عبور جدید باید حداقل ۸ کاراکتر باشد.</span></div>
             <div class="profile-field">
               <Label for="profile-current-password">رمز عبور فعلی</Label>
@@ -283,10 +275,36 @@ watch(
               <Label for="profile-confirm-password">تکرار رمز عبور جدید</Label>
               <Input id="profile-confirm-password" v-model="confirmPassword" type="password" :loading="passwordSubmit.isSubmitting.value" required />
             </div>
-            <div class="profile-form-actions">
-              <Button type="submit" :loading="passwordSubmit.isSubmitting.value">تغییر رمز عبور</Button>
-            </div>
           </form>
+        </div>
+
+        <!-- Footer مشترک برای همه تب‌ها -->
+        <div v-if="!isLoadingProfile" class="profile-modal-footer">
+          <Button
+            v-if="activeTab === 'profile'"
+            type="submit"
+            form="form-profile"
+            :loading="profileSubmit.isSubmitting.value"
+            :disabled="isLoadingProfile"
+          >
+            ذخیره اطلاعات
+          </Button>
+          <Button
+            v-else-if="activeTab === 'email'"
+            type="submit"
+            form="form-email"
+            :loading="emailSubmit.isSubmitting.value"
+          >
+            تغییر ایمیل
+          </Button>
+          <Button
+            v-else
+            type="submit"
+            form="form-password"
+            :loading="passwordSubmit.isSubmitting.value"
+          >
+            تغییر رمز عبور
+          </Button>
         </div>
       </DialogContent>
     </DialogPortal>
@@ -321,6 +339,7 @@ watch(
 .profile-tab-intro { display: flex; align-items: flex-start; gap: 10px; min-height: 48px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--muted-foreground); font-size: 12px; }
 .profile-tab-intro svg { flex-shrink: 0; color: var(--primary); }
 .profile-form-actions { display: flex; justify-content: flex-start; margin-top: auto; padding-top: 12px; }
+.profile-modal-footer { display: flex; justify-content: flex-end; padding: 16px 24px; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--secondary) 38%, transparent); }
 @media (max-width: 640px) {
   .profile-modal-content { width: calc(100svw - 24px); max-width: calc(100svw - 24px); height: min(620px, calc(100svh - 24px)); max-height: calc(100svh - 24px); border-radius: var(--radius); }
   .profile-modal-header { gap: 10px; padding: 16px; }
@@ -332,6 +351,8 @@ watch(
   .profile-skeleton, .profile-form { min-height: 360px; height: 100%; gap: 14px; }
   .profile-form-actions { padding-top: 8px; }
   .profile-form-actions :deep(button) { width: 100%; }
+  .profile-modal-footer { padding: 12px 16px; }
+  .profile-modal-footer :deep(button) { width: 100%; }
 }
 @media (max-width: 380px) {
   .profile-modal-content { width: calc(100svw - 16px); max-width: calc(100svw - 16px); height: min(620px, calc(100svh - 16px)); max-height: calc(100svh - 16px); }

@@ -31,18 +31,18 @@ markedInstance.use({
       const language = (lang || 'code').trim().toLowerCase()
       const encodedCode = encodeURIComponent(text)
       return `
-<div class="code-block-wrapper my-4 rounded-xl border border-border/60 overflow-hidden bg-[#11121d] text-slate-100 shadow-sm" dir="ltr">
-  <div class="code-block-header flex items-center justify-between px-4 py-2 bg-[#181926] border-b border-white/10 text-xs font-mono">
-    <span class="code-lang font-semibold tracking-wider uppercase text-slate-300">${escapeHtml(language.toUpperCase())}</span>
-    <button type="button" class="copy-code-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-sans text-slate-300 hover:text-white hover:bg-white/10 transition-colors" data-code="${encodedCode}">
-      <svg class="copy-icon w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+<div class="code-block-wrapper" dir="ltr">
+  <div class="code-block-header">
+    <span class="code-lang">${escapeHtml(language.toUpperCase())}</span>
+    <button type="button" class="copy-code-btn" data-code="${encodedCode}">
+      <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
       </svg>
       <span class="copy-label">کپی</span>
     </button>
   </div>
-  <pre class="code-pre p-4 overflow-x-auto text-[13px] leading-relaxed font-mono selection:bg-primary/30"><code class="language-${escapeHtml(language)}">${escapeHtml(text)}</code></pre>
+  <pre class="code-pre"><code class="language-${escapeHtml(language)}">${escapeHtml(text)}</code></pre>
 </div>
 `
     },
@@ -230,6 +230,79 @@ onBeforeUnmount(() => {
   margin: 0;
   border-radius: 0;
   background: transparent !important;
+}
+
+/* ── Code block ── */
+.markdown-content .code-block-wrapper {
+  margin: 1rem 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--code-bg, #11121d);
+  color: var(--code-fg, #e2e4f0);
+  font-size: 13px;
+}
+
+.markdown-content .code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px;
+  background: var(--code-header-bg, #181926);
+  border-bottom: 1px solid var(--code-divider, rgba(255,255,255,0.07));
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.markdown-content .code-lang {
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--code-label, rgba(255,255,255,0.5));
+}
+
+.markdown-content .copy-code-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--code-label, rgba(255,255,255,0.5));
+  font-family: var(--font-sans);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.markdown-content .copy-code-btn:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.08);
+}
+
+.markdown-content .copy-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.markdown-content .code-pre {
+  margin: 0;
+  padding: 16px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.65;
+  background: transparent !important;
+  border-radius: 0;
+}
+
+/* Light mode overrides */
+html:not(.dark) .markdown-content .code-block-wrapper {
+  --code-bg: #1e2030;
+  --code-header-bg: #161824;
+  --code-divider: rgba(255,255,255,0.07);
+  --code-label: rgba(255,255,255,0.45);
 }
 
 .markdown-content .inline-code {

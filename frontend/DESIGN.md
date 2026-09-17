@@ -39,7 +39,7 @@ Untitled
 دلایل رایج مخالفت با ازدواج
 درخواست ارائه تشخیص ناهنجاری پایگاه داده
 Conversation with Gemini
-# NeuralChat — Design Guidelines
+# PARVA — Design Guidelines
 
 
 
@@ -403,13 +403,13 @@ Hidden at rest. Surface only on hover via `::-webkit-scrollbar-thumb` opacity to
 
 
 
-- AI persona name: **NeuralChat**
+- AI persona name: **PARVA**
 
 - Tone: knowledgeable, direct, no filler
 
 - Error / loading copy: functional, not playful
 
-- Disclaimer: "NeuralChat can make mistakes. Verify important information." — small, centered, below composer
+- Disclaimer: "PARVA can make mistakes. Verify important information." — small, centered, below composer
 
 
 
@@ -469,7 +469,7 @@ Hidden at rest. Surface only on hover via `::-webkit-scrollbar-thumb` opacity to
 
 میتونی اصلاحش کنی بعد به من بدی؟ 
 
-NeuralChat — Design Guidelines
+PARVA — Design Guidelines
 A focused AI chat platform. Editorial stance: cool-tinted dark and warm-cream light palettes anchored by a single navy/blue accent. Every decision reduces friction between the user and the conversation.
 
 Aesthetic Stance
@@ -634,13 +634,13 @@ AA/AAA contrast target: var(--foreground) on var(--background) meets contrast th
 Focus ring: 2px glow using var(--ring) on all interactive inputs
 
 Content Voice
-AI persona name: NeuralChat
+AI persona name: PARVA
 
 Tone: knowledgeable, direct, no filler
 
 Error / loading copy: functional, not playful
 
-Disclaimer: "NeuralChat can make mistakes. Verify important information." — small, centered, below composer
+Disclaimer: "PARVA can make mistakes. Verify important information." — small, centered, below composer
 
 Do / Don't
 Do	Don't
@@ -747,10 +747,10 @@ Hidden at rest. Surface only on hover via `::-webkit-scrollbar-thumb` opacity to
 
 ## Content Voice
 
-- AI persona name: **NeuralChat**
+- AI persona name: **PARVA**
 - Tone: knowledgeable, direct, no filler
 - Error / loading copy: functional, not playful
-- Disclaimer: "NeuralChat can make mistakes. Verify important information." — small, centered, below composer
+- Disclaimer: "PARVA can make mistakes. Verify important information." — small, centered, below composer
 
 ---
 
@@ -785,7 +785,7 @@ README
 Gemini isn't human. It can make mistakes, so double-check it.
 
 Requesting Readme Download
-# NeuralChat — Design Guidelines
+# PARVA — Design Guidelines
 
 A focused AI chat platform. Editorial stance: cool-tinted dark and warm-cream light palettes anchored by a single navy/blue accent. Every decision reduces friction between the user and the conversation.
 
@@ -979,10 +979,10 @@ Hidden at rest. Surface only on hover via `::-webkit-scrollbar-thumb` opacity to
 
 ## Content Voice
 
-- AI persona name: **NeuralChat**
+- AI persona name: **PARVA**
 - Tone: knowledgeable, direct, no filler
 - Error / loading copy: functional, not playful
-- Disclaimer: "NeuralChat can make mistakes. Verify important information." — small, centered, below composer
+- Disclaimer: "PARVA can make mistakes. Verify important information." — small, centered, below composer
 
 ---
 

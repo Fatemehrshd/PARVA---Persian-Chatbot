@@ -321,3 +321,9 @@
 - Fixed pre-existing branch issues to restore the green gate: removed duplicate `UpdateUserStatusDto` in backend `admin/dto.ts`, removed two unused imports (ProfileModal `DialogDescription`, AdminPanelView `authStore`), and updated stale test expectations in `LoginView.spec.ts` / `SettingsModal.spec.ts` to the current Persian UI strings.
 - Verification: frontend suite 126/126 green (23 files) and production build (`vue-tsc -b && vite build`) passes.
 - Mobile layout fix: below 768px the admin sidebar goes off-canvas, so `margin-inline-start: 260px` on `.admin-main` is now reset (it previously stayed applied, pushing all admin content sideways on phones); topbar and content padding are also compacted on small screens.
+
+## Task 27: Immediate Avatar Sync on Login (Frontend)
+- The auth (login/signup) response carries no `avatarUrl`, so the sidebar avatar only appeared after the profile modal was opened (which fetches `/users/me`).
+- `authStore` now refreshes the full profile right after login/signup (fire-and-forget, session already usable) and on store init when a saved session exists (page refresh / direct URL).
+- Failure-safe: a failed profile refresh keeps the session untouched (401 is handled globally with auto-logout).
+- Covered by `tests/AvatarSync.spec.ts` (login path, refresh path, failure path).

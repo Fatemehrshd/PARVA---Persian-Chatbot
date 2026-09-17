@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User } from '../types'
 import { authService } from '../services/auth.service'
+import { profileService } from '../services/profile.service'
 
 export const useAuthStore = defineStore('auth', () => {
   const savedUser = localStorage.getItem('user')
@@ -28,12 +29,32 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('user', JSON.stringify(updatedUser))
   }
 
+  /**
+   * The auth (login/signup) payload carries no avatarUrl, so the avatar in
+   * the sidebar only appeared after the profile modal was opened. This
+   * fetches /users/me once and syncs the full profile (avatar included)
+   * into the session right after login and on page refresh.
+   */
+  async function refreshProfile(): Promise<void> {
+    if (!token.value) return
+    try {
+      updateUser(await profileService.getProfile())
+    } catch (err: any) {
+      // 401 is handled globally (auto logout + toast) in services/api.ts;
+      // any other failure keeps the current session untouched.
+      if (err?.statusCode !== 401) {
+        console.warn('Profile refresh failed:', err)
+      }
+    }
+  }
+
   async function login(email: string, password: string): Promise<boolean> {
     loading.value = true
     error.value = null
     try {
       const response = await authService.login(email.trim().toLowerCase(), password)
       setSession(response.user, response.accessToken, response.refreshToken)
+      void refreshProfile()
       return true
     } catch (err: any) {
       let msg = err?.message || 'ورود با خطا مواجه شد.'
@@ -58,6 +79,7 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const response = await authService.signup(email, password, displayName)
       setSession(response.user, response.accessToken, response.refreshToken)
+      void refreshProfile()
       return true
     } catch (err: any) {
       let msg = err?.message || 'ثبت‌نام با خطا مواجه شد.'
@@ -89,6 +111,12 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // Existing session (page refresh / direct URL): sync the profile — avatar
+  // included — immediately instead of waiting for the profile modal.
+  if (token.value && user.value) {
+    void refreshProfile()
+  }
+
   return {
     user,
     token,
@@ -100,5 +128,6 @@ export const useAuthStore = defineStore('auth', () => {
     signup,
     logout,
     updateUser,
+    refreshProfile,
   }
 })

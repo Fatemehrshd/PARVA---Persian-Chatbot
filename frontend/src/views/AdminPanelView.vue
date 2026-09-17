@@ -12,6 +12,7 @@ import {
 } from '@lucide/vue'
 import { useModelsStore } from '../stores/models'
 import { useUiStore } from '../stores/ui'
+import { useAuthStore } from '../stores/auth'
 import { modelsService } from '../services/models.service'
 import { adminService } from '../services/admin.service'
 import { buildUrl } from '../services/api'
@@ -47,9 +48,13 @@ import usersWhite from '../assets/users-white.svg'
 const router = useRouter()
 const modelsStore = useModelsStore()
 const uiStore = useUiStore()
+const authStore = useAuthStore()
 
 const activeSection = ref<'dashboard' | 'providers' | 'models' | 'users' | 'prompts' | 'chats' | 'files'>('dashboard')
 const sidebarOpen = ref(false)
+
+const adminName = computed(() => authStore.user?.displayName || authStore.user?.email || 'ادمین')
+const adminInitial = computed(() => adminName.value.charAt(0).toUpperCase())
 
 // 3-Second Search Debounce
 const searchQuery = ref('')
@@ -860,11 +865,15 @@ onMounted(loadData)
     <!-- Sidebar -->
     <aside class="admin-sidebar" :class="{ 'is-open': sidebarOpen }">
       <div class="admin-brand">
-        <div class="admin-brand-mark">پ</div>
+        <img
+          v-if="authStore.user?.avatarUrl"
+          :src="authStore.user.avatarUrl"
+          alt=""
+          class="admin-avatar admin-avatar-image"
+        />
+        <div v-else class="admin-avatar">{{ adminInitial }}</div>
         <div class="admin-brand-text">
-          <strong>پروا</strong>
-          <span class="admin-brand-sub">پنل مدیریت سیستم</span>
-          <span class="sr-only">ADMIN</span>
+          <strong>{{ adminName }}</strong>
         </div>
       </div>
 
@@ -2201,29 +2210,28 @@ onMounted(loadData)
   border-bottom: 1px solid var(--border);
 }
 
-.admin-brand-mark {
+.admin-avatar {
   width: 38px;
   height: 38px;
+  flex-shrink: 0;
   display: grid;
   place-items: center;
-  border-radius: 11px;
+  border-radius: 50%;
   background: var(--primary);
   color: var(--primary-foreground);
   font-weight: 700;
-  font-size: 20px;
+  font-size: 18px;
+  overflow: hidden;
+}
+
+.admin-avatar-image {
+  object-fit: cover;
 }
 
 .admin-brand-text strong {
   display: block;
   font-size: 17px;
   font-weight: 700;
-}
-
-.admin-brand-sub {
-  display: block;
-  font-size: 11px;
-  color: var(--muted-foreground);
-  margin-top: 2px;
 }
 
 .admin-nav {

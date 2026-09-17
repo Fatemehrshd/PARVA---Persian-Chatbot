@@ -35,7 +35,7 @@ export class FileProcessorService {
     file.errorMessage = undefined;
     await this.fileRepo.save(file);
 
-    const timeoutSec = await this.getSettingNumber('file_processing_timeout_sec', 120);
+    const timeoutSec = Math.max(5, await this.getSettingNumber('file_processing_timeout_sec', 120));
 
     const processPromise = (async () => {
       const buffer = await this.storage.getBuffer(file.minioKey);
@@ -53,12 +53,13 @@ export class FileProcessorService {
     })();
 
     // Timeout guard to prevent infinite processing
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(
+    let timeoutTimer: NodeJS.Timeout;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutTimer = setTimeout(
         () => reject(new Error('پردازش فایل به دلیل اتمام زمان مجاز با خطا مواجه شد')),
         timeoutSec * 1000,
-      ),
-    );
+      );
+    });
 
     try {
       await Promise.race([processPromise, timeoutPromise]);
@@ -71,6 +72,8 @@ export class FileProcessorService {
       file.status = 'error';
       file.errorMessage = err?.message || 'خطا در پردازش فایل';
       await this.fileRepo.save(file);
+    } finally {
+      clearTimeout(timeoutTimer!);
     }
   }
 
@@ -182,9 +185,12 @@ export class FileProcessorService {
 
   private async getSettingNumber(key: string, defaultValue: number): Promise<number> {
     try {
-      const val = await this.settings.get(key);
-      if (val !== undefined && val !== null && !isNaN(Number(val))) {
-        return Number(val);
+      const val = await this.settings.get(key, String(defaultValue));
+      if (val && typeof val === 'string' && val.trim() !== '') {
+        const parsed = Number(val);
+        if (!isNaN(parsed) && parsed > 0) {
+          return parsed;
+        }
       }
     } catch {
       // ignore

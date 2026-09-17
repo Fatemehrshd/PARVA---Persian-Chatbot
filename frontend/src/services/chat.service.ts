@@ -81,6 +81,16 @@ export const chatService = {
   },
 
   /**
+   * Delete a single message from conversation (Soft Delete).
+   * DELETE /chat/conversations/{conversationId}/messages/{messageId}
+   */
+  async deleteMessage(conversationId: string, messageId: string): Promise<void> {
+    return request<void>(`/chat/conversations/${conversationId}/messages/${messageId}`, {
+      method: 'DELETE'
+    })
+  },
+
+  /**
    * Get the message history of a conversation (ordered oldest first).
    * GET /chat/conversations/{conversationId}/messages
    */
@@ -92,8 +102,8 @@ export const chatService = {
    * Send a message and receive a synchronous JSON reply (non-streaming).
    * POST /chat/conversations/{conversationId}/messages with Accept: application/json
    */
-  async sendMessage(conversationId: string, content: string): Promise<Message> {
-    const payload: SendMessageRequest = { content }
+  async sendMessage(conversationId: string, content: string, fileIds?: string[]): Promise<Message> {
+    const payload: SendMessageRequest = { content, ...(fileIds && fileIds.length > 0 ? { fileIds } : {}) }
     return request<Message>(`/chat/conversations/${conversationId}/messages`, {
       method: 'POST',
       headers: {
@@ -227,7 +237,8 @@ export const chatService = {
     onError: (err: any) => void,
     signal?: AbortSignal,
     onTitle?: (title: string) => void,
-    onSync?: (accumulated: string) => void
+    onSync?: (accumulated: string) => void,
+    fileIds?: string[]
   ): Promise<void> {
     const token = localStorage.getItem('token')
     const headers: Record<string, string> = {
@@ -253,10 +264,14 @@ export const chatService = {
     }
 
     try {
+      const payload: any = { content }
+      if (fileIds && fileIds.length > 0) {
+        payload.fileIds = fileIds
+      }
       const response = await fetch(url, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ content }),
+        body: JSON.stringify(payload),
         signal: internalAbort.signal
       })
 

@@ -17,6 +17,7 @@ export class Conversation {
   @ManyToOne('User', 'conversations', { onDelete: 'CASCADE' }) user: User;
   @Column() userId: string;
   @OneToMany(() => Message, (m) => m.conversation) messages: Message[];
+  @Column({ default: false }) isDeleted: boolean;
   @CreateDateColumn() createdAt: Date;
   @UpdateDateColumn() updatedAt: Date;
 }

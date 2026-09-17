@@ -1,0 +1,296 @@
+import { ref, computed, onMounted } from 'vue'
+import type { FileAttachmentItem } from '../types'
+import { filesService, type UploadLimits } from '../services/files.service'
+import { useUiStore } from '../stores/ui'
+
+export function useFileUpload(conversationIdProvider: () => string | null) {
+  const uiStore = useUiStore()
+
+  const attachedFiles = ref<FileAttachmentItem[]>([])
+  const isDraggingOver = ref(false)
+
+  const limits = ref<UploadLimits>({
+    maxFileSizeMb: 20,
+    maxTotalSizeMb: 50,
+    maxFileCount: 5,
+    maxFileSizeBytes: 20 * 1024 * 1024,
+    maxTotalSizeBytes: 50 * 1024 * 1024,
+  })
+
+  onMounted(async () => {
+    try {
+      limits.value = await filesService.getSettings()
+    } catch {
+      // keep fallback
+    }
+  })
+
+  const hasUploadingFiles = computed(() =>
+    attachedFiles.value.some((f) => f.status === 'uploading'),
+  )
+
+  const hasProcessingFiles = computed(() =>
+    attachedFiles.value.some((f) => f.status === 'processing'),
+  )
+
+  const hasErrorFiles = computed(() =>
+    attachedFiles.value.some((f) => f.status === 'error'),
+  )
+
+  const allReadyFiles = computed(() =>
+    attachedFiles.value.filter((f) => f.status === 'ready'),
+  )
+
+  const readyFileIds = computed(() =>
+    allReadyFiles.value.map((f) => f.id),
+  )
+
+  /**
+   * Validates incoming File list against size and count limits.
+   */
+  function validateFiles(newFiles: File[]): { valid: boolean; message?: string } {
+    const currentCount = attachedFiles.value.length
+    if (currentCount + newFiles.length > limits.value.maxFileCount) {
+      return {
+        valid: false,
+        message: `حداکثر ${limits.value.maxFileCount} فایل می‌توانید در یک پیام پیوست کنید`,
+      }
+    }
+
+    const currentTotalBytes = attachedFiles.value.reduce(
+      (sum, f) => sum + (f.fileSize || 0),
+      0,
+    )
+    const newTotalBytes = newFiles.reduce((sum, f) => sum + f.size, 0)
+
+    for (const f of newFiles) {
+      if (f.size > limits.value.maxFileSizeBytes) {
+        return {
+          valid: false,
+          message: `حجم فایل "${f.name}" بیش از سقف مجاز (${limits.value.maxFileSizeMb} مگابایت) است`,
+        }
+      }
+    }
+
+    if (currentTotalBytes + newTotalBytes > limits.value.maxTotalSizeBytes) {
+      return {
+        valid: false,
+        message: `مجموع حجم فایل‌ها از سقف مجاز (${limits.value.maxTotalSizeMb} مگابایت) فراتر می‌رود`,
+      }
+    }
+
+    return { valid: true }
+  }
+
+  function resolveFileType(file: File): 'image' | 'pdf' | 'excel' {
+    const name = file.name.toLowerCase()
+    if (file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(name)) {
+      return 'image'
+    }
+    if (file.type === 'application/pdf' || name.endsWith('.pdf')) {
+      return 'pdf'
+    }
+    return 'excel'
+  }
+
+  /**
+   * Adds and immediately starts uploading files.
+   */
+  async function addFiles(files: FileList | File[]) {
+    const fileArray = Array.from(files)
+    if (fileArray.length === 0) return
+
+    const validation = validateFiles(fileArray)
+    if (!validation.valid) {
+      uiStore.showToast(validation.message || 'فایل‌های انتخابی مجاز نیستند', 'error')
+      return
+    }
+
+    for (const file of fileArray) {
+      const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
+      const fileType = resolveFileType(file)
+      const previewUrl = fileType === 'image' ? URL.createObjectURL(file) : undefined
+
+      const abortController = new AbortController()
+
+      const item: FileAttachmentItem = {
+        id: tempId,
+        originalName: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        fileType,
+        fileSize: file.size,
+        status: 'uploading',
+        progress: 0,
+        previewUrl,
+        abortController,
+      }
+
+      attachedFiles.value.push(item)
+
+      // Start upload immediately
+      startUpload(item, file)
+    }
+  }
+
+  async function startUpload(item: FileAttachmentItem, file: File) {
+    const convId = conversationIdProvider() || undefined
+
+    try {
+      const result = await filesService.uploadFile(
+        file,
+        convId,
+        (percent) => {
+          item.progress = percent
+        },
+        item.abortController?.signal,
+      )
+
+      // Replace tempId with actual server id
+      item.id = result.id
+      item.status = (result.status as any) || 'processing'
+      item.progress = 100
+
+      // Start polling for processing status until ready or error
+      pollFileStatus(item)
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.message === 'Upload aborted') {
+        // User cancelled, ignore
+        return
+      }
+
+      item.status = 'error'
+      item.errorMessage = err?.message || 'خطا در آپلود فایل'
+      uiStore.showToast(item.errorMessage || 'خطا در آپلود فایل', 'error')
+    }
+  }
+
+  async function pollFileStatus(item: FileAttachmentItem) {
+    let attempts = 0
+    const maxAttempts = 60 // 60 * 2s = 120s (matching timeout)
+
+    const interval = setInterval(async () => {
+      // If item was removed from array, stop polling
+      if (!attachedFiles.value.some((f) => f.id === item.id)) {
+        clearInterval(interval)
+        return
+      }
+
+      attempts++
+      try {
+        const res = await filesService.getFileStatus(item.id)
+        item.status = res.status
+        item.errorMessage = res.errorMessage
+        item.metadata = res.metadata
+
+        if (res.status === 'ready' || res.status === 'error') {
+          clearInterval(interval)
+          if (res.status === 'error') {
+            uiStore.showToast(
+              `خطا در پردازش فایل "${item.originalName}": ${res.errorMessage || 'خطا'}`,
+              'error',
+            )
+          }
+        }
+      } catch {
+        // network issue or temporary error
+      }
+
+      if (attempts >= maxAttempts && item.status === 'processing') {
+        clearInterval(interval)
+        item.status = 'error'
+        item.errorMessage = 'پردازش فایل به دلیل اتمام زمان مجاز با خطا مواجه شد'
+        uiStore.showToast(item.errorMessage, 'error')
+      }
+    }, 2000)
+  }
+
+  /**
+   * Cancels active upload or removes uploaded file.
+   */
+  async function removeFile(item: FileAttachmentItem) {
+    if (item.status === 'uploading' && item.abortController) {
+      item.abortController.abort()
+    }
+
+    // Revoke blob URL
+    if (item.previewUrl) {
+      try {
+        URL.revokeObjectURL(item.previewUrl)
+      } catch {}
+    }
+
+    // Call backend delete if already persisted
+    if (item.id && !item.id.startsWith('temp-')) {
+      filesService.deleteFile(item.id).catch(() => {})
+    }
+
+    attachedFiles.value = attachedFiles.value.filter((f) => f.id !== item.id)
+  }
+
+  async function retryFile(item: FileAttachmentItem) {
+    if (!item.id || item.id.startsWith('temp-')) return
+
+    item.status = 'processing'
+    item.errorMessage = undefined
+    try {
+      await filesService.retryFile(item.id)
+      pollFileStatus(item)
+    } catch (err: any) {
+      item.status = 'error'
+      item.errorMessage = err?.message || 'خطا در تلاش مجدد'
+      uiStore.showToast(item.errorMessage || 'خطا در تلاش مجدد', 'error')
+    }
+  }
+
+  function clearAttachedFiles() {
+    for (const item of attachedFiles.value) {
+      if (item.previewUrl) {
+        try {
+          URL.revokeObjectURL(item.previewUrl)
+        } catch {}
+      }
+    }
+    attachedFiles.value = []
+  }
+
+  // Drag & drop event handlers
+  function handleDragOver(e: DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    isDraggingOver.value = true
+  }
+
+  function handleDragLeave(e: DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    isDraggingOver.value = false
+  }
+
+  function handleDrop(e: DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    isDraggingOver.value = false
+
+    if (e.dataTransfer && e.dataTransfer.files) {
+      addFiles(e.dataTransfer.files)
+    }
+  }
+
+  return {
+    attachedFiles,
+    limits,
+    isDraggingOver,
+    hasUploadingFiles,
+    hasProcessingFiles,
+    hasErrorFiles,
+    allReadyFiles,
+    readyFileIds,
+    addFiles,
+    removeFile,
+    retryFile,
+    clearAttachedFiles,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+  }
+}

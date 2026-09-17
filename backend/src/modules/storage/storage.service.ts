@@ -74,16 +74,16 @@ export class StorageService implements OnModuleInit {
 
   async put(key: string, data: Buffer, contentType: string): Promise<void> {
     const c = this.ensure();
+    const meta: Record<string, string> = {
+      'Content-Type': contentType,
+      'X-Amz-Server-Side-Encryption': 'AES256',
+    };
     try {
-      await c.putObject(this.bucket, key, data, data.length, {
-        'Content-Type': contentType,
-      });
+      await c.putObject(this.bucket, key, data, data.length, meta);
     } catch (err: any) {
       if (err?.code === 'NoSuchBucket') {
         await this.ensureBucket();
-        await c.putObject(this.bucket, key, data, data.length, {
-          'Content-Type': contentType,
-        });
+        await c.putObject(this.bucket, key, data, data.length, meta);
       } else {
         throw err;
       }
@@ -105,7 +105,15 @@ export class StorageService implements OnModuleInit {
 
   async remove(key: string): Promise<void> {
     const c = this.ensure();
-    await c.removeObject(this.bucket, key);
+    try {
+      await c.removeObject(this.bucket, key);
+    } catch (err: any) {
+      this.logger.warn(`Failed to remove MinIO object ${key}: ${err?.message || err}`);
+    }
+  }
+
+  async delete(key: string): Promise<void> {
+    return this.remove(key);
   }
 
   /** Public GET path served by the backend (streams bytes from MinIO). */

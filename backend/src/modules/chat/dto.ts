@@ -1,4 +1,4 @@
-import { IsString, IsOptional, MinLength, IsUUID } from 'class-validator';
+import { IsString, IsOptional, MinLength, IsUUID, IsArray } from 'class-validator';
 import { FA } from '../../shared/messages.fa';
 
 export class CreateConvDto {
@@ -26,4 +26,8 @@ export class SendMsgDto {
   @IsString({ message: FA.contentString })
   @MinLength(1, { message: FA.contentMin })
   content: string;
+
+  @IsOptional()
+  @IsArray()
+  fileIds?: string[];
 }

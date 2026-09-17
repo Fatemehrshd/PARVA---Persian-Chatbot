@@ -10,6 +10,31 @@ export class UpdateSettingsDto {
   @IsString({ message: 'پرامپت سیستم باید رشته متنی باشد' })
   @MinLength(1, { message: 'پرامپت سیستم نمی‌تواند خالی باشد' })
   systemPrompt?: string;
+
+  @IsOptional()
+  @IsInt({ message: 'حداکثر حجم هر فایل باید عدد صحیح باشد' })
+  @Min(1)
+  fileMaxSizeMb?: number;
+
+  @IsOptional()
+  @IsInt({ message: 'حداکثر مجموع حجم فایل‌ها باید عدد صحیح باشد' })
+  @Min(1)
+  fileMaxTotalSizeMb?: number;
+
+  @IsOptional()
+  @IsInt({ message: 'حداکثر تعداد فایل باید عدد صحیح باشد' })
+  @Min(1)
+  fileMaxCount?: number;
+
+  @IsOptional()
+  @IsInt({ message: 'حداکثر سطرهای اکسل باید عدد صحیح باشد' })
+  @Min(10)
+  excelMaxRows?: number;
+
+  @IsOptional()
+  @IsInt({ message: 'تایم‌اوت پردازش باید عدد صحیح باشد' })
+  @Min(10)
+  fileProcessingTimeoutSec?: number;
 }
 
 export class UpdateUserAdminDto {
@@ -35,11 +60,6 @@ export class UpdateUserAdminDto {
   @IsInt({ message: 'سقف توکن کاربر باید عدد صحیح باشد' })
   @Min(0, { message: 'سقف توکن کاربر نمی‌تواند منفی باشد' })
   tokenLimit?: number | null;
-}
-
-export class UpdateUserStatusDto {
-  @IsBoolean({ message: 'وضعیت فعال بودن باید boolean باشد' })
-  isActive: boolean;
 }
 
 export class UpdateUserStatusDto {

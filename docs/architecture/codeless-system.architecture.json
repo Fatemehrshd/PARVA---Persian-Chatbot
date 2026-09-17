@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "CODELESS Platform Architecture",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "request-path",
+        "label": "User request path",
+        "focus": ["user", "frontend", "api", "chat", "forwarder", "provider"],
+        "note": "Follow a user message from the Vue chat surface to the configured AI model and back."
+      },
+      {
+        "id": "persistence-and-files",
+        "label": "Persistence and files",
+        "focus": ["api", "postgres", "typeorm", "minio"],
+        "note": "See durable chat, account, provider, and object-storage responsibilities."
+      },
+      {
+        "id": "admin-and-compatibility",
+        "label": "Admin and compatibility",
+        "focus": ["admin", "provider", "compat", "forwarder"],
+        "note": "Isolate model administration and the authenticated OpenAI-compatible facade."
+      }
+    ]
+  },
+  "components": [
+    { "id": "user", "type": "external", "label": "User", "sublabel": "Persian RTL chat", "pos": [40, 300], "size": [132, 64] },
+    { "id": "frontend", "type": "frontend", "label": "Vue 3 Frontend", "sublabel": "Vite + Pinia", "pos": [250, 300], "size": [144, 64], "tag": "VITE_API_BASE_URL" },
+    { "id": "api", "type": "backend", "label": "NestJS API", "sublabel": "REST + SSE", "pos": [480, 300], "size": [144, 64], "tag": "JWT guarded" },
+    { "id": "auth", "type": "security", "label": "Auth Module", "sublabel": "JWT + refresh tokens", "pos": [480, 120], "size": [144, 64] },
+    { "id": "chat", "type": "backend", "label": "Chat Module", "sublabel": "conversations + streams", "pos": [700, 300], "size": [144, 64], "tag": "resumable" },
+    { "id": "forwarder", "type": "cloud", "label": "AI Forwarder", "sublabel": "OpenAI-compatible fetch", "pos": [920, 300], "size": [160, 64], "tag": "stream:true" },
+    { "id": "provider", "type": "cloud", "label": "AI Provider", "sublabel": "configured upstream", "pos": [1160, 300], "size": [144, 64] },
+    { "id": "admin", "type": "security", "label": "Admin Models", "sublabel": "providers + models", "pos": [700, 120], "size": [144, 64] },
+    { "id": "compat", "type": "backend", "label": "OpenAI Facade", "sublabel": "/v1/models + chat", "pos": [920, 120], "size": [160, 64] },
+    { "id": "postgres", "type": "database", "label": "PostgreSQL", "sublabel": "users + chats + AI config", "pos": [700, 500], "size": [144, 64] },
+    { "id": "typeorm", "type": "backend", "label": "TypeORM", "sublabel": "entities + migrations", "pos": [480, 500], "size": [144, 64] },
+    { "id": "minio", "type": "cloud", "label": "MinIO", "sublabel": "avatar objects", "pos": [250, 500], "size": [144, 64] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "CODELESS application boundary", "wraps": ["frontend", "api", "auth", "chat", "forwarder", "admin", "compat", "typeorm"] },
+    { "kind": "security-group", "label": "Authenticated API surface", "wraps": ["api", "auth", "admin", "compat"] }
+  ],
+  "connections": [
+    { "id": "user-frontend", "from": "user", "to": "frontend", "label": "HTTPS", "variant": "emphasis" },
+    { "id": "frontend-api", "from": "frontend", "to": "api", "label": "REST / SSE", "variant": "emphasis" },
+    { "id": "api-auth", "from": "api", "to": "auth", "label": "verify JWT", "variant": "security", "fromSide": "top", "toSide": "bottom", "labelDy": -56 },
+    { "id": "api-chat", "from": "api", "to": "chat", "label": "chat routes", "variant": "emphasis" },
+    { "id": "chat-forwarder", "from": "chat", "to": "forwarder", "label": "stream tokens", "variant": "emphasis" },
+    { "id": "forwarder-provider", "from": "forwarder", "to": "provider", "label": "Bearer + JSON", "variant": "default" },
+    { "id": "api-admin", "from": "api", "to": "admin", "label": "admin guard", "variant": "security", "fromSide": "top", "toSide": "bottom", "labelDy": -56 },
+    { "id": "compat-forwarder", "from": "compat", "to": "forwarder", "label": "compatible completion", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelDy": 58 },
+    { "id": "chat-typeorm", "from": "chat", "to": "typeorm", "label": "messages + sessions", "variant": "default", "fromSide": "bottom", "toSide": "top", "labelDy": 58 },
+    { "id": "admin-typeorm", "from": "admin", "to": "typeorm", "label": "provider/model CRUD", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelDy": 58 },
+    { "id": "typeorm-postgres", "from": "typeorm", "to": "postgres", "label": "SQL + migrations", "variant": "emphasis" },
+    { "id": "api-minio", "from": "api", "to": "minio", "label": "avatar objects", "variant": "dashed", "fromSide": "bottom", "toSide": "left", "via": [[440, 560], [250, 560]], "labelDy": 58 }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Primary request path", "items": ["Vue chat surface calls NestJS over REST and SSE", "ChatService persists messages while ActiveStreamService keeps generation resilient", "OpenAiCompatForwarder streams tokens from any configured compatible upstream"] },
+    { "dot": "emerald", "title": "Configuration and storage", "items": ["Admins register providers and models with masked write-only API keys", "TypeORM migrations keep PostgreSQL schema changes explicit", "MinIO stores avatars and returns 503 when object storage is not configured"] },
+    { "dot": "rose", "title": "Trust boundaries", "items": ["JWT authentication protects user and compatibility surfaces", "AdminGuard protects provider/model configuration", "The upstream provider is outside the application boundary"] }
+  ]
+}

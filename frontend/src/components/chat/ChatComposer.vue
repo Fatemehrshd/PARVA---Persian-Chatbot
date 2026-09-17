@@ -4,6 +4,8 @@ import { useChatStore } from '../../stores/chat'
 import { useModelsStore } from '../../stores/models'
 import { useUiStore } from '../../stores/ui'
 import { getActiveTypingDirection } from '../../utils/textDirection'
+import { useFileUpload } from '../../composables/useFileUpload'
+import FilePreviewCard from './FilePreviewCard.vue'
 
 const chatStore = useChatStore()
 const modelsStore = useModelsStore()
@@ -15,6 +17,60 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isFocused = ref(false)
 const modelMenuOpen = ref(false)
 const modelPickerRef = ref<HTMLElement | null>(null)
+
+// ─── File Upload Composable ──────────────────────────────────────────────────
+const {
+  attachedFiles,
+  limits,
+  isDraggingOver,
+  hasUploadingFiles,
+  addFiles,
+  removeFile,
+  retryFile,
+  clearAttachedFiles,
+  handleDragOver,
+  handleDragLeave,
+  handleDrop,
+} = useFileUpload(() => chatStore.currentConversationId)
+
+const attachmentMenuOpen = ref(false)
+const attachmentMenuRef = ref<HTMLElement | null>(null)
+const imageInputRef = ref<HTMLInputElement | null>(null)
+const docInputRef = ref<HTMLInputElement | null>(null)
+
+function toggleAttachmentMenu() {
+  if (attachedFiles.value.length >= limits.value.maxFileCount) {
+    uiStore.showToast(`حداکثر ${limits.value.maxFileCount} فایل می‌توانید انتخاب کنید`, 'error')
+    return
+  }
+  attachmentMenuOpen.value = !attachmentMenuOpen.value
+}
+
+function pickImages() {
+  attachmentMenuOpen.value = false
+  imageInputRef.value?.click()
+}
+
+function pickDocuments() {
+  attachmentMenuOpen.value = false
+  docInputRef.value?.click()
+}
+
+function handleImageChange(e: Event) {
+  const target = e.target as HTMLInputElement
+  if (target.files && target.files.length > 0) {
+    addFiles(target.files)
+    target.value = ''
+  }
+}
+
+function handleDocChange(e: Event) {
+  const target = e.target as HTMLInputElement
+  if (target.files && target.files.length > 0) {
+    addFiles(target.files)
+    target.value = ''
+  }
+}
 
 function updateDirection() {
   inputDirection.value = getActiveTypingDirection(
@@ -33,7 +89,12 @@ watch(inputContent, (newVal) => {
 })
 
 const canSend = computed(() => {
-  return inputContent.value.trim().length > 0 && !chatStore.isStreaming
+  const hasText = inputContent.value.trim().length > 0
+  const hasFiles = attachedFiles.value.length > 0
+  if (!hasText && !hasFiles) return false
+  // Disabled until all in-flight uploads complete
+  if (hasUploadingFiles.value) return false
+  return true
 })
 
 function adjustHeight() {
@@ -65,12 +126,14 @@ function handleKeydown(event: KeyboardEvent) {
 function handleSubmit() {
   if (!canSend.value) return
   const text = inputContent.value
+  const files = [...attachedFiles.value]
   inputContent.value = ''
   inputDirection.value = 'rtl'
+  clearAttachedFiles()
   if (textareaRef.value) {
     textareaRef.value.style.height = 'auto'
   }
-  chatStore.sendMessage(text)
+  chatStore.sendMessage(text, files)
 }
 
 const selectableModels = computed(() => {
@@ -100,6 +163,9 @@ async function selectModel(id: string) {
 function handleClickOutside(event: MouseEvent) {
   if (modelPickerRef.value && !modelPickerRef.value.contains(event.target as Node)) {
     modelMenuOpen.value = false
+  }
+  if (attachmentMenuRef.value && !attachmentMenuRef.value.contains(event.target as Node)) {
+    attachmentMenuOpen.value = false
   }
 }
 
@@ -151,7 +217,51 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div :class="['composer-card', { focused: isFocused }]">
+      <!-- Hidden file inputs -->
+      <input
+        ref="imageInputRef"
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        multiple
+        style="display: none"
+        @change="handleImageChange"
+      />
+      <input
+        ref="docInputRef"
+        type="file"
+        accept=".pdf,.xls,.xlsx,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        multiple
+        style="display: none"
+        @change="handleDocChange"
+      />
+
+      <div
+        :class="['composer-card', { focused: isFocused, 'drag-over': isDraggingOver }]"
+        @dragover="handleDragOver"
+        @dragleave="handleDragLeave"
+        @drop="handleDrop"
+      >
+        <!-- Drag & Drop Overlay -->
+        <div v-if="isDraggingOver" class="dropzone-overlay">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <span>فایل‌ها را اینجا رها کنید (تصویر، PDF، Excel)</span>
+        </div>
+
+        <!-- Attached Files Preview Row -->
+        <div v-if="attachedFiles.length > 0" class="composer-attachments">
+          <FilePreviewCard
+            v-for="file in attachedFiles"
+            :key="file.id"
+            :file="file"
+            @remove="removeFile(file)"
+            @retry="retryFile(file)"
+          />
+        </div>
+
         <textarea
           ref="textareaRef"
           v-model="inputContent"
@@ -169,48 +279,88 @@ onUnmounted(() => {
         ></textarea>
 
         <div class="composer-footer">
-          <!-- Model Picker Dropdown inside Chat Form -->
-          <div class="model-picker-container" ref="modelPickerRef" @click.stop>
-            <button
-              type="button"
-              class="model-badge-btn"
-              @click="toggleModelMenu"
-              title="تغییر مدل هوش مصنوعی"
-            >
-              <span class="model-dot"></span>
-              <span class="model-name">{{ modelsStore.selectedModel.name }}</span>
-              <svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline :points="modelMenuOpen ? '6 15 12 9 18 15' : '18 15 12 9 6 15'"></polyline>
-              </svg>
-            </button>
+          <div class="composer-footer-start">
+            <!-- Plus Attachment Button with Menu -->
+            <div class="attachment-picker-container" ref="attachmentMenuRef" @click.stop>
+              <button
+                type="button"
+                class="attachment-btn"
+                @click="toggleAttachmentMenu"
+                title="پیوست فایل"
+                :disabled="attachedFiles.length >= limits.maxFileCount"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+              </button>
 
-            <!-- Dropdown Popover opening upward -->
-            <div v-if="modelMenuOpen" class="composer-model-dropdown">
-              <div class="dropdown-header font-mono">
-                انتخاب مدل هوش مصنوعی
-              </div>
-              <div class="model-options-list">
-                <button
-                  v-for="model in selectableModels"
-                  :key="model.id"
-                  type="button"
-                  :class="['model-option-btn', { active: model.id === modelsStore.selectedModelId }]"
-                  @click="selectModel(model.id)"
-                >
-                  <div class="model-option-info">
-                    <span class="model-option-name">{{ model.name }}</span>
-                    <span class="model-option-meta font-mono">{{ model.provider }} • {{ model.apiIdentifier }}</span>
-                  </div>
-                  <span v-if="model.id === modelsStore.selectedModelId" class="check-mark">✓</span>
+              <!-- Attachment Dropdown Popover -->
+              <div v-if="attachmentMenuOpen" class="attachment-dropdown">
+                <button type="button" class="attachment-menu-item" @click="pickImages">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                  </svg>
+                  <span>عکس</span>
                 </button>
+                <button type="button" class="attachment-menu-item" @click="pickDocuments">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                  </svg>
+                  <span>اسناد (PDF، اکسل)</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Model Picker Dropdown inside Chat Form -->
+            <div class="model-picker-container" ref="modelPickerRef" @click.stop>
+              <button
+                type="button"
+                class="model-badge-btn"
+                @click="toggleModelMenu"
+                title="تغییر مدل هوش مصنوعی"
+              >
+                <span class="model-dot"></span>
+                <span class="model-name">{{ modelsStore.selectedModel.name }}</span>
+                <svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline :points="modelMenuOpen ? '6 15 12 9 18 15' : '18 15 12 9 6 15'"></polyline>
+                </svg>
+              </button>
+
+              <!-- Dropdown Popover opening upward -->
+              <div v-if="modelMenuOpen" class="composer-model-dropdown">
+                <div class="dropdown-header font-mono">
+                  انتخاب مدل هوش مصنوعی
+                </div>
+                <div class="model-options-list">
+                  <button
+                    v-for="model in selectableModels"
+                    :key="model.id"
+                    type="button"
+                    :class="['model-option-btn', { active: model.id === modelsStore.selectedModelId }]"
+                    @click="selectModel(model.id)"
+                  >
+                    <div class="model-option-info">
+                      <span class="model-option-name">{{ model.name }}</span>
+                      <span class="model-option-meta font-mono">{{ model.provider }} • {{ model.apiIdentifier }}</span>
+                    </div>
+                    <span v-if="model.id === modelsStore.selectedModelId" class="check-mark">✓</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- Action Button: Stop or Send -->
+          <!-- Action Button: Stop or Send (queueing allowed while streaming) -->
           <div class="action-buttons">
             <button
               v-if="chatStore.isStreaming"
+              type="button"
               class="btn-stop"
               @click="handleStop"
               title="توقف پاسخ"
@@ -218,11 +368,12 @@ onUnmounted(() => {
               <span class="stop-square"></span>
             </button>
             <button
-              v-else
+              v-if="!chatStore.isStreaming || canSend"
+              type="button"
               class="btn-send"
               :disabled="!canSend"
               @click="handleSubmit"
-              title="ارسال پیام"
+              :title="chatStore.isStreaming ? 'افزودن به صف پیام‌ها' : 'ارسال پیام'"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -348,6 +499,112 @@ onUnmounted(() => {
   flex-direction: column;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
   transition: border-color 150ms ease, box-shadow 150ms ease;
+  position: relative;
+}
+
+.composer-card.drag-over {
+  border-color: var(--primary);
+  border-style: dashed;
+  background-color: rgba(124, 106, 247, 0.05);
+}
+
+.dropzone-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  opacity: 0.95;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--primary);
+  font-weight: 500;
+  font-size: 13px;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.composer-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.composer-footer-start {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.attachment-picker-container {
+  position: relative;
+}
+
+.attachment-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background-color: var(--secondary);
+  border: 1px solid var(--border);
+  color: var(--secondary-foreground);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.attachment-btn:hover:not(:disabled) {
+  background-color: var(--card);
+  color: var(--foreground);
+  border-color: var(--muted-foreground);
+}
+
+.attachment-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.attachment-dropdown {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  inset-inline-start: 0;
+  width: 170px;
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  padding: 4px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.attachment-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+  text-align: inherit;
+}
+
+.attachment-menu-item:hover {
+  background-color: var(--secondary);
 }
 
 .composer-card.focused {

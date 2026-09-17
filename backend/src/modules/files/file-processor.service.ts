@@ -1,0 +1,194 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { FileAttachment } from './file-attachment.entity';
+import { StorageService } from '../storage/storage.service';
+import { SettingsService } from '../admin/settings.service';
+import * as xlsx from 'xlsx';
+
+// pdf-parse import with fallback for ESM/CJS compatibility
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const pdfParse = require('pdf-parse');
+
+@Injectable()
+export class FileProcessorService {
+  private readonly logger = new Logger(FileProcessorService.name);
+
+  constructor(
+    @InjectRepository(FileAttachment)
+    private readonly fileRepo: Repository<FileAttachment>,
+    private readonly storage: StorageService,
+    private readonly settings: SettingsService,
+  ) {}
+
+  /**
+   * Processes a single file attachment asynchronously according to its type.
+   */
+  async processFile(fileId: string): Promise<void> {
+    const file = await this.fileRepo.findOne({ where: { id: fileId } });
+    if (!file) {
+      this.logger.warn(`File attachment ${fileId} not found for processing`);
+      return;
+    }
+
+    file.status = 'processing';
+    file.errorMessage = undefined;
+    await this.fileRepo.save(file);
+
+    const timeoutSec = await this.getSettingNumber('file_processing_timeout_sec', 120);
+
+    const processPromise = (async () => {
+      const buffer = await this.storage.getBuffer(file.minioKey);
+
+      switch (file.fileType) {
+        case 'image':
+          return await this.processImage(file, buffer);
+        case 'pdf':
+          return await this.processPdf(file, buffer);
+        case 'excel':
+          return await this.processExcel(file, buffer);
+        default:
+          throw new Error(`Unsupported file type: ${file.fileType}`);
+      }
+    })();
+
+    // Timeout guard to prevent infinite processing
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error('پردازش فایل به دلیل اتمام زمان مجاز با خطا مواجه شد')),
+        timeoutSec * 1000,
+      ),
+    );
+
+    try {
+      await Promise.race([processPromise, timeoutPromise]);
+      file.status = 'ready';
+      file.errorMessage = undefined;
+      await this.fileRepo.save(file);
+      this.logger.log(`File ${file.id} (${file.originalName}) processed successfully.`);
+    } catch (err: any) {
+      this.logger.error(`Error processing file ${file.id}: ${err?.message || err}`);
+      file.status = 'error';
+      file.errorMessage = err?.message || 'خطا در پردازش فایل';
+      await this.fileRepo.save(file);
+    }
+  }
+
+  /**
+   * Processes image files for vision models.
+   */
+  private async processImage(file: FileAttachment, buffer: Buffer): Promise<void> {
+    const base64Data = buffer.toString('base64');
+    const dataUrl = `data:${file.mimeType};base64,${base64Data}`;
+
+    file.metadata = {
+      ...(file.metadata || {}),
+      isVision: true,
+      dataUrl,
+      sizeBytes: buffer.length,
+    };
+    file.extractedText = `[تصویر پیوست شده: ${file.originalName}]`;
+  }
+
+  /**
+   * Extracts text from PDF files and detects visual/scanned content heuristically.
+   */
+  private async processPdf(file: FileAttachment, buffer: Buffer): Promise<void> {
+    const parsed = await pdfParse(buffer);
+    const numPages = parsed.numpages || 1;
+    const text = (parsed.text || '').trim();
+
+    // Heuristic: low text density per page or embedded image stream signatures
+    const avgCharsPerPage = text.length / Math.max(1, numPages);
+    const hasImageStream =
+      buffer.includes(Buffer.from('/Subtype /Image')) ||
+      buffer.includes(Buffer.from('/DCTDecode')) ||
+      buffer.includes(Buffer.from('/JPXDecode'));
+
+    const hasVisualContent = avgCharsPerPage < 80 || hasImageStream;
+
+    file.extractedText = text.length > 0 ? text : `[سند PDF شامل محتوای بصری و اسکن‌شده بدون لایه متنی مستقیم]`;
+    file.metadata = {
+      ...(file.metadata || {}),
+      numPages,
+      charCount: text.length,
+      hasVisualContent,
+      info: parsed.info || {},
+    };
+  }
+
+  /**
+   * Parses Excel workbooks into structured Markdown/CSV or samples data if row count exceeds limit.
+   */
+  private async processExcel(file: FileAttachment, buffer: Buffer): Promise<void> {
+    const workbook = xlsx.read(buffer, { type: 'buffer' });
+    const maxRows = await this.getSettingNumber('excel_max_rows', 5000);
+
+    const sheetSummaries: string[] = [];
+    let totalRowsAcrossSheets = 0;
+
+    for (const sheetName of workbook.SheetNames) {
+      const worksheet = workbook.Sheets[sheetName];
+      if (!worksheet) continue;
+
+      const jsonData: any[][] = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+      const rowCount = jsonData.length;
+      totalRowsAcrossSheets += rowCount;
+
+      sheetSummaries.push(`\n### برگه (Sheet): ${sheetName} (تعداد کل سطرها: ${rowCount})`);
+
+      if (rowCount <= maxRows) {
+        // Output complete CSV/table representation
+        const csv = xlsx.utils.sheet_to_csv(worksheet);
+        sheetSummaries.push(csv);
+      } else {
+        // Summarize: sample head rows + column statistics
+        const sampleRows = jsonData.slice(0, 50);
+        const headers = (jsonData[0] || []).map((h, i) => String(h || `ستون_${i + 1}`));
+
+        // Column statistics
+        const colStats = headers.map((header, colIdx) => {
+          let nonEmptyCount = 0;
+          const uniqueValues = new Set<string>();
+          for (let r = 1; r < rowCount; r++) {
+            const cell = jsonData[r]?.[colIdx];
+            if (cell !== undefined && cell !== null && String(cell).trim() !== '') {
+              nonEmptyCount++;
+              if (uniqueValues.size < 10) uniqueValues.add(String(cell));
+            }
+          }
+          return `- **${header}**: تعداد رکوردهای پر: ${nonEmptyCount} از ${rowCount - 1} | نمونه مقادیر: [${Array.from(uniqueValues).slice(0, 5).join(', ')}]`;
+        });
+
+        sheetSummaries.push(
+          `> [!NOTE]\n> تعداد سطرهای این برگه (${rowCount}) از سقف مجاز (${maxRows}) بیشتر است. نمونه ۵۰ سطر نخست و خلاصه آماری ستون‌ها در ادامه آورده شده است:\n`,
+        );
+        sheetSummaries.push('#### آمار ستون‌ها:\n' + colStats.join('\n'));
+        sheetSummaries.push(
+          '\n#### نمونه ۵۰ سطر نخست:\n' +
+            sampleRows.map((row) => row.join('\t')).join('\n'),
+        );
+      }
+    }
+
+    file.extractedText = sheetSummaries.join('\n\n');
+    file.metadata = {
+      ...(file.metadata || {}),
+      sheets: workbook.SheetNames,
+      totalRows: totalRowsAcrossSheets,
+      isSampled: totalRowsAcrossSheets > maxRows,
+    };
+  }
+
+  private async getSettingNumber(key: string, defaultValue: number): Promise<number> {
+    try {
+      const val = await this.settings.get(key);
+      if (val !== undefined && val !== null && !isNaN(Number(val))) {
+        return Number(val);
+      }
+    } catch {
+      // ignore
+    }
+    return defaultValue;
+  }
+}

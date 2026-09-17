@@ -24,7 +24,7 @@ const authStore = useAuthStore()
         </svg>
       </button>
 
-      <span class="header-brand-title font-mono text-xs hidden sm:inline text-muted-foreground">NeuralChat</span>
+      <span class="header-brand-title font-mono text-xs hidden sm:inline text-muted-foreground">PARVA</span>
     </div>
 
     <!-- Right Section: Admin Panel, Settings, User Profile -->

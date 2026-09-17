@@ -86,7 +86,7 @@ export interface FileAttachmentItem {
   tempId?: string
   originalName: string
   mimeType: string
-  fileType: 'image' | 'pdf' | 'excel'
+  fileType: 'image' | 'pdf' | 'excel' | 'text'
   fileSize: number
   status: 'uploading' | 'processing' | 'ready' | 'error'
   errorMessage?: string

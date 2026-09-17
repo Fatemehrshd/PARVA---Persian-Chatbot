@@ -9,14 +9,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.2.0] - 2026-09-17
 
+### Added
+- **Plain Text & Markdown File Attachment Support (`frontend` & `backend`)**:
+  - Added full support for `.txt`, `.md`, `.text`, and `.markdown` documents across composer file picker, drag-and-drop, upload pipeline, and AI context ingestion.
+  - Implemented asynchronous text extraction in `FileProcessorService` with UTF-8 encoding support, metadata tracking (character count, markdown format flag), and configurable character limits (`text_max_chars`).
+  - Added dedicated `.text-icon` and dynamic `TXT`/`MD` badge in `FilePreviewCard.vue`.
+- **Authenticated File Content Serving (`backend` & `frontend`)**:
+  - Added `GET /api/v1/files/:id/content` route to stream file attachments directly from MinIO with secure user ownership verification.
+  - Enhanced `JwtAuthGuard` to support `?token=` query parameters for direct image `src` rendering in `<img>` tags.
+  - Added preview fallback in `FilePreviewCard.vue` so images persist and display reliably across browser reloads or expired blob URLs.
+- **Google Gemini 3.5 Flash Provider & Vision Support (`backend` & `database`)**:
+  - Integrated and verified Google Gemini OpenAI-compatible endpoint (`/v1beta/openai/chat/completions`) with streaming and multimodal vision (image understanding).
+  - Seeded `Google Gemini` provider and `gemini-3.5-flash` model into PostgreSQL database for immediate chat use.
+
 ### Fixed
+- **Message Retry Image Attachment Preservation (`frontend`)**:
+  - Fixed an issue where retrying a failed or interrupted message deleted attached images.
+  - `retryLastMessage` now captures existing attachments and re-submits them without triggering redundant uploads, preserving file IDs and previews in the chat bubble.
 - **Image & File Upload Send Button Disabled State & Reactivity Fix (`frontend`)**:
   - Resolved an issue where attaching an image or document kept the send button permanently disabled (`disabled: true`). The root cause was that raw JavaScript objects were passed to `startUpload`, bypassing Vue 3's reactive proxy `set` traps and preventing computed `hasUploadingFiles` from updating after server completion.
   - Ensured `attachedFiles` uses reactive array proxies so upload status (`uploading` -> `processing` -> `ready`) and progress indicators update in real-time.
   - Enhanced `ChatComposer.vue` to allow sending immediately when files are attached (even without accompanying prompt text).
   - Added `waitForUploads` synchronization in `handleSubmit` so if a user clicks Send while bytes are still in-flight, it smoothly awaits upload completion before dispatching.
   - Prevented sending only when an attached file is in an `error` state, requiring the user to retry or remove it first.
-  - Adjusted `MessageBubble.vue` attachment spacing when messages contain only images without text.
+- **File Preview Card Error Layout & Action Button Collision Fix (`frontend`)**:
+  - Resolved layout collision where the error status text ("خطا در پردازش"), retry button ("تلاش مجدد"), and file metadata overlapped in RTL mode.
+  - Re-architected `FilePreviewCard.vue` to place status tag and retry action inline inside `.file-meta` with clean flex gap spacing.
+  - Added dedicated `.error-badge` indicator on the thumbnail corner and graceful `@error` fallback to SVG icon when image sources fail.
+- **Composer Streaming Lock & Upload Guard (`frontend`)**:
+  - Completely prevented message dispatch and file uploads while the AI model is loading or generating a response (`isStreaming || isThinking`).
+  - The send button is replaced by the Stop button (`btn-stop`), attachment button (`+`) is disabled, and Enter key, Drag & Drop, and file paste actions are blocked with user-friendly Persian warning toasts.
+- **Single-Source Provider Credentials & Streamlined Model Configuration (`frontend` & `backend`)**:
+  - Removed duplicate `baseUrl` and `apiKey` inputs from the Model definition and edit forms in `AdminPanelView.vue` and `ModelsModal.vue`.
+  - Established Providers (`AiProvider`) as the exclusive single source of truth for `baseUrl` and authentication tokens (`apiKey`).
+  - Model configurations now exclusively require the model display name, associated provider selection, and API model identifier (`apiIdentifier`), automatically inheriting connection parameters.
 
 ## [1.1.0] - 2026-09-16
 

@@ -79,6 +79,8 @@ export class FileProcessorService {
           return await this.processPdf(file, buffer);
         case 'excel':
           return await this.processExcel(file, buffer);
+        case 'text':
+          return await this.processText(file, buffer);
         default:
           throw new Error(`Unsupported file type: ${file.fileType}`);
       }
@@ -212,6 +214,25 @@ export class FileProcessorService {
       sheets: workbook.SheetNames,
       totalRows: totalRowsAcrossSheets,
       isSampled: totalRowsAcrossSheets > maxRows,
+    };
+  }
+
+  /**
+   * Processes plain text and Markdown files.
+   */
+  private async processText(file: FileAttachment, buffer: Buffer): Promise<void> {
+    const text = buffer.toString('utf-8');
+    const maxChars = await this.getSettingNumber('text_max_chars', 100000);
+
+    const isTruncated = text.length > maxChars;
+    const effectiveText = isTruncated ? text.slice(0, maxChars) : text;
+
+    file.extractedText = effectiveText;
+    file.metadata = {
+      ...(file.metadata || {}),
+      charCount: text.length,
+      isTruncated,
+      format: file.originalName.toLowerCase().endsWith('.md') ? 'markdown' : 'text',
     };
   }
 

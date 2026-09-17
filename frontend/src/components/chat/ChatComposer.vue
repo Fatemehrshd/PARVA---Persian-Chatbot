@@ -35,12 +35,22 @@ const {
   handleDrop,
 } = useFileUpload(() => chatStore.currentConversationId)
 
+if (typeof window !== 'undefined') {
+  ;(window as any).__ATTACHED_FILES__ = attachedFiles
+}
+
 const attachmentMenuOpen = ref(false)
 const attachmentMenuRef = ref<HTMLElement | null>(null)
 const imageInputRef = ref<HTMLInputElement | null>(null)
 const docInputRef = ref<HTMLInputElement | null>(null)
 
+const isGenerating = computed(() => chatStore.isStreaming || chatStore.isThinking)
+
 function toggleAttachmentMenu() {
+  if (isGenerating.value) {
+    uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
+    return
+  }
   if (attachedFiles.value.length >= limits.value.maxFileCount) {
     uiStore.showToast(`حداکثر ${limits.value.maxFileCount} فایل می‌توانید انتخاب کنید`, 'error')
     return
@@ -49,17 +59,30 @@ function toggleAttachmentMenu() {
 }
 
 function pickImages() {
+  if (isGenerating.value) {
+    uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
+    return
+  }
   attachmentMenuOpen.value = false
   imageInputRef.value?.click()
 }
 
 function pickDocuments() {
+  if (isGenerating.value) {
+    uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
+    return
+  }
   attachmentMenuOpen.value = false
   docInputRef.value?.click()
 }
 
 function handleImageChange(e: Event) {
   const target = e.target as HTMLInputElement
+  if (isGenerating.value) {
+    uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
+    target.value = ''
+    return
+  }
   if (target.files && target.files.length > 0) {
     const files = Array.from(target.files)
     const nonImages = files.filter((f) => {
@@ -84,22 +107,28 @@ function handleImageChange(e: Event) {
 
 function handleDocChange(e: Event) {
   const target = e.target as HTMLInputElement
+  if (isGenerating.value) {
+    uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
+    target.value = ''
+    return
+  }
   if (target.files && target.files.length > 0) {
     const files = Array.from(target.files)
     const nonDocs = files.filter((f) => {
       const name = f.name.toLowerCase()
       const isDoc =
-        /\.(pdf|xlsx|xls|csv)$/i.test(name) ||
+        /\.(pdf|xlsx|xls|csv|txt|md|text|markdown)$/i.test(name) ||
         f.type === 'application/pdf' ||
         f.type.includes('spreadsheet') ||
         f.type.includes('excel') ||
-        f.type.includes('csv')
+        f.type.includes('csv') ||
+        f.type.startsWith('text/')
       return !isDoc
     })
 
     if (nonDocs.length > 0) {
       uiStore.showToast(
-        `فایل «${nonDocs[0].name}» سند مجاز نیست. تنها اسناد PDF و فایل‌های اکسل (XLSX, XLS, CSV) مجاز هستند.`,
+        `فایل «${nonDocs[0].name}» سند مجاز نیست. تنها اسناد متنی (TXT, MD)، اسناد PDF و اکسل (XLSX, XLS, CSV) مجاز هستند.`,
         'error',
       )
       target.value = ''
@@ -113,9 +142,28 @@ function handleDocChange(e: Event) {
 
 function handlePaste(e: ClipboardEvent) {
   if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
+    if (isGenerating.value) {
+      e.preventDefault()
+      uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
+      return
+    }
     const files = Array.from(e.clipboardData.files)
     addFiles(files)
   }
+}
+
+function onDragOver(e: DragEvent) {
+  if (isGenerating.value) return
+  handleDragOver(e)
+}
+
+function onDrop(e: DragEvent) {
+  if (isGenerating.value) {
+    e.preventDefault()
+    uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
+    return
+  }
+  handleDrop(e)
 }
 
 function updateDirection() {
@@ -135,6 +183,7 @@ watch(inputContent, (newVal) => {
 })
 
 const canSend = computed(() => {
+  if (isGenerating.value) return false
   const hasText = inputContent.value.trim().length > 0
   const hasFiles = attachedFiles.value.length > 0
   if (!hasText && !hasFiles) return false
@@ -165,12 +214,13 @@ function handleCursorMove() {
 function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
+    if (isGenerating.value) return
     handleSubmit()
   }
 }
 
 async function handleSubmit() {
-  if (!canSend.value) return
+  if (!canSend.value || isGenerating.value) return
 
   // If in-flight file byte uploads are active, wait for completion
   if (hasUploadingFiles.value) {
@@ -285,26 +335,26 @@ onUnmounted(() => {
       <input
         ref="docInputRef"
         type="file"
-        accept=".pdf,.xlsx,.xls,.csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+        accept=".pdf,.xlsx,.xls,.csv,.txt,.md,.text,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,text/markdown"
         multiple
         style="display: none"
         @change="handleDocChange"
       />
 
       <div
-        :class="['composer-card', { focused: isFocused, 'drag-over': isDraggingOver }]"
-        @dragover="handleDragOver"
+        :class="['composer-card', { focused: isFocused, 'drag-over': isDraggingOver && !isGenerating }]"
+        @dragover="onDragOver"
         @dragleave="handleDragLeave"
-        @drop="handleDrop"
+        @drop="onDrop"
       >
         <!-- Drag & Drop Overlay -->
-        <div v-if="isDraggingOver" class="dropzone-overlay">
+        <div v-if="isDraggingOver && !isGenerating" class="dropzone-overlay">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="17 8 12 3 7 8"/>
             <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
-          <span>فایل‌ها را اینجا رها کنید (تصویر، PDF، Excel)</span>
+          <span>فایل‌ها را اینجا رها کنید (عکس، PDF، اکسل، متن و Markdown)</span>
         </div>
 
         <!-- Attached Files Preview Row -->
@@ -323,7 +373,7 @@ onUnmounted(() => {
           v-model="inputContent"
           :class="['composer-textarea', inputDirection]"
           :dir="inputDirection"
-          placeholder="پیام خود را بنویسید... (Enter برای ارسال)"
+          :placeholder="isGenerating ? 'در حال دریافت پاسخ هوش مصنوعی...' : 'پیام خود را بنویسید... (Enter برای ارسال)'"
           rows="1"
           @focus="isFocused = true; updateDirection()"
           @blur="isFocused = false"
@@ -344,7 +394,7 @@ onUnmounted(() => {
                 class="attachment-btn"
                 @click="toggleAttachmentMenu"
                 title="پیوست فایل"
-                :disabled="attachedFiles.length >= limits.maxFileCount"
+                :disabled="isGenerating || attachedFiles.length >= limits.maxFileCount"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -369,7 +419,7 @@ onUnmounted(() => {
                     <line x1="16" y1="13" x2="8" y2="13"/>
                     <line x1="16" y1="17" x2="8" y2="17"/>
                   </svg>
-                  <span>اسناد (PDF، اکسل)</span>
+                  <span>اسناد (PDF، اکسل، متن)</span>
                 </button>
               </div>
             </div>
@@ -413,10 +463,10 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Action Button: Stop or Send (queueing allowed while streaming) -->
+          <!-- Action Button: Stop or Send (Queueing disabled while streaming) -->
           <div class="action-buttons">
             <button
-              v-if="chatStore.isStreaming"
+              v-if="isGenerating"
               type="button"
               class="btn-stop"
               @click="handleStop"
@@ -425,12 +475,12 @@ onUnmounted(() => {
               <span class="stop-square"></span>
             </button>
             <button
-              v-if="!chatStore.isStreaming || canSend"
+              v-else
               type="button"
               class="btn-send"
               :disabled="!canSend"
               @click="handleSubmit"
-              :title="chatStore.isStreaming ? 'افزودن به صف پیام‌ها' : 'ارسال پیام'"
+              title="ارسال پیام"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>

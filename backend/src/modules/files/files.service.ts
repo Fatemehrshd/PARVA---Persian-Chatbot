@@ -88,8 +88,20 @@ export class FilesService {
       return 'excel';
     }
 
+    // 4. Text & Markdown documents: .txt, .md, .text, .markdown
+    const isTextExt = /\.(txt|md|text|markdown)$/i.test(lowerName);
+    const isTextMime =
+      mimeType.startsWith('text/') ||
+      mimeType === 'application/octet-stream' ||
+      mimeType === 'text/plain' ||
+      mimeType === 'text/markdown' ||
+      mimeType === 'text/x-markdown';
+    if (isTextExt && (isTextMime || mimeType === 'application/octet-stream')) {
+      return 'text';
+    }
+
     throw new BadRequestException(
-      'فرمت فایل انتخاب‌شده مجاز نیست. تنها فرمت‌های عکس (PNG, JPG, JPEG, JFIF, WEBP, GIF, SVG)، اسناد PDF و اکسل (XLSX, XLS, CSV) پشتیبانی می‌شوند.',
+      'فرمت فایل انتخاب‌شده مجاز نیست. تنها فرمت‌های عکس (PNG, JPG, JPEG, JFIF, WEBP, GIF, SVG)، اسناد متنی (TXT, MD)، اسناد PDF و اکسل (XLSX, XLS, CSV) پشتیبانی می‌شوند.',
     );
   }
 
@@ -228,5 +240,25 @@ export class FilesService {
     return this.fileRepo.find({
       where: ids.map((id) => ({ id, userId, isDeleted: false })),
     });
+  }
+
+  /**
+   * Retrieves file entity record owned by user.
+   */
+  async getFileRecord(userId: string, fileId: string): Promise<FileAttachment> {
+    const file = await this.fileRepo.findOne({
+      where: { id: fileId, userId, isDeleted: false },
+    });
+    if (!file) {
+      throw new NotFoundException('فایل یافت نشد');
+    }
+    return file;
+  }
+
+  /**
+   * Retrieves binary buffer for a file attachment from MinIO.
+   */
+  async getFileBuffer(file: FileAttachment): Promise<Buffer> {
+    return this.storage.getBuffer(file.minioKey);
   }
 }

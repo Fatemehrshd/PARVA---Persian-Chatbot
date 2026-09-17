@@ -64,7 +64,7 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
     const newTotalBytes = newFiles.reduce((sum, f) => sum + f.size, 0)
 
     const ALLOWED_IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.jfif', '.webp', '.gif', '.svg']
-    const ALLOWED_DOC_EXTS = ['.pdf', '.xlsx', '.xls', '.csv']
+    const ALLOWED_DOC_EXTS = ['.pdf', '.xlsx', '.xls', '.csv', '.txt', '.md', '.text', '.markdown']
     const ALL_ALLOWED_EXTS = [...ALLOWED_IMAGE_EXTS, ...ALLOWED_DOC_EXTS]
 
     for (const f of newFiles) {
@@ -74,7 +74,7 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
       if (!hasValidExt || !isFileTypeSupported(f)) {
         return {
           valid: false,
-          message: `فرمت فایل «${f.name}» مجاز نیست. تنها فرمت‌های عکس (PNG, JPG, JFIF, WEBP, GIF, SVG)، اسناد PDF و اکسل (XLSX, XLS, CSV) مجاز هستند.`,
+          message: `فرمت فایل «${f.name}» مجاز نیست. تنها فرمت‌های عکس (PNG, JPG, JFIF, WEBP, GIF, SVG)، متنی (TXT, MD)، اسناد PDF و اکسل (XLSX, XLS, CSV) مجاز هستند.`,
         }
       }
       if (f.size > limits.value.maxFileSizeBytes) {
@@ -105,10 +105,15 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
       file.type.includes('csv') ||
       file.type === 'text/csv' ||
       /\.(xlsx|xls|csv)$/i.test(name)
-    return isImage || isPdf || isExcel
+    const isText =
+      file.type.startsWith('text/') ||
+      file.type === 'text/plain' ||
+      file.type === 'text/markdown' ||
+      /\.(txt|md|text|markdown)$/i.test(name)
+    return isImage || isPdf || isExcel || isText
   }
 
-  function resolveFileType(file: File): 'image' | 'pdf' | 'excel' {
+  function resolveFileType(file: File): 'image' | 'pdf' | 'excel' | 'text' {
     const name = file.name.toLowerCase()
     if (file.type.startsWith('image/') || /\.(png|jpe?g|jfif|webp|gif|svg)$/i.test(name)) {
       return 'image'
@@ -116,7 +121,14 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
     if (file.type === 'application/pdf' || name.endsWith('.pdf')) {
       return 'pdf'
     }
-    return 'excel'
+    if (
+      file.type.includes('spreadsheet') ||
+      file.type.includes('excel') ||
+      /\.(xlsx|xls|csv)$/i.test(name)
+    ) {
+      return 'excel'
+    }
+    return 'text'
   }
 
   /**

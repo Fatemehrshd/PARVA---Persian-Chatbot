@@ -619,6 +619,12 @@ export const useChatStore = defineStore('chat', () => {
   async function sendMessage(content: string, files?: FileAttachmentItem[]) {
     if (!content.trim() && (!files || files.length === 0)) return
 
+    const currentActiveState = currentConversationId.value ? convStreamStates.value.get(currentConversationId.value) : null
+    if (currentActiveState?.isStreaming || currentActiveState?.isThinking) {
+      uiStore.showToast('در حال دریافت پاسخ، امکان ارسال پیام جدید وجود ندارد', 'warning')
+      return
+    }
+
     if (!currentConversationId.value) {
       const tempId = `c-${Date.now()}`
       const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
@@ -715,21 +721,10 @@ export const useChatStore = defineStore('chat', () => {
       return
     }
 
-    // 2. Check if currently streaming
+    // 2. Check if currently streaming or thinking
     const currentState = convStreamStates.value.get(convId)
-    if (currentState?.isStreaming) {
-      userMessage.status = 'queued'
-      if (!pendingMessageQueue.value.has(convId)) {
-        pendingMessageQueue.value.set(convId, [])
-      }
-      pendingMessageQueue.value.get(convId)!.push({
-        id: userMessage.id,
-        convId,
-        content,
-        fileIds,
-        attachments: fileList,
-        userMessage,
-      })
+    if (currentState?.isStreaming || currentState?.isThinking) {
+      uiStore.showToast('در حال دریافت پاسخ، امکان ارسال پیام جدید وجود ندارد', 'warning')
       return
     }
 
@@ -857,11 +852,14 @@ export const useChatStore = defineStore('chat', () => {
     if (!convId) return
 
     const s = convStreamStates.value.get(convId)
+    const lastUserMsg = [...messages.value].reverse().find((m) => m.role === 'user')
     const promptToRetry =
-      s?.lastUserPrompt?.trim() ||
-      [...messages.value].reverse().find((m) => m.role === 'user')?.content?.trim()
+      s?.lastUserPrompt?.trim()
+        ? s.lastUserPrompt
+        : (lastUserMsg?.content || '')
+    const filesToRetry = lastUserMsg?.attachments ? [...lastUserMsg.attachments] : undefined
 
-    if (!promptToRetry) return
+    if (!promptToRetry.trim() && (!filesToRetry || filesToRetry.length === 0)) return
 
     // Clear transient error & abort any hanging controller / watchdog
     clearWatchdog(convId)
@@ -887,15 +885,15 @@ export const useChatStore = defineStore('chat', () => {
       }
     }
 
-    // Remove trailing user message so sendMessage can re-add it cleanly
+    // Remove trailing user message so sendMessage can re-add it cleanly with its attachments preserved
     if (messages.value.length > 0 && messages.value[messages.value.length - 1].role === 'user') {
       const last = messages.value[messages.value.length - 1]
-      if (last.content.trim() === promptToRetry) {
+      if (last.id === lastUserMsg?.id || last.content.trim() === promptToRetry.trim()) {
         messages.value.pop()
       }
     }
 
-    await sendMessage(promptToRetry)
+    await sendMessage(promptToRetry, filesToRetry)
   }
 
   // ─── Resume interrupted message ────────────────────────────────────────────

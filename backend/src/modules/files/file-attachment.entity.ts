@@ -10,7 +10,7 @@ import { User } from '../users/user.entity';
 import { Conversation } from '../chat/conversation.entity';
 import { Message } from '../chat/message.entity';
 
-export type FileAttachmentType = 'image' | 'pdf' | 'excel';
+export type FileAttachmentType = 'image' | 'pdf' | 'excel' | 'text';
 export type FileAttachmentStatus = 'uploading' | 'processing' | 'ready' | 'error';
 
 @Entity('file_attachments')

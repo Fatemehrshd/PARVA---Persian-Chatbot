@@ -54,9 +54,8 @@
     { "id": "api-admin", "from": "api", "to": "admin", "label": "admin guard", "variant": "security", "fromSide": "top", "toSide": "bottom", "labelDy": -56 },
     { "id": "compat-forwarder", "from": "compat", "to": "forwarder", "label": "compatible completion", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelDy": 58 },
     { "id": "chat-typeorm", "from": "chat", "to": "typeorm", "label": "messages + sessions", "variant": "default", "fromSide": "bottom", "toSide": "top", "labelDy": 58 },
-    { "id": "admin-typeorm", "from": "admin", "to": "typeorm", "label": "provider/model CRUD", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelDy": 58 },
-    { "id": "typeorm-postgres", "from": "typeorm", "to": "postgres", "label": "SQL + migrations", "variant": "emphasis" },
-    { "id": "api-minio", "from": "api", "to": "minio", "label": "avatar objects", "variant": "dashed", "fromSide": "bottom", "toSide": "left", "via": [[440, 560], [250, 560]], "labelDy": 58 }
+    { "id": "typeorm-postgres", "from": "typeorm", "to": "postgres", "label": "SQL + migrations", "variant": "emphasis", "labelAt": [662, 578] },
+    { "id": "api-minio", "from": "api", "to": "minio", "label": "avatar objects", "variant": "dashed" }
   ],
   "cards": [
     { "dot": "cyan", "title": "Primary request path", "items": ["Vue chat surface calls NestJS over REST and SSE", "ChatService persists messages while ActiveStreamService keeps generation resilient", "OpenAiCompatForwarder streams tokens from any configured compatible upstream"] },

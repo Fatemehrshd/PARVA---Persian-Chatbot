@@ -12,7 +12,9 @@ import {
   BadRequestException,
   HttpCode,
   Body,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { FilesService } from './files.service';
@@ -76,6 +78,24 @@ export class FilesController {
   @Get(':id/status')
   async getStatus(@Req() req: any, @Param('id') id: string) {
     return this.filesService.getFileStatus(req.user.sub, id);
+  }
+
+  @Get(':id/content')
+  async getContent(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const file = await this.filesService.getFileRecord(req.user.sub, id);
+    const buffer = await this.filesService.getFileBuffer(file);
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Content-Length', buffer.length);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${encodeURIComponent(file.originalName)}"`,
+    );
+    res.end(buffer);
   }
 
   @Post(':id/retry')

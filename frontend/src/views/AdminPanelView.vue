@@ -100,8 +100,6 @@ const modelForm = ref({
   provider: '',
   providerId: '',
   apiIdentifier: '',
-  baseUrl: '',
-  apiKey: '',
   isActive: true,
 })
 
@@ -323,8 +321,6 @@ function openModelEditor(model?: Model) {
       provider: model.provider,
       providerId: model.providerId || '',
       apiIdentifier: model.apiIdentifier,
-      baseUrl: model.baseUrl || '',
-      apiKey: '',
       isActive: model.isActive,
     }
   } else {
@@ -333,8 +329,6 @@ function openModelEditor(model?: Model) {
       provider: providers.value[0]?.name || '',
       providerId: providers.value[0]?.id || '',
       apiIdentifier: '',
-      baseUrl: '',
-      apiKey: '',
       isActive: true,
     }
   }
@@ -355,8 +349,6 @@ async function saveModel() {
       provider: provider?.name || modelForm.value.provider.trim(),
       providerId: provider?.id || undefined,
       apiIdentifier: modelForm.value.apiIdentifier.trim(),
-      baseUrl: modelForm.value.baseUrl.trim() || undefined,
-      apiKey: modelForm.value.apiKey.trim() || undefined,
       isActive: modelForm.value.isActive,
     }
 
@@ -1316,20 +1308,6 @@ onMounted(loadData)
           <label class="col-span-full">
             <span class="field-label">{{ labels.apiId }} <span class="req">*</span></span>
             <input id="apiIdentifier" v-model="modelForm.apiIdentifier" class="mono" required :disabled="isSaving" />
-          </label>
-          <label class="col-span-full">
-            <span class="field-label">{{ labels.baseUrl }}</span>
-            <input v-model="modelForm.baseUrl" class="mono" :disabled="isSaving" />
-          </label>
-          <label class="col-span-full">
-            <span class="field-label">{{ labels.apiKey }}</span>
-            <input
-              v-model="modelForm.apiKey"
-              type="password"
-              class="mono"
-              placeholder="در صورت عدم تغییر، خالی بگذارید"
-              :disabled="isSaving"
-            />
           </label>
           <label class="toggle-label col-span-full">
             <BaseToggle v-model="modelForm.isActive" :disabled="isSaving" />

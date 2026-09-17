@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import type { FileAttachmentItem } from '../../types'
 
 const props = defineProps<{
@@ -14,10 +14,22 @@ const emit = defineEmits<{
 }>()
 
 const isPreviewModalOpen = ref(false)
+const imageLoadFailed = ref(false)
+
+watch(() => props.file.id, () => {
+  imageLoadFailed.value = false
+})
 
 const imageSource = computed(() => {
+  if (imageLoadFailed.value) return ''
   if (props.file.previewUrl) return props.file.previewUrl
   if (props.file.metadata?.dataUrl) return props.file.metadata.dataUrl
+  if (props.file.id && !props.file.id.startsWith('temp-')) {
+    const token = localStorage.getItem('token')
+    return token
+      ? `/api/v1/files/${props.file.id}/content?token=${token}`
+      : `/api/v1/files/${props.file.id}/content`
+  }
   return ''
 })
 
@@ -32,6 +44,10 @@ const isUploading = computed(() => props.file.status === 'uploading')
 const isProcessing = computed(() => props.file.status === 'processing')
 const isError = computed(() => props.file.status === 'error')
 const isReady = computed(() => props.file.status === 'ready')
+const isMarkdown = computed(() => {
+  const name = props.file.originalName?.toLowerCase() || ''
+  return name.endsWith('.md') || name.endsWith('.markdown')
+})
 
 const progress = computed(() => Math.min(100, Math.max(0, props.file.progress || 0)))
 
@@ -101,10 +117,11 @@ function handleRetryClick(e: MouseEvent) {
       <!-- Image Thumbnail -->
       <template v-if="file.fileType === 'image'">
         <img
-          v-if="imageSource"
+          v-if="imageSource && !imageLoadFailed"
           :src="imageSource"
-          :alt="file.originalName"
+          alt=""
           class="image-thumb"
+          @error="imageLoadFailed = true"
         />
         <div v-else class="media-icon image-icon">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
@@ -138,6 +155,20 @@ function handleRetryClick(e: MouseEvent) {
             <path d="M8 13l4 4m0-4l-4 4"/>
           </svg>
           <span class="type-badge">XLS</span>
+        </div>
+      </template>
+
+      <!-- Text / Markdown Icon -->
+      <template v-else-if="file.fileType === 'text'">
+        <div class="media-icon text-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          <span class="type-badge">{{ isMarkdown ? 'MD' : 'TXT' }}</span>
         </div>
       </template>
 
@@ -192,32 +223,41 @@ function handleRetryClick(e: MouseEvent) {
           <polyline points="20 6 9 17 4 12"></polyline>
         </svg>
       </div>
+
+      <!-- Error Exclamation Badge -->
+      <div v-if="isError && !compact" class="error-badge" :title="file.errorMessage || 'خطا در پردازش'">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+      </div>
     </div>
 
     <!-- Info Area (Name & Size) -->
     <div class="card-info" v-if="!compact">
       <span class="file-name" :title="file.originalName">{{ file.originalName }}</span>
       <div class="file-meta">
-        <span class="file-size">{{ formattedSize }}</span>
-        <span v-if="isProcessing" class="status-tag processing">در حال پردازش...</span>
-        <span v-else-if="isError" class="status-tag error">خطا در پردازش</span>
+        <template v-if="isError">
+          <span class="status-tag error" :title="file.errorMessage || 'خطا در پردازش'">خطا در پردازش</span>
+          <button
+            v-if="!readOnly"
+            type="button"
+            class="btn-retry-file"
+            @click.stop="handleRetryClick"
+            title="تلاش مجدد پردازش"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+            <span>تلاش مجدد</span>
+          </button>
+        </template>
+        <template v-else>
+          <span class="file-size">{{ formattedSize }}</span>
+          <span v-if="isProcessing" class="status-tag processing">در حال پردازش...</span>
+        </template>
       </div>
-    </div>
-
-    <!-- Error State Overlay / Actions -->
-    <div v-if="isError && !readOnly" class="error-action-row">
-      <button
-        type="button"
-        class="btn-retry-file"
-        @click="handleRetryClick"
-        title="تلاش مجدد پردازش"
-      >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="23 4 23 10 17 10"/>
-          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-        </svg>
-        تلاش مجدد
-      </button>
     </div>
 
     <!-- Remove '×' Button (visible when not uploading and not readOnly) -->
@@ -299,7 +339,7 @@ function handleRetryClick(e: MouseEvent) {
   border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
   border-radius: 10px;
   min-width: 140px;
-  max-width: 220px;
+  max-width: 240px;
   height: 52px;
   user-select: none;
   direction: rtl;
@@ -312,8 +352,13 @@ function handleRetryClick(e: MouseEvent) {
 }
 
 .file-preview-card.error {
-  border-color: rgba(239, 68, 68, 0.5);
+  border-color: rgba(239, 68, 68, 0.45);
   background-color: rgba(239, 68, 68, 0.08);
+  min-width: 180px;
+}
+
+.file-preview-card.error .file-name {
+  color: #fca5a5;
 }
 
 .file-preview-card.compact {
@@ -358,6 +403,10 @@ function handleRetryClick(e: MouseEvent) {
 
 .excel-icon {
   color: #10b981;
+}
+
+.text-icon {
+  color: #3b82f6;
 }
 
 .type-badge {
@@ -473,6 +522,7 @@ function handleRetryClick(e: MouseEvent) {
   overflow: hidden;
   flex: 1;
   min-width: 0;
+  gap: 2px;
 }
 
 .file-name {
@@ -482,6 +532,7 @@ function handleRetryClick(e: MouseEvent) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.3;
 }
 
 .file-meta {
@@ -490,6 +541,8 @@ function handleRetryClick(e: MouseEvent) {
   gap: 6px;
   font-size: 10px;
   color: var(--muted-foreground, #94a3b8);
+  min-width: 0;
+  line-height: 1.2;
 }
 
 .status-tag {
@@ -504,6 +557,11 @@ function handleRetryClick(e: MouseEvent) {
 
 .status-tag.error {
   color: #ef4444;
+  background-color: rgba(239, 68, 68, 0.12);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .btn-remove-corner {
@@ -531,27 +589,41 @@ function handleRetryClick(e: MouseEvent) {
   color: white;
 }
 
-.error-action-row {
-  position: absolute;
-  bottom: 4px;
-  inset-inline-end: 4px;
-}
-
 .btn-retry-file {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 3px;
   font-size: 9px;
-  background-color: rgba(239, 68, 68, 0.2);
+  font-weight: 500;
+  background-color: rgba(239, 68, 68, 0.18);
   color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.4);
+  border: 1px solid rgba(239, 68, 68, 0.45);
   border-radius: 4px;
-  padding: 1px 5px;
+  padding: 1px 6px;
   cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  line-height: 1.3;
 }
 
 .btn-retry-file:hover {
-  background-color: rgba(239, 68, 68, 0.35);
+  background-color: rgba(239, 68, 68, 0.3);
+  border-color: rgba(239, 68, 68, 0.7);
+  color: #ffffff;
+}
+
+.error-badge {
+  position: absolute;
+  bottom: 2px;
+  inset-inline-end: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .cursor-zoom {

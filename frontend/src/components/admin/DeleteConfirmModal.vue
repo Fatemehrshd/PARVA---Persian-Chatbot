@@ -38,7 +38,7 @@ defineEmits<{
 
       <div class="delete-text">
         <p class="delete-message">{{ message }}</p>
-        <p v-if="itemName" class="delete-item-name">«{{ itemName }}»</p>
+        <p v-if="itemName" class="delete-item-name">ï¿½{{ itemName }}ï¿½</p>
       </div>
 
       <div class="delete-actions">
@@ -102,5 +102,16 @@ defineEmits<{
   margin-top: 8px;
   padding-top: 16px;
   border-top: 1px solid var(--border);
+}
+
+@media (max-width: 480px) {
+  .delete-actions {
+    flex-direction: column-reverse;
+  }
+
+  .delete-actions :deep(.base-button),
+  .delete-actions > * {
+    width: 100%;
+  }
 }
 </style>

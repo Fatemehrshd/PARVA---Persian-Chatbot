@@ -8,7 +8,6 @@ import {
 } from '@lucide/vue'
 import { useModelsStore } from '../stores/models'
 import { useUiStore } from '../stores/ui'
-import { useAuthStore } from '../stores/auth'
 import { modelsService } from '../services/models.service'
 import { adminService } from '../services/admin.service'
 import AdminModal from '../components/admin/AdminModal.vue'
@@ -40,7 +39,6 @@ import usersWhite from '../assets/users-white.svg'
 const router = useRouter()
 const modelsStore = useModelsStore()
 const uiStore = useUiStore()
-const authStore = useAuthStore()
 
 const activeSection = ref<'dashboard' | 'providers' | 'models' | 'users' | 'prompts' | 'chats'>('dashboard')
 const sidebarOpen = ref(false)
@@ -933,15 +931,15 @@ onMounted(loadData)
             table-class="dashboard-table"
           >
             <template #row="{ item: model }">
-              <td>
+              <td :data-label="labels.modelName">
                 <div class="cell-primary">
                   <strong>{{ model.name }}</strong>
                   <span v-if="model.isDefault" class="subtext-badge">{{ labels.default }}</span>
                 </div>
               </td>
-              <td><span class="tag">{{ model.provider }}</span></td>
-              <td class="mono subtext">{{ model.apiIdentifier }}</td>
-              <td>
+              <td :data-label="labels.provider"><span class="tag">{{ model.provider }}</span></td>
+              <td :data-label="labels.apiId" class="mono subtext">{{ model.apiIdentifier }}</td>
+              <td :data-label="labels.status">
                 <BaseToggle
                   :model-value="model.isActive"
                   size="sm"
@@ -1053,22 +1051,22 @@ onMounted(loadData)
           table-class="dashboard-table"
         >
           <template #row="{ item: model }">
-            <td>
+            <td :data-label="labels.modelName">
               <div class="cell-primary">
                 <strong>{{ model.name }}</strong>
                 <span v-if="model.isDefault" class="subtext-badge">{{ labels.default }}</span>
               </div>
             </td>
-            <td><span class="tag">{{ model.provider }}</span></td>
-            <td class="mono subtext">{{ model.apiIdentifier }}</td>
-            <td>
+            <td :data-label="labels.provider"><span class="tag">{{ model.provider }}</span></td>
+            <td :data-label="labels.apiId" class="mono subtext">{{ model.apiIdentifier }}</td>
+            <td :data-label="labels.status">
               <BaseToggle
                 :model-value="model.isActive"
                 size="sm"
                 @update:model-value="toggleModel(model)"
               />
             </td>
-            <td class="actions-cell">
+            <td :data-label="labels.actions" class="actions-cell">
               <div class="action-buttons">
                 <BaseButton
                   variant="ghost"
@@ -1102,7 +1100,7 @@ onMounted(loadData)
 
         <AdminTable :columns="userColumns" :items="filteredUsers">
           <template #row="{ item: user }">
-            <td>
+            <td :data-label="labels.user">
               <div class="user-cell">
                 <span class="avatar-chip">{{ (user.displayName || user.email).charAt(0).toUpperCase() }}</span>
                 <div>
@@ -1111,24 +1109,24 @@ onMounted(loadData)
                 </div>
               </div>
             </td>
-            <td>
+            <td :data-label="labels.role">
               <span class="tag" :class="{ 'tag-admin': user.role === 'admin' }">
                 {{ user.role === 'admin' ? 'مدیر سیستم' : 'کاربر عادی' }}
               </span>
             </td>
-            <td class="mono">{{ user.conversationsCount }}</td>
-            <td class="mono">{{ user.usedTokens.toLocaleString() }}</td>
-            <td class="mono">
+            <td :data-label="labels.conversations" class="mono">{{ user.conversationsCount }}</td>
+            <td :data-label="labels.usedTokens" class="mono">{{ user.usedTokens.toLocaleString() }}</td>
+            <td :data-label="labels.tokenLimit" class="mono">
               {{ user.tokenLimit !== null && user.tokenLimit !== undefined ? user.tokenLimit.toLocaleString() : 'سقف سراسری' }}
             </td>
-            <td>
+            <td :data-label="labels.status">
               <BaseToggle
                 :model-value="user.isActive !== false"
                 size="sm"
                 @update:model-value="toggleUser(user)"
               />
             </td>
-            <td class="actions-cell">
+            <td :data-label="labels.actions" class="actions-cell">
               <div class="action-buttons">
                 <BaseButton variant="ghost" size="sm" @click="openUserEditor(user)">
                   {{ labels.edit }}
@@ -1250,7 +1248,7 @@ onMounted(loadData)
 
         <AdminTable :columns="chatColumns" :items="filteredChats">
           <template #row="{ item: conv }">
-            <td>
+            <td data-label="عنوان گفتگو">
               <div class="chat-title-cell">
                 <MessageSquare :size="15" class="chat-row-icon" />
                 <div>
@@ -1259,7 +1257,7 @@ onMounted(loadData)
                 </div>
               </div>
             </td>
-            <td>
+            <td data-label="کاربر">
               <div class="user-cell">
                 <span class="avatar-chip">{{ (conv.user?.displayName || conv.user?.email || 'U').charAt(0).toUpperCase() }}</span>
                 <div>
@@ -1268,13 +1266,13 @@ onMounted(loadData)
                 </div>
               </div>
             </td>
-            <td class="mono">
+            <td data-label="تعداد پیام‌ها" class="mono">
               <span class="message-count-badge">{{ conv.messageCount }} پیام</span>
             </td>
-            <td class="mono subtext">
+            <td data-label="تاریخ آخرین فعالیت" class="mono subtext">
               {{ new Date(conv.updatedAt || conv.createdAt).toLocaleDateString('fa-IR') }}
             </td>
-            <td class="actions-cell">
+            <td :data-label="labels.actions" class="actions-cell">
               <div class="action-buttons">
                 <BaseButton variant="secondary" size="sm" @click="openChatViewer(conv)">
                   مشاهده پیام‌ها
@@ -2758,11 +2756,28 @@ onMounted(loadData)
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 768px) {
   .admin-menu-button {
     display: block;
+  }
+
+  /* Sidebar is off-canvas below 768px, so the content offset must go. */
+  .admin-main {
+    margin-inline-start: 0;
+  }
+
+  .admin-topbar {
+    min-height: 64px;
+    padding: 14px 12px;
+  }
+
+  .admin-content {
+    padding: 12px 0 20px;
   }
 
   .admin-sidebar {

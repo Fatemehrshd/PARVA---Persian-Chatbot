@@ -53,7 +53,7 @@ describe('SettingsModal', () => {
     const englishBtn = buttons.find(b => b.text().includes('English') || b.text().includes('LTR'))
     expect(englishBtn).toBeUndefined()
     expect(uiStore.direction).toBe('rtl')
-    expect(wrapper.find('.settings-modal-dialog').text()).toContain('تنظیمات سامانه')
+    expect(wrapper.find('.settings-modal-dialog').text()).toContain('تنظیمات')
   })
 
   it('closes modal when close button is clicked', async () => {

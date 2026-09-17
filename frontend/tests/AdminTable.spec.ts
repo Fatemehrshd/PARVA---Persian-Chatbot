@@ -61,4 +61,19 @@ describe('AdminTable.vue Component', () => {
     expect(wrapper.find('.custom-name').exists()).toBe(true)
     expect(wrapper.find('.custom-name').text()).toBe('GPT-4o - ??????')
   })
+
+  it('adds data-label attributes to default cells for mobile card layout', () => {
+    const wrapper = mount(AdminTable, {
+      props: {
+        columns,
+        items,
+      },
+    })
+
+    const firstRowCells = wrapper.findAll('tbody tr.table-row')[0].findAll('td')
+    expect(firstRowCells.length).toBe(3)
+    columns.forEach((col, index) => {
+      expect(firstRowCells[index].attributes('data-label')).toBe(col.label)
+    })
+  })
 })

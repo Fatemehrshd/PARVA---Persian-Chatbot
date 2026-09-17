@@ -13,6 +13,9 @@ export class Message {
   @Column({ default: false }) isInterrupted: boolean;
   @Column({ default: false }) stoppedByUser: boolean;
   @Column({ default: false }) isDeleted: boolean;
+  /** Web-search sources attached to this assistant reply (null when unused). */
+  @Column({ type: 'jsonb', nullable: true, default: null })
+  sources?: { title: string; url: string; snippet?: string }[] | null;
   @OneToMany(() => FileAttachment, (f) => f.message)
   attachments: FileAttachment[];
   @CreateDateColumn() createdAt: Date;

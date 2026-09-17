@@ -1,6 +1,6 @@
 # API Architecture & Technical Reference
 
-این سند راهنمای جامع و فنی معماری API پلتفرم **CODELESS / NeuralChat** است که بر اساس قرارداد استاندارد OpenAPI نسخه ۰.۵.۰ ([`api-contract.yaml`](../../api-contract.yaml)) تدوین شده است.
+این سند راهنمای جامع و فنی معماری API پلتفرم **PARVA** است که بر اساس قرارداد استاندارد OpenAPI نسخه ۰.۵.۰ ([`api-contract.yaml`](../../api-contract.yaml)) تدوین شده است.
 
 ---
 

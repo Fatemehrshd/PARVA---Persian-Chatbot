@@ -32,6 +32,18 @@ watch(inputContent, (newVal) => {
   }
 })
 
+// پاک کردن input هنگام سوئیچ conversation
+watch(
+  () => chatStore.currentConversationId,
+  () => {
+    inputContent.value = ''
+    inputDirection.value = 'rtl'
+    if (textareaRef.value) {
+      textareaRef.value.style.height = 'auto'
+    }
+  }
+)
+
 const canSend = computed(() => {
   return inputContent.value.trim().length > 0 && !chatStore.isStreaming
 })

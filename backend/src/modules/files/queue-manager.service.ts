@@ -42,8 +42,12 @@ export class QueueManagerService implements OnModuleInit, OnModuleDestroy {
         port,
         maxRetriesPerRequest: null,
         connectTimeout: 2000,
-        retryStrategy: (times) => (times > 2 ? null : 1000),
+        retryStrategy: () => null,
         lazyConnect: true,
+      });
+
+      this.redisClient.on('error', () => {
+        // Handled silently to prevent unhandled error event spam when Redis is off
       });
 
       await this.redisClient.connect();
@@ -69,6 +73,9 @@ export class QueueManagerService implements OnModuleInit, OnModuleDestroy {
       this.messageQueue = new Queue('message-queue', { connection: this.redisClient });
     } catch (err: any) {
       this.isRedisAvailable = false;
+      try {
+        this.redisClient?.disconnect();
+      } catch {}
       this.logger.warn(
         `Redis is unavailable (${err?.message || err}). Falling back to asynchronous in-memory queues.`,
       );

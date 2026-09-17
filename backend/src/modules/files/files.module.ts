@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { FileAttachment } from './file-attachment.entity';
 import { StorageModule } from '../storage/storage.module';
 import { AdminModule } from '../admin/admin.module';
+import { AuthModule } from '../auth/auth.module';
 import { FilesService } from './files.service';
 import { FilesController } from './files.controller';
 import { MalwareScannerService } from './malware-scanner.service';
@@ -15,6 +16,7 @@ import { FileCleanupService } from './file-cleanup.service';
     TypeOrmModule.forFeature([FileAttachment]),
     StorageModule,
     AdminModule,
+    AuthModule,
   ],
   controllers: [FilesController],
   providers: [
@@ -27,3 +29,4 @@ import { FileCleanupService } from './file-cleanup.service';
   exports: [FilesService, FileProcessorService, QueueManagerService],
 })
 export class FilesModule {}
+

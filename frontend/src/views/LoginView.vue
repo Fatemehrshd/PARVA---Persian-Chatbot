@@ -98,7 +98,7 @@ async function handleSubmit() {
           </div>
           <div class="text-start">
             <span class="text-2xl font-bold tracking-tight text-foreground block leading-tight">پروا</span>
-            <span class="text-[11px] font-mono text-muted-foreground">سامانه هوش مصنوعی پروا • NeuralChat</span>
+            <span class="text-[11px] font-mono text-muted-foreground">سامانه هوش مصنوعی پروا</span>
           </div>
         </div>
 

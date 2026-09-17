@@ -355,15 +355,6 @@ const userInitial = computed(() => {
       <!-- Spacer -->
       <div class="sb-spacer" />
 
-      <!-- Settings in collapsed state -->
-      <button
-        class="sb-icon-btn sb-icon-btn--lg"
-        @click="openSettings"
-        title="تنظیمات و تم"
-      >
-        <Settings :size="17" />
-      </button>
-
       <!-- Profile (collapsed) -->
       <div class="sb-collapsed-profile flex flex-col gap-2 items-center" v-if="authStore.isAuthenticated">
         <!-- Direct Admin Icon Link (collapsed) -->

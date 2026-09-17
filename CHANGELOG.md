@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2026-09-17
+
+### Fixed
+- **Image & File Upload Send Button Disabled State & Reactivity Fix (`frontend`)**:
+  - Resolved an issue where attaching an image or document kept the send button permanently disabled (`disabled: true`). The root cause was that raw JavaScript objects were passed to `startUpload`, bypassing Vue 3's reactive proxy `set` traps and preventing computed `hasUploadingFiles` from updating after server completion.
+  - Ensured `attachedFiles` uses reactive array proxies so upload status (`uploading` -> `processing` -> `ready`) and progress indicators update in real-time.
+  - Enhanced `ChatComposer.vue` to allow sending immediately when files are attached (even without accompanying prompt text).
+  - Added `waitForUploads` synchronization in `handleSubmit` so if a user clicks Send while bytes are still in-flight, it smoothly awaits upload completion before dispatching.
+  - Prevented sending only when an attached file is in an `error` state, requiring the user to retry or remove it first.
+  - Adjusted `MessageBubble.vue` attachment spacing when messages contain only images without text.
+
 ## [1.1.0] - 2026-09-16
 
 ### Added

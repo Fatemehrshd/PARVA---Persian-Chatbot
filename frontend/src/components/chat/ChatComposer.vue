@@ -24,6 +24,8 @@ const {
   limits,
   isDraggingOver,
   hasUploadingFiles,
+  hasErrorFiles,
+  waitForUploads,
   addFiles,
   removeFile,
   retryFile,
@@ -136,8 +138,8 @@ const canSend = computed(() => {
   const hasText = inputContent.value.trim().length > 0
   const hasFiles = attachedFiles.value.length > 0
   if (!hasText && !hasFiles) return false
-  // Disabled until all in-flight uploads complete
-  if (hasUploadingFiles.value) return false
+  // Disallow sending if any file is in error state (must be removed or retried)
+  if (hasErrorFiles.value) return false
   return true
 })
 
@@ -167,8 +169,18 @@ function handleKeydown(event: KeyboardEvent) {
   }
 }
 
-function handleSubmit() {
+async function handleSubmit() {
   if (!canSend.value) return
+
+  // If in-flight file byte uploads are active, wait for completion
+  if (hasUploadingFiles.value) {
+    const finished = await waitForUploads()
+    if (!finished || hasErrorFiles.value) {
+      uiStore.showToast('لطفاً تا اتمام آپلود فایل‌ها منتظر بمانید', 'warning')
+      return
+    }
+  }
+
   const text = inputContent.value
   const files = [...attachedFiles.value]
   inputContent.value = ''

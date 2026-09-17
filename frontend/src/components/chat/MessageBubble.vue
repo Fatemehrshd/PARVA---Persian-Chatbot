@@ -119,7 +119,11 @@ function copyContent() {
         :dir="textDirection"
       >
         <!-- Attachments if any -->
-        <div v-if="isUser && message.attachments && message.attachments.length > 0" class="message-attachments flex flex-wrap gap-2 mb-3">
+        <div
+          v-if="isUser && message.attachments && message.attachments.length > 0"
+          class="message-attachments flex flex-wrap gap-2"
+          :class="{ 'mb-3': !!props.message.content?.trim() }"
+        >
           <FilePreviewCard
             v-for="file in message.attachments"
             :key="file.id"
@@ -130,7 +134,7 @@ function copyContent() {
         </div>
 
         <!-- User: Plain text with per-line hybrid directional alignment -->
-        <div v-if="isUser" class="message-text leading-relaxed text-[14px] md:text-[15px] space-y-0.5">
+        <div v-if="isUser && props.message.content?.trim()" class="message-text leading-relaxed text-[14px] md:text-[15px] space-y-0.5">
           <div
             v-for="(line, idx) in userMessageLines"
             :key="idx"

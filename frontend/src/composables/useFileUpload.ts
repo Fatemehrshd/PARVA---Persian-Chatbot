@@ -153,19 +153,22 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
 
       attachedFiles.value.push(item)
 
-      // Start upload immediately
-      startUpload(item, file)
+      // Grab reactive proxy from array to ensure all property mutations trigger Vue reactivity
+      const reactiveItem = attachedFiles.value[attachedFiles.value.length - 1]
+      startUpload(reactiveItem, file)
     }
   }
 
   async function startUpload(item: FileAttachmentItem, file: File) {
     const convId = conversationIdProvider() || undefined
+    const tempId = item.id
 
     // Smooth visual progress ticker for instant/local uploads
     item.progress = 20
     const progressTimer = setInterval(() => {
-      if (item.status === 'uploading' && (item.progress || 0) < 85) {
-        item.progress = Math.min(85, (item.progress || 20) + 20)
+      const current = attachedFiles.value.find((f) => f.id === item.id || f.id === tempId) || item
+      if (current.status === 'uploading' && (current.progress || 0) < 85) {
+        current.progress = Math.min(85, (current.progress || 20) + 20)
       }
     }, 100)
 
@@ -174,19 +177,24 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
         file,
         convId,
         (percent) => {
-          item.progress = Math.max(item.progress || 20, percent)
+          const current = attachedFiles.value.find((f) => f.id === item.id || f.id === tempId) || item
+          current.progress = Math.max(current.progress || 20, percent)
         },
         item.abortController?.signal,
       )
 
       clearInterval(progressTimer)
+      const current = attachedFiles.value.find((f) => f.id === item.id || f.id === tempId) || item
       // Replace tempId with actual server id
+      current.id = result.id
       item.id = result.id
-      item.status = (result.status as any) || 'processing'
+      current.status = (result.status as any) || 'processing'
+      item.status = current.status
+      current.progress = 100
       item.progress = 100
 
       // Start polling for processing status until ready or error
-      pollFileStatus(item)
+      pollFileStatus(current)
     } catch (err: any) {
       clearInterval(progressTimer)
       if (err?.name === 'AbortError' || err?.message === 'Upload aborted') {
@@ -194,9 +202,12 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
         return
       }
 
+      const current = attachedFiles.value.find((f) => f.id === item.id || f.id === tempId) || item
+      current.status = 'error'
       item.status = 'error'
-      item.errorMessage = err?.message || 'خطا در آپلود فایل'
-      uiStore.showToast(item.errorMessage || 'خطا در آپلود فایل', 'error')
+      current.errorMessage = err?.message || 'خطا در آپلود فایل'
+      item.errorMessage = current.errorMessage
+      uiStore.showToast(current.errorMessage || 'خطا در آپلود فایل', 'error')
     }
   }
 
@@ -207,6 +218,10 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
     // Check immediately first: small files/images process in ~10ms
     try {
       const immediateRes = await filesService.getFileStatus(item.id)
+      const current = attachedFiles.value.find((f) => f.id === item.id) || item
+      current.status = immediateRes.status
+      current.errorMessage = immediateRes.errorMessage
+      current.metadata = immediateRes.metadata
       item.status = immediateRes.status
       item.errorMessage = immediateRes.errorMessage
       item.metadata = immediateRes.metadata
@@ -216,7 +231,7 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
       }
       if (immediateRes.status === 'error') {
         uiStore.showToast(
-          `خطا در پردازش فایل "${item.originalName}": ${immediateRes.errorMessage || 'خطا'}`,
+          `خطا در پردازش فایل "${current.originalName}": ${immediateRes.errorMessage || 'خطا'}`,
           'error',
         )
         return
@@ -226,15 +241,19 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
     }
 
     const interval = setInterval(async () => {
+      const current = attachedFiles.value.find((f) => f.id === item.id)
       // If item was removed from array, stop polling
-      if (!attachedFiles.value.some((f) => f.id === item.id)) {
+      if (!current) {
         clearInterval(interval)
         return
       }
 
       attempts++
       try {
-        const res = await filesService.getFileStatus(item.id)
+        const res = await filesService.getFileStatus(current.id)
+        current.status = res.status
+        current.errorMessage = res.errorMessage
+        current.metadata = res.metadata
         item.status = res.status
         item.errorMessage = res.errorMessage
         item.metadata = res.metadata
@@ -243,7 +262,7 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
           clearInterval(interval)
           if (res.status === 'error') {
             uiStore.showToast(
-              `خطا در پردازش فایل "${item.originalName}": ${res.errorMessage || 'خطا'}`,
+              `خطا در پردازش فایل "${current.originalName}": ${res.errorMessage || 'خطا'}`,
               'error',
             )
           }
@@ -252,13 +271,27 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
         // network issue or temporary error
       }
 
-      if (attempts >= maxAttempts && item.status === 'processing') {
+      if (attempts >= maxAttempts && current.status === 'processing') {
         clearInterval(interval)
+        current.status = 'error'
+        current.errorMessage = 'پردازش فایل به دلیل اتمام زمان مجاز با خطا مواجه شد'
         item.status = 'error'
-        item.errorMessage = 'پردازش فایل به دلیل اتمام زمان مجاز با خطا مواجه شد'
-        uiStore.showToast(item.errorMessage, 'error')
+        item.errorMessage = current.errorMessage
+        uiStore.showToast(current.errorMessage, 'error')
       }
     }, 1500)
+  }
+
+  /**
+   * Helper to await completion of any in-flight byte transfers.
+   */
+  async function waitForUploads(): Promise<boolean> {
+    if (!hasUploadingFiles.value) return true
+    const start = Date.now()
+    while (hasUploadingFiles.value && Date.now() - start < 20000) {
+      await new Promise((r) => setTimeout(r, 100))
+    }
+    return !hasUploadingFiles.value
   }
 
   /**
@@ -336,6 +369,7 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
     hasErrorFiles,
     allReadyFiles,
     readyFileIds,
+    waitForUploads,
     addFiles,
     removeFile,
     retryFile,

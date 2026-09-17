@@ -64,6 +64,12 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
     const newTotalBytes = newFiles.reduce((sum, f) => sum + f.size, 0)
 
     for (const f of newFiles) {
+      if (!isFileTypeSupported(f)) {
+        return {
+          valid: false,
+          message: `فرمت فایل «${f.name}» پشتیبانی نمی‌شود. تنها عکس (PNG, JPG, WEBP, GIF, SVG)، اسناد PDF و فایل‌های اکسل (XLSX, XLS, CSV) مجاز هستند.`,
+        }
+      }
       if (f.size > limits.value.maxFileSizeBytes) {
         return {
           valid: false,
@@ -80,6 +86,19 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
     }
 
     return { valid: true }
+  }
+
+  function isFileTypeSupported(file: File): boolean {
+    const name = file.name.toLowerCase()
+    const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(name)
+    const isPdf = file.type === 'application/pdf' || name.endsWith('.pdf')
+    const isExcel =
+      file.type.includes('spreadsheet') ||
+      file.type.includes('excel') ||
+      file.type.includes('csv') ||
+      file.type === 'text/csv' ||
+      /\.(xlsx|xls|csv)$/i.test(name)
+    return isImage || isPdf || isExcel
   }
 
   function resolveFileType(file: File): 'image' | 'pdf' | 'excel' {

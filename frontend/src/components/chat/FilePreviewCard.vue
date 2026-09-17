@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type { FileAttachmentItem } from '../../types'
 
 const props = defineProps<{
@@ -12,6 +12,14 @@ const emit = defineEmits<{
   (e: 'remove', file: FileAttachmentItem): void
   (e: 'retry', file: FileAttachmentItem): void
 }>()
+
+const isPreviewModalOpen = ref(false)
+
+const imageSource = computed(() => {
+  if (props.file.previewUrl) return props.file.previewUrl
+  if (props.file.metadata?.dataUrl) return props.file.metadata.dataUrl
+  return ''
+})
 
 const formattedSize = computed(() => {
   const bytes = props.file.fileSize || 0
@@ -31,6 +39,30 @@ const progress = computed(() => Math.min(100, Math.max(0, props.file.progress ||
 const strokeDashoffset = computed(() => {
   const circumference = 2 * Math.PI * 18
   return circumference - (circumference * progress.value) / 100
+})
+
+function openPreviewModal() {
+  if (imageSource.value) {
+    isPreviewModalOpen.value = true
+  }
+}
+
+function closePreviewModal() {
+  isPreviewModalOpen.value = false
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && isPreviewModalOpen.value) {
+    closePreviewModal()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
 })
 
 function handleRemoveClick(e: MouseEvent) {
@@ -60,12 +92,17 @@ function handleRetryClick(e: MouseEvent) {
     :title="file.originalName"
   >
     <!-- Thumbnail / Icon Area -->
-    <div class="card-media">
+    <div
+      class="card-media"
+      :class="{ 'cursor-zoom': file.fileType === 'image' && imageSource && !isUploading }"
+      @click="file.fileType === 'image' && imageSource && !isUploading ? openPreviewModal() : undefined"
+      :title="file.fileType === 'image' && imageSource && !isUploading ? 'کلیک برای بزرگ‌نمایی تصویر' : file.originalName"
+    >
       <!-- Image Thumbnail -->
       <template v-if="file.fileType === 'image'">
         <img
-          v-if="file.previewUrl"
-          :src="file.previewUrl"
+          v-if="imageSource"
+          :src="imageSource"
           :alt="file.originalName"
           class="image-thumb"
         />
@@ -194,6 +231,61 @@ function handleRetryClick(e: MouseEvent) {
       ✕
     </button>
   </div>
+
+  <!-- Minimal & Smooth Image Preview Lightbox -->
+  <Teleport to="body">
+    <Transition name="fade-lightbox">
+      <div
+        v-if="isPreviewModalOpen"
+        class="image-lightbox-overlay"
+        @click.self="closePreviewModal"
+      >
+        <div class="lightbox-dialog" @click.stop>
+          <!-- Top bar -->
+          <div class="lightbox-topbar">
+            <div class="lightbox-info">
+              <span class="lightbox-title">{{ file.originalName }}</span>
+              <span class="lightbox-size">{{ formattedSize }}</span>
+            </div>
+            <div class="lightbox-actions">
+              <a
+                v-if="imageSource"
+                :href="imageSource"
+                :download="file.originalName"
+                class="lightbox-btn"
+                title="دانلود تصویر"
+                @click.stop
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+              </a>
+              <button
+                type="button"
+                class="lightbox-btn close-btn"
+                @click="closePreviewModal"
+                title="بستن (ESC)"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          <!-- Image Frame -->
+          <div class="lightbox-body" @click="closePreviewModal">
+            <img
+              :src="imageSource"
+              :alt="file.originalName"
+              class="lightbox-image"
+              @click.stop
+            />
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -460,5 +552,153 @@ function handleRetryClick(e: MouseEvent) {
 
 .btn-retry-file:hover {
   background-color: rgba(239, 68, 68, 0.35);
+}
+
+.cursor-zoom {
+  cursor: zoom-in;
+  transition: transform 0.15s ease;
+}
+
+.cursor-zoom:hover {
+  filter: brightness(1.05);
+}
+
+/* =======================================================
+   IMAGE LIGHTBOX MODAL (Teleported to Body)
+   ======================================================= */
+.image-lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background-color: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  cursor: zoom-out;
+}
+
+.lightbox-dialog {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 92vw;
+  max-height: 92vh;
+  cursor: default;
+}
+
+.lightbox-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 14px;
+  background-color: rgba(23, 23, 23, 0.75);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  direction: rtl;
+}
+
+.lightbox-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+}
+
+.lightbox-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+.lightbox-size {
+  font-size: 11px;
+  color: #94a3b8;
+  direction: ltr;
+}
+
+.lightbox-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lightbox-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.lightbox-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  transform: scale(1.05);
+}
+
+.lightbox-btn.close-btn {
+  font-size: 14px;
+}
+
+.lightbox-btn.close-btn:hover {
+  background: rgba(239, 68, 68, 0.35);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.lightbox-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  max-width: 100%;
+  max-height: calc(90vh - 60px);
+}
+
+.lightbox-image {
+  max-width: 90vw;
+  max-height: calc(88vh - 60px);
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  user-select: none;
+}
+
+/* Transitions */
+.fade-lightbox-enter-active,
+.fade-lightbox-leave-active {
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fade-lightbox-enter-from,
+.fade-lightbox-leave-to {
+  opacity: 0;
+}
+
+.fade-lightbox-enter-from .lightbox-dialog,
+.fade-lightbox-leave-to .lightbox-dialog {
+  transform: scale(0.94);
+}
+
+.fade-lightbox-enter-to .lightbox-dialog,
+.fade-lightbox-leave-from .lightbox-dialog {
+  transform: scale(1);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 </style>

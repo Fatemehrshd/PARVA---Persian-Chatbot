@@ -59,7 +59,23 @@ function pickDocuments() {
 function handleImageChange(e: Event) {
   const target = e.target as HTMLInputElement
   if (target.files && target.files.length > 0) {
-    addFiles(target.files)
+    const files = Array.from(target.files)
+    const nonImages = files.filter((f) => {
+      const name = f.name.toLowerCase()
+      const isImg = f.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(name)
+      return !isImg
+    })
+
+    if (nonImages.length > 0) {
+      uiStore.showToast(
+        `فایل «${nonImages[0].name}» تصویر نیست. در این بخش فقط فایل‌های عکس (PNG, JPG, WEBP, GIF, SVG) مجاز هستند.`,
+        'error',
+      )
+      target.value = ''
+      return
+    }
+
+    addFiles(files)
     target.value = ''
   }
 }
@@ -67,7 +83,28 @@ function handleImageChange(e: Event) {
 function handleDocChange(e: Event) {
   const target = e.target as HTMLInputElement
   if (target.files && target.files.length > 0) {
-    addFiles(target.files)
+    const files = Array.from(target.files)
+    const nonDocs = files.filter((f) => {
+      const name = f.name.toLowerCase()
+      const isDoc =
+        /\.(pdf|xlsx|xls|csv)$/i.test(name) ||
+        f.type === 'application/pdf' ||
+        f.type.includes('spreadsheet') ||
+        f.type.includes('excel') ||
+        f.type.includes('csv')
+      return !isDoc
+    })
+
+    if (nonDocs.length > 0) {
+      uiStore.showToast(
+        `فایل «${nonDocs[0].name}» سند مجاز نیست. تنها اسناد PDF و فایل‌های اکسل (XLSX, XLS, CSV) مجاز هستند.`,
+        'error',
+      )
+      target.value = ''
+      return
+    }
+
+    addFiles(files)
     target.value = ''
   }
 }
@@ -221,7 +258,7 @@ onUnmounted(() => {
       <input
         ref="imageInputRef"
         type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.png,.jpg,.jpeg,.webp,.gif,.svg"
         multiple
         style="display: none"
         @change="handleImageChange"
@@ -229,7 +266,7 @@ onUnmounted(() => {
       <input
         ref="docInputRef"
         type="file"
-        accept=".pdf,.xls,.xlsx,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        accept=".pdf,.xlsx,.xls,.csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
         multiple
         style="display: none"
         @change="handleDocChange"

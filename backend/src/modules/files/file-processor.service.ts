@@ -6,9 +6,41 @@ import { StorageService } from '../storage/storage.service';
 import { SettingsService } from '../admin/settings.service';
 import * as xlsx from 'xlsx';
 
-// pdf-parse import with fallback for ESM/CJS compatibility
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const pdfParse = require('pdf-parse');
+// Helper function to extract text from PDF buffer supporting both pdf-parse v2 (class) and v1 (function)
+async function parsePdfBuffer(buffer: Buffer): Promise<{ text: string; numpages: number; info?: any }> {
+  const pdfModule = require('pdf-parse');
+  if (typeof pdfModule.PDFParse === 'function') {
+    const parser = new pdfModule.PDFParse({ data: buffer });
+    try {
+      const result = await parser.getText();
+      const numpages = result.total || (Array.isArray(result.pages) ? result.pages.length : 1);
+      return {
+        text: (result.text || '').trim(),
+        numpages,
+        info: {},
+      };
+    } finally {
+      if (typeof parser.destroy === 'function') {
+        await parser.destroy().catch(() => {});
+      }
+    }
+  } else if (typeof pdfModule === 'function') {
+    const result = await pdfModule(buffer);
+    return {
+      text: (result.text || '').trim(),
+      numpages: result.numpages || 1,
+      info: result.info || {},
+    };
+  } else if (typeof pdfModule.default === 'function') {
+    const result = await pdfModule.default(buffer);
+    return {
+      text: (result.text || '').trim(),
+      numpages: result.numpages || 1,
+      info: result.info || {},
+    };
+  }
+  throw new Error('قالب کتابخانه پردازش فایل پی‌دی‌اف معتبر نیست');
+}
 
 @Injectable()
 export class FileProcessorService {
@@ -97,7 +129,7 @@ export class FileProcessorService {
    * Extracts text from PDF files and detects visual/scanned content heuristically.
    */
   private async processPdf(file: FileAttachment, buffer: Buffer): Promise<void> {
-    const parsed = await pdfParse(buffer);
+    const parsed = await parsePdfBuffer(buffer);
     const numPages = parsed.numpages || 1;
     const text = (parsed.text || '').trim();
 

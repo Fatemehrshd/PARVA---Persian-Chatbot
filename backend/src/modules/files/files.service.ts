@@ -60,29 +60,36 @@ export class FilesService {
   resolveFileType(mimeType: string, filename: string): FileAttachmentType {
     const lowerName = filename.toLowerCase();
 
-    if (
-      mimeType.startsWith('image/') ||
-      /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(lowerName)
-    ) {
+    // 1. Image formats: PNG, JPG, JPEG, WEBP, GIF, SVG
+    const isImageExt = /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(lowerName);
+    const isImageMime = mimeType.startsWith('image/');
+    if (isImageExt && (isImageMime || mimeType === 'application/octet-stream')) {
       return 'image';
     }
 
-    if (mimeType === 'application/pdf' || lowerName.endsWith('.pdf')) {
+    // 2. PDF documents: .pdf
+    const isPdfExt = lowerName.endsWith('.pdf');
+    const isPdfMime = mimeType === 'application/pdf';
+    if (isPdfExt && (isPdfMime || mimeType === 'application/octet-stream')) {
       return 'pdf';
     }
 
-    if (
+    // 3. Excel & Spreadsheet documents: .xlsx, .xls, .csv
+    const isExcelExt = /\.(xlsx|xls|csv)$/i.test(lowerName);
+    const isExcelMime =
       mimeType.includes('spreadsheet') ||
       mimeType.includes('excel') ||
-      lowerName.endsWith('.xlsx') ||
-      lowerName.endsWith('.xls') ||
-      lowerName.endsWith('.csv')
-    ) {
+      mimeType.includes('csv') ||
+      mimeType === 'text/csv' ||
+      mimeType === 'application/csv' ||
+      mimeType === 'application/vnd.ms-excel' ||
+      mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    if (isExcelExt && (isExcelMime || mimeType === 'application/octet-stream' || mimeType.startsWith('text/'))) {
       return 'excel';
     }
 
     throw new BadRequestException(
-      'فرمت فایل پشتیبانی نمی‌شود. فرمت‌های مجاز: عکس (Image)، پی‌دی‌اف (PDF) و اکسل (Excel)',
+      'فرمت فایل انتخاب‌شده مجاز نیست. تنها فرمت‌های عکس (PNG, JPG, WEBP, GIF, SVG)، اسناد PDF و اکسل (XLSX, XLS, CSV) پشتیبانی می‌شوند.',
     );
   }
 

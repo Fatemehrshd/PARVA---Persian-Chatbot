@@ -211,9 +211,6 @@ async function handleSubmit() {
               <Label for="password" class="text-xs font-medium text-foreground/90">
                 رمز عبور
               </Label>
-              <span v-if="isSignup" class="text-[10px] text-muted-foreground font-mono">
-                حداقل ۸ کاراکتر
-              </span>
             </div>
             <div class="relative">
               <span class="absolute inset-y-0 start-3 flex items-center pointer-events-none text-muted-foreground">

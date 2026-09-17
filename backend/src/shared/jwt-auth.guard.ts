@@ -6,10 +6,11 @@ export class JwtAuthGuard implements CanActivate {
   canActivate(ctx: ExecutionContext): boolean {
     const req = ctx.switchToHttp().getRequest();
     const h = req.headers['authorization'] as string;
-    if (!h?.startsWith('Bearer '))
+    const token = h?.startsWith('Bearer ') ? h.slice(7) : (req.query?.token as string);
+    if (!token)
       throw new UnauthorizedException('Missing or invalid access token');
     try {
-      req.user = this.jwt.verify(h.slice(7));
+      req.user = this.jwt.verify(token);
       return true;
     } catch {
       throw new UnauthorizedException('Missing or invalid access token');

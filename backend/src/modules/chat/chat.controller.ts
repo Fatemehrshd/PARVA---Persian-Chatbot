@@ -57,6 +57,15 @@ export class ChatController {
   async delete(@Req() req: any, @Param('id') id: string) {
     await this.chat.delete(req.user.sub, id);
   }
+  @Delete(':id/messages/:messageId')
+  @HttpCode(204)
+  async deleteMessage(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+  ) {
+    await this.chat.deleteMessage(req.user.sub, id, messageId);
+  }
   @Get(':id/messages') history(@Req() req: any, @Param('id') id: string) {
     return this.chat.history(req.user.sub, id);
   }
@@ -128,7 +137,7 @@ export class ChatController {
     @Param('id') id: string,
     @Body(new ValidationPipe({ whitelist: true })) d: SendMsgDto,
   ) {
-    const gen = this.chat.generate(req.user.sub, id, d.content);
+    const gen = this.chat.generate(req.user.sub, id, d.content, d.fileIds);
     const accept = (req.headers['accept'] as string) ?? '';
     if (accept.includes('application/json')) {
       // Buffer the whole stream: nothing has been written yet, so provider

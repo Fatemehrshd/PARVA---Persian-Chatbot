@@ -81,6 +81,21 @@ export interface UpdateConversationRequest {
   modelId?: string
 }
 
+export interface FileAttachmentItem {
+  id: string
+  tempId?: string
+  originalName: string
+  mimeType: string
+  fileType: 'image' | 'pdf' | 'excel' | 'text'
+  fileSize: number
+  status: 'uploading' | 'processing' | 'ready' | 'error'
+  errorMessage?: string
+  previewUrl?: string
+  progress?: number
+  abortController?: AbortController
+  metadata?: Record<string, any>
+}
+
 export interface Message {
   id: string
   conversationId: string
@@ -89,8 +104,10 @@ export interface Message {
   createdAt: string
   isInterrupted?: boolean
   stoppedByUser?: boolean
-  status?: 'sending' | 'sent' | 'error'
+  status?: 'sending' | 'sent' | 'error' | 'queued' | 'processing_files'
   errorText?: string
+  attachments?: FileAttachmentItem[]
+  fileIds?: string[]
 }
 
 export interface ActiveStreamStatus {
@@ -103,6 +120,7 @@ export interface ActiveStreamStatus {
 
 export interface SendMessageRequest {
   content: string
+  fileIds?: string[]
 }
 
 export interface SearchResult {

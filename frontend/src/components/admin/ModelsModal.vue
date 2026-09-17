@@ -12,8 +12,6 @@ const modelsStore = useModelsStore()
 const newName = ref('')
 const newProvider = ref('openai')
 const newApiIdentifier = ref('')
-const newBaseUrl = ref('')
-const newApiKey = ref('')
 const isAdding = ref(false)
 
 const {
@@ -28,8 +26,6 @@ const {
       name: newName.value.trim(),
       provider: newProvider.value,
       apiIdentifier: newApiIdentifier.value.trim(),
-      baseUrl: newBaseUrl.value.trim() || undefined,
-      apiKey: newApiKey.value.trim() || undefined,
       isActive: true
     })
   },
@@ -38,8 +34,6 @@ const {
     onSuccess: () => {
       newName.value = ''
       newApiIdentifier.value = ''
-      newBaseUrl.value = ''
-      newApiKey.value = ''
       isAdding.value = false
     }
   }
@@ -195,26 +189,7 @@ async function handleDelete(id: string) {
               placeholder="مثال: gemini-1.5-pro-latest"
             />
           </div>
-          <div class="form-group">
-            <label class="form-label">آدرس Base URL (اختیاری)</label>
-            <input
-              v-model="newBaseUrl"
-              type="text"
-              :disabled="isRegisteringModel"
-              class="form-input font-mono text-xs"
-              placeholder="https://api.openai.com/v1"
-            />
-          </div>
-          <div class="form-group">
-            <label class="form-label">کلید API Key (اختیاری)</label>
-            <input
-              v-model="newApiKey"
-              type="password"
-              :disabled="isRegisteringModel"
-              class="form-input font-mono text-xs"
-              placeholder="sk-..."
-            />
-          </div>
+
         </div>
         <div class="form-actions flex items-center justify-between w-full">
           <button type="submit" class="confirm-btn flex items-center gap-1.5" :disabled="isRegisteringModel">

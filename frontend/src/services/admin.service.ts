@@ -28,7 +28,13 @@ export const adminService = {
     return request('/admin/settings')
   },
 
-  async updateSettings(data: { globalTokenLimit?: number; systemPrompt?: string }): Promise<{ globalTokenLimit: number; systemPrompt: string }> {
+  async updateSettings(data: {
+    globalTokenLimit?: number
+    systemPrompt?: string
+    fileMaxSizeMb?: number
+    fileMaxTotalSizeMb?: number
+    fileMaxCount?: number
+  }): Promise<{ globalTokenLimit: number; systemPrompt: string }> {
     return request<{ globalTokenLimit: number; systemPrompt: string }>('/admin/settings', {
       method: 'PUT',
       body: JSON.stringify(data)

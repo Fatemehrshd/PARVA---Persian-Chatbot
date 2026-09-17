@@ -14,7 +14,7 @@ export class SettingsService {
     private repo: Repository<SystemSetting>,
   ) {}
 
-  private async getSetting(key: string, defaultValue: string): Promise<string> {
+  async get(key: string, defaultValue = ''): Promise<string> {
     try {
       const row = await this.repo.findOne({ where: { key } });
       if (row && row.value !== undefined && row.value !== null) {
@@ -26,7 +26,7 @@ export class SettingsService {
     return defaultValue;
   }
 
-  private async setSetting(key: string, value: string): Promise<void> {
+  async set(key: string, value: string): Promise<void> {
     let row = await this.repo.findOne({ where: { key } }).catch(() => null);
     if (!row) {
       row = this.repo.create({ key, value });
@@ -37,29 +37,74 @@ export class SettingsService {
   }
 
   async getGlobalTokenLimit(): Promise<number> {
-    const val = await this.getSetting('global_token_limit', String(DEFAULT_GLOBAL_TOKEN_LIMIT));
+    const val = await this.get('global_token_limit', String(DEFAULT_GLOBAL_TOKEN_LIMIT));
     const parsed = parseInt(val, 10);
     return isNaN(parsed) ? DEFAULT_GLOBAL_TOKEN_LIMIT : parsed;
   }
 
   async getSystemPrompt(): Promise<string> {
-    return this.getSetting('system_prompt', DEFAULT_SYSTEM_PROMPT);
+    return this.get('system_prompt', DEFAULT_SYSTEM_PROMPT);
   }
 
-  async getAll(): Promise<{ globalTokenLimit: number; systemPrompt: string }> {
-    const [globalTokenLimit, systemPrompt] = await Promise.all([
+  async getAll(): Promise<{
+    globalTokenLimit: number;
+    systemPrompt: string;
+    fileMaxSizeMb: number;
+    fileMaxTotalSizeMb: number;
+    fileMaxCount: number;
+    excelMaxRows: number;
+    fileProcessingTimeoutSec: number;
+  }> {
+    const [
+      globalTokenLimit,
+      systemPrompt,
+      fileMaxSizeMb,
+      fileMaxTotalSizeMb,
+      fileMaxCount,
+      excelMaxRows,
+      fileProcessingTimeoutSec,
+    ] = await Promise.all([
       this.getGlobalTokenLimit(),
       this.getSystemPrompt(),
+      this.get('file_max_size_mb', '20').then(Number),
+      this.get('file_max_total_size_mb', '50').then(Number),
+      this.get('file_max_count', '5').then(Number),
+      this.get('excel_max_rows', '5000').then(Number),
+      this.get('file_processing_timeout_sec', '120').then(Number),
     ]);
-    return { globalTokenLimit, systemPrompt };
+
+    return {
+      globalTokenLimit,
+      systemPrompt,
+      fileMaxSizeMb: isNaN(fileMaxSizeMb) ? 20 : fileMaxSizeMb,
+      fileMaxTotalSizeMb: isNaN(fileMaxTotalSizeMb) ? 50 : fileMaxTotalSizeMb,
+      fileMaxCount: isNaN(fileMaxCount) ? 5 : fileMaxCount,
+      excelMaxRows: isNaN(excelMaxRows) ? 5000 : excelMaxRows,
+      fileProcessingTimeoutSec: isNaN(fileProcessingTimeoutSec) ? 120 : fileProcessingTimeoutSec,
+    };
   }
 
-  async update(dto: UpdateSettingsDto): Promise<{ globalTokenLimit: number; systemPrompt: string }> {
+  async update(dto: UpdateSettingsDto): Promise<any> {
     if (dto.globalTokenLimit !== undefined) {
-      await this.setSetting('global_token_limit', String(dto.globalTokenLimit));
+      await this.set('global_token_limit', String(dto.globalTokenLimit));
     }
     if (dto.systemPrompt !== undefined) {
-      await this.setSetting('system_prompt', dto.systemPrompt);
+      await this.set('system_prompt', dto.systemPrompt);
+    }
+    if (dto.fileMaxSizeMb !== undefined) {
+      await this.set('file_max_size_mb', String(dto.fileMaxSizeMb));
+    }
+    if (dto.fileMaxTotalSizeMb !== undefined) {
+      await this.set('file_max_total_size_mb', String(dto.fileMaxTotalSizeMb));
+    }
+    if (dto.fileMaxCount !== undefined) {
+      await this.set('file_max_count', String(dto.fileMaxCount));
+    }
+    if (dto.excelMaxRows !== undefined) {
+      await this.set('excel_max_rows', String(dto.excelMaxRows));
+    }
+    if (dto.fileProcessingTimeoutSec !== undefined) {
+      await this.set('file_processing_timeout_sec', String(dto.fileProcessingTimeoutSec));
     }
     return this.getAll();
   }

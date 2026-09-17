@@ -32,10 +32,11 @@ export class AdminConversationsController {
   ) {
     const conversations = await this.convRepo
       .find({
+        where: { isDeleted: false },
         relations: ['user', 'messages'],
         order: { updatedAt: 'DESC' },
       })
-      .catch(async () => this.convRepo.find());
+      .catch(async () => this.convRepo.find({ where: { isDeleted: false } }));
 
     let results = (conversations || []).map((c) => ({
       id: c.id,
@@ -48,7 +49,7 @@ export class AdminConversationsController {
             displayName: c.user.displayName,
           }
         : null,
-      messageCount: Array.isArray(c.messages) ? c.messages.length : 0,
+      messageCount: Array.isArray(c.messages) ? c.messages.filter((m) => !m.isDeleted).length : 0,
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
       modelId: c.modelId,
@@ -82,10 +83,10 @@ export class AdminConversationsController {
   async getConversation(@Param('id') id: string) {
     const conversation = await this.convRepo
       .findOne({
-        where: { id },
+        where: { id, isDeleted: false },
         relations: ['user', 'messages'],
       })
-      .catch(async () => this.convRepo.findOne({ where: { id } }));
+      .catch(async () => this.convRepo.findOne({ where: { id, isDeleted: false } }));
 
     if (!conversation) {
       throw new NotFoundException('گفتگو یافت نشد');
@@ -94,16 +95,18 @@ export class AdminConversationsController {
     let messages = conversation.messages;
     if (!messages && this.msgRepo) {
       messages = await this.msgRepo.find({
-        where: { conversationId: id },
+        where: { conversationId: id, isDeleted: false },
         order: { createdAt: 'ASC' },
       });
     }
 
     const sortedMessages = Array.isArray(messages)
-      ? [...messages].sort(
-          (a, b) =>
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-        )
+      ? [...messages]
+          .filter((m) => !m.isDeleted)
+          .sort(
+            (a, b) =>
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+          )
       : [];
 
     return {
@@ -122,10 +125,12 @@ export class AdminConversationsController {
   @Delete(':id')
   @HttpCode(204)
   async deleteConversation(@Param('id') id: string) {
-    const conversation = await this.convRepo.findOne({ where: { id } });
+    const conversation = await this.convRepo.findOne({ where: { id, isDeleted: false } });
     if (!conversation) {
       throw new NotFoundException('گفتگو یافت نشد');
     }
-    await this.convRepo.delete(id);
+    conversation.isDeleted = true;
+    await this.convRepo.save(conversation);
+    await this.msgRepo.update({ conversationId: id }, { isDeleted: true });
   }
 }

@@ -72,21 +72,52 @@ export class StorageService implements OnModuleInit {
     }
   }
 
+  private sseSupported: boolean | null = null;
+
   async put(key: string, data: Buffer, contentType: string): Promise<void> {
     const c = this.ensure();
-    const meta: Record<string, string> = {
+
+    if (process.env.MINIO_SSE_ENABLED === 'false') {
+      this.sseSupported = false;
+    }
+
+    const baseMeta: Record<string, string> = {
       'Content-Type': contentType,
-      'X-Amz-Server-Side-Encryption': 'AES256',
     };
+
+    const trySse = this.sseSupported !== false;
+    const meta: Record<string, string> = trySse
+      ? { ...baseMeta, 'X-Amz-Server-Side-Encryption': 'AES256' }
+      : baseMeta;
+
     try {
       await c.putObject(this.bucket, key, data, data.length, meta);
+      if (trySse && this.sseSupported === null) {
+        this.sseSupported = true;
+      }
     } catch (err: any) {
       if (err?.code === 'NoSuchBucket') {
         await this.ensureBucket();
-        await c.putObject(this.bucket, key, data, data.length, meta);
-      } else {
-        throw err;
+        return this.put(key, data, contentType);
       }
+
+      const isKmsError =
+        err?.message?.includes('KMS is not configured') ||
+        err?.message?.includes('server side encrypted') ||
+        err?.code === 'KMSNotConfigured' ||
+        err?.code === 'InvalidArgument' ||
+        err?.code === 'InvalidRequest';
+
+      if (trySse && isKmsError) {
+        this.sseSupported = false;
+        this.logger.warn(
+          `MinIO KMS is not configured on the server; storing objects without SSE-S3. (${err.message})`,
+        );
+        await c.putObject(this.bucket, key, data, data.length, baseMeta);
+        return;
+      }
+
+      throw err;
     }
   }
 

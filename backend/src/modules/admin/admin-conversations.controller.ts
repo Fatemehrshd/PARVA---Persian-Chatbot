@@ -27,6 +27,8 @@ export class AdminConversationsController {
   async listConversations(
     @Query('search') search?: string,
     @Query('userId') userId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     const conversations = await this.convRepo
       .find({
@@ -65,6 +67,13 @@ export class AdminConversationsController {
           (c.user?.email && c.user.email.toLowerCase().includes(q)) ||
           (c.user?.displayName && c.user.displayName.toLowerCase().includes(q)),
       );
+    }
+
+    if (page || limit) {
+      const p = page ? Math.max(1, parseInt(page, 10)) : 1;
+      const l = limit ? Math.max(1, parseInt(limit, 10)) : 50;
+      const skip = (p - 1) * l;
+      return results.slice(skip, skip + l);
     }
 
     return results;

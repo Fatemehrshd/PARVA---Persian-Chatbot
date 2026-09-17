@@ -195,13 +195,7 @@ watch(
 )
 
 const canSend = computed(() => {
-  if (isGenerating.value) return false
-  const hasText = inputContent.value.trim().length > 0
-  const hasFiles = attachedFiles.value.length > 0
-  if (!hasText && !hasFiles) return false
-  // Disallow sending if any file is in error state (must be removed or retried)
-  if (hasErrorFiles.value) return false
-  return true
+  return inputContent.value.trim().length > 0 && !chatStore.isStreaming && !chatStore.isTokenLimitExceeded
 })
 
 function adjustHeight() {
@@ -303,9 +297,35 @@ onUnmounted(() => {
 <template>
   <div class="composer-outer">
     <div class="chat-content-wrapper composer-container">
+      <!-- Token Limit Banner -->
+      <div
+        v-if="chatStore.isTokenLimitExceeded"
+        class="stream-error-banner stream-error-banner--limit"
+        role="alert"
+      >
+        <div class="stream-error-content">
+          <svg class="stream-error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <span class="stream-error-text">سقف مجاز مصرف توکن به پایان رسیده است. امکان ارسال پیام جدید وجود ندارد. لطفاً با مدیر سامانه تماس بگیرید.</span>
+        </div>
+        <div class="stream-error-actions">
+          <button
+            type="button"
+            class="stream-error-dismiss-btn"
+            @click.stop.prevent="chatStore.clearStreamError"
+            title="بستن"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
       <!-- Transient Stream Error Alert (clears on refresh, new conversation or retry) -->
       <div
-        v-if="chatStore.streamError && !chatStore.isStreaming"
+        v-else-if="chatStore.streamError && !chatStore.isStreaming"
         class="stream-error-banner"
       >
         <div class="stream-error-content">
@@ -385,7 +405,8 @@ onUnmounted(() => {
           v-model="inputContent"
           :class="['composer-textarea', inputDirection]"
           :dir="inputDirection"
-          :placeholder="isGenerating ? 'در حال دریافت پاسخ هوش مصنوعی...' : 'پیام خود را بنویسید... (Enter برای ارسال)'"
+          :placeholder="chatStore.isTokenLimitExceeded ? 'سقف مجاز مصرف توکن شما به پایان رسیده است' : 'پیام خود را بنویسید... (Enter برای ارسال)'"
+          :disabled="chatStore.isTokenLimitExceeded"
           rows="1"
           @focus="isFocused = true; updateDirection()"
           @blur="isFocused = false"
@@ -536,6 +557,18 @@ onUnmounted(() => {
   color: #ef4444;
   font-size: 12px;
   animation: fadeIn 200ms ease-out;
+}
+
+.stream-error-banner--limit {
+  background-color: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #d97706;
+}
+
+:global(.dark) .stream-error-banner--limit {
+  background-color: rgba(245, 158, 11, 0.16);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
 }
 
 .stream-error-content {

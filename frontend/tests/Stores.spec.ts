@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useChatStore } from '../src/stores/chat'
 import { useModelsStore } from '../src/stores/models'
 import { useUiStore } from '../src/stores/ui'
+import { chatService } from '../src/services/chat.service'
 
 describe('Pinia Stores', () => {
   beforeEach(() => {
@@ -65,6 +66,53 @@ describe('Pinia Stores', () => {
     // Adding exact duplicate should not create additional toast
     uiStore.showToast('پیام ۳', 'error')
     expect(uiStore.toasts.length).toBe(2)
+  })
+
+  it('chatStore: loads paginated conversations and appends next page on loadMoreConversations', async () => {
+    const chatStore = useChatStore()
+    const page1Items = Array.from({ length: 50 }, (_, i) => ({
+      id: `conv-${i + 1}`,
+      title: `گفتگو ${i + 1}`,
+      modelId: 'gpt-4o',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }))
+    const page2Items = Array.from({ length: 10 }, (_, i) => ({
+      id: `conv-${i + 51}`,
+      title: `گفتگو ${i + 51}`,
+      modelId: 'gpt-4o',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }))
+
+    const listSpy = vi.spyOn(chatService, 'listConversations').mockImplementation(async (page?: number) => {
+      if (page === 2) return page2Items
+      return page1Items
+    })
+
+    await chatStore.loadConversations()
+    expect(listSpy).toHaveBeenCalledWith(1, 50)
+    expect(chatStore.conversations.length).toBe(50)
+    expect(chatStore.hasMoreConversations).toBe(true)
+
+    // Load next page
+    await chatStore.loadMoreConversations()
+    expect(listSpy).toHaveBeenCalledWith(2, 50)
+    expect(chatStore.conversations.length).toBe(60)
+    expect(chatStore.hasMoreConversations).toBe(false)
+
+    listSpy.mockRestore()
+  })
+
+  it('chatStore: manages isTokenLimitExceeded flag and clears it via clearStreamError', () => {
+    const chatStore = useChatStore()
+    expect(chatStore.isTokenLimitExceeded).toBe(false)
+
+    chatStore.isTokenLimitExceeded = true
+    expect(chatStore.isTokenLimitExceeded).toBe(true)
+
+    chatStore.clearStreamError()
+    expect(chatStore.isTokenLimitExceeded).toBe(false)
   })
 })
 

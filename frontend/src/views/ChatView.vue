@@ -21,6 +21,7 @@ const isEntering = ref(true)
 
 async function initChat() {
   const routeId = route.params.id as string | undefined
+  chatStore.isLoadingMessages = true
   await modelsStore.fetchModels()
   await chatStore.loadConversations(routeId)
 

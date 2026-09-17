@@ -41,10 +41,12 @@ export const adminService = {
     })
   },
 
-  async listConversations(params?: { search?: string; userId?: string }): Promise<AdminConversationSummary[]> {
+  async listConversations(params?: { search?: string; userId?: string; page?: number; limit?: number }): Promise<AdminConversationSummary[]> {
     const searchParams = new URLSearchParams()
     if (params?.search) searchParams.set('search', params.search)
     if (params?.userId) searchParams.set('userId', params.userId)
+    if (params?.page) searchParams.set('page', String(params.page))
+    if (params?.limit) searchParams.set('limit', String(params.limit))
     const qs = searchParams.toString()
     return request<AdminConversationSummary[]>(`/admin/conversations${qs ? `?${qs}` : ''}`)
   },

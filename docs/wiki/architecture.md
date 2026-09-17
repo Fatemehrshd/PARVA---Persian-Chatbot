@@ -44,6 +44,7 @@ backend/src/
     ├── storage/                   ← StorageService: MinIO put/get/remove (global module)
     ├── chat/                      ← Conversation, Message, ChatService.generate (streaming),
     │                                 ChatController (SSE + JSON), OpenAiCompatController (/v1/*, JWT-protected)
+    ├── web-search/                ← WebSearchService (Serper): sources injected into prompt; SSE search-status/sources/sources-error
     ├── ai/                        ← OpenAiCompatForwarder: credential resolution + SSE parsing via global fetch
     └── models-admin/              ← AiModel + AiProvider entities, ModelsAdminService,
                                       ProvidersAdminService (CRUD/status/default/cascade), admin controllers,

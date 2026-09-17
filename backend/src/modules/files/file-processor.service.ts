@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { FileAttachment } from './file-attachment.entity';
 import { StorageService } from '../storage/storage.service';
 import { SettingsService } from '../admin/settings.service';
+import { telemetry } from '../../shared/telemetry';
 import * as xlsx from 'xlsx';
 
 // Helper function to extract text from PDF buffer supporting both pdf-parse v2 (class) and v1 (function)
@@ -95,17 +96,37 @@ export class FileProcessorService {
       );
     });
 
+    const startTime = Date.now();
+    const span = telemetry.startSpan('file.process', {
+      'file.id': file.id,
+      'file.type': file.fileType,
+      'file.name': file.originalName,
+      'file.size': file.fileSize,
+    });
     try {
       await Promise.race([processPromise, timeoutPromise]);
       file.status = 'ready';
       file.errorMessage = undefined;
+      file.metadata = {
+        ...(file.metadata || {}),
+        processingDurationMs: Date.now() - startTime,
+        traceId: span.traceId,
+      };
       await this.fileRepo.save(file);
-      this.logger.log(`File ${file.id} (${file.originalName}) processed successfully.`);
+      span.end('ok');
+      this.logger.log(`File ${file.id} (${file.originalName}) processed successfully in ${Date.now() - startTime}ms.`);
     } catch (err: any) {
       this.logger.error(`Error processing file ${file.id}: ${err?.message || err}`);
       file.status = 'error';
       file.errorMessage = err?.message || 'خطا در پردازش فایل';
+      file.metadata = {
+        ...(file.metadata || {}),
+        processingDurationMs: Date.now() - startTime,
+        errorDetails: err?.message || String(err),
+        traceId: span.traceId,
+      };
       await this.fileRepo.save(file);
+      span.end('error', err?.message || 'خطا در پردازش فایل');
     } finally {
       clearTimeout(timeoutTimer!);
     }

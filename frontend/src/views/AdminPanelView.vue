@@ -5,12 +5,16 @@ import {
   Sparkles,
   MessageSquare,
   Loader2,
+  FileText,
+  ExternalLink,
+  RefreshCw,
+  Eye,
 } from '@lucide/vue'
 import { useModelsStore } from '../stores/models'
 import { useUiStore } from '../stores/ui'
-import { useAuthStore } from '../stores/auth'
 import { modelsService } from '../services/models.service'
 import { adminService } from '../services/admin.service'
+import { buildUrl } from '../services/api'
 import AdminModal from '../components/admin/AdminModal.vue'
 import AdminTable from '../components/admin/AdminTable.vue'
 import DeleteConfirmModal from '../components/admin/DeleteConfirmModal.vue'
@@ -25,6 +29,9 @@ import type {
   UpdateAdminUserRequest,
   AdminConversationSummary,
   AdminConversationDetail,
+  AdminFileItem,
+  AdminFileStats,
+  AdminFileDetail,
 } from '../types'
 
 // Nav icons — blue for light mode, white for dark mode
@@ -40,9 +47,8 @@ import usersWhite from '../assets/users-white.svg'
 const router = useRouter()
 const modelsStore = useModelsStore()
 const uiStore = useUiStore()
-const authStore = useAuthStore()
 
-const activeSection = ref<'dashboard' | 'providers' | 'models' | 'users' | 'prompts' | 'chats'>('dashboard')
+const activeSection = ref<'dashboard' | 'providers' | 'models' | 'users' | 'prompts' | 'chats' | 'files'>('dashboard')
 const sidebarOpen = ref(false)
 
 // 3-Second Search Debounce
@@ -78,13 +84,27 @@ const isChatModalOpen = ref(false)
 const inspectingConversation = ref<AdminConversationDetail | null>(null)
 const isLoadingChatDetail = ref(false)
 
+// Files Management State
+const files = ref<AdminFileItem[]>([])
+const fileStats = ref<AdminFileStats | null>(null)
+const isLoadingFiles = ref(false)
+const fileStatusFilter = ref<'all' | 'processing' | 'ready' | 'error'>('all')
+const filePage = ref(1)
+const fileLimit = ref(50)
+const fileTotal = ref(0)
+const fileTotalPages = ref(1)
+const inspectingFile = ref<AdminFileDetail | null>(null)
+const isFileDetailModalOpen = ref(false)
+const isLoadingFileDetail = ref(false)
+const isRetryingFile = ref<string | null>(null)
+
 // Modals state
 const modelModalOpen = ref(false)
 const providerModalOpen = ref(false)
 const userModalOpen = ref(false)
 const settingsModalOpen = ref(false)
 const deleteModalOpen = ref(false)
-const deleteTarget = ref<{ type: 'model' | 'provider' | 'conversation'; id: string; name: string } | null>(null)
+const deleteTarget = ref<{ type: 'model' | 'provider' | 'conversation' | 'file'; id: string; name: string } | null>(null)
 
 // Selected entities for editing
 const editingModel = ref<Model | null>(null)
@@ -209,6 +229,8 @@ const labels = {
   status: 'وضعیت',
   actions: 'عملیات',
   modelCount: 'مدل',
+  files: 'مدیریت فایل‌ها',
+  filesTitle: 'مدیریت و پایش فایل‌های آپلودشده کاربران',
 }
 
 const navItems = computed(() => {
@@ -220,6 +242,7 @@ const navItems = computed(() => {
     { id: 'users', label: labels.users, icon: isDark ? usersWhite : usersBlue, iconType: 'img' },
     { id: 'prompts', label: labels.prompts, icon: Sparkles, iconType: 'component' },
     { id: 'chats', label: labels.chats, icon: MessageSquare, iconType: 'component' },
+    { id: 'files', label: labels.files, icon: FileText, iconType: 'component' },
   ]
 })
 
@@ -303,6 +326,15 @@ const chatColumns = [
   { key: 'actions', label: labels.actions, align: 'left' as const },
 ]
 
+const fileColumns = [
+  { key: 'name', label: 'نام فایل و نوع' },
+  { key: 'user', label: 'کاربر' },
+  { key: 'size', label: 'حجم' },
+  { key: 'status', label: 'وضعیت پردازش' },
+  { key: 'createdAt', label: 'زمان آپلود' },
+  { key: 'actions', label: labels.actions, align: 'left' as const },
+]
+
 function selectSection(section: typeof activeSection.value) {
   activeSection.value = section
   sidebarOpen.value = false
@@ -310,6 +342,12 @@ function selectSection(section: typeof activeSection.value) {
   debouncedSearchQuery.value = ''
   isSearchDebouncing.value = false
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  if (section === 'files') {
+    loadFiles()
+    loadFilesStats()
+  } else if (section === 'chats') {
+    loadConversations()
+  }
 }
 
 // Model handlers
@@ -624,6 +662,11 @@ async function executeDelete() {
       await adminService.deleteConversation(deleteTarget.value.id)
       conversations.value = conversations.value.filter((c) => c.id !== deleteTarget.value?.id)
       uiStore.showToast('گفتگو با موفقیت حذف شد.', 'success')
+    } else if (deleteTarget.value.type === 'file') {
+      await adminService.deleteFile(deleteTarget.value.id)
+      files.value = files.value.filter((f) => f.id !== deleteTarget.value?.id)
+      uiStore.showToast('فایل با موفقیت حذف شد.', 'success')
+      loadFilesStats()
     }
     deleteModalOpen.value = false
     deleteTarget.value = null
@@ -633,6 +676,146 @@ async function executeDelete() {
     isSaving.value = false
   }
 }
+
+// Files management handlers
+async function loadFiles() {
+  isLoadingFiles.value = true
+  try {
+    const res = await adminService.listFiles({
+      page: filePage.value,
+      limit: fileLimit.value,
+      status: fileStatusFilter.value !== 'all' ? fileStatusFilter.value : undefined,
+      search: debouncedSearchQuery.value || undefined,
+    })
+    files.value = res.items || []
+    fileTotal.value = res.total || 0
+    fileTotalPages.value = res.totalPages || 1
+  } catch (err: any) {
+    console.error('Failed to load admin files:', err)
+  } finally {
+    isLoadingFiles.value = false
+  }
+}
+
+async function loadFilesStats() {
+  try {
+    fileStats.value = await adminService.getFileStats()
+  } catch (err: any) {
+    console.error('Failed to load admin file stats:', err)
+  }
+}
+
+function changeFileStatusFilter(status: 'all' | 'processing' | 'ready' | 'error') {
+  fileStatusFilter.value = status
+  filePage.value = 1
+  loadFiles()
+}
+
+function changeFilePage(newPage: number) {
+  if (newPage < 1 || newPage > fileTotalPages.value) return
+  filePage.value = newPage
+  loadFiles()
+}
+
+async function openFileDetails(file: AdminFileItem) {
+  isLoadingFileDetail.value = true
+  isFileDetailModalOpen.value = true
+  try {
+    inspectingFile.value = await adminService.getFileDetail(file.id)
+  } catch (err: any) {
+    uiStore.showToast(err?.message || 'خطا در دریافت جزئیات فایل', 'error')
+    isFileDetailModalOpen.value = false
+  } finally {
+    isLoadingFileDetail.value = false
+  }
+}
+
+async function handleRetryFile(file: AdminFileItem) {
+  isRetryingFile.value = file.id
+  try {
+    await adminService.retryFile(file.id)
+    file.status = 'processing'
+    file.errorMessage = undefined
+    uiStore.showToast(`فایل «${file.originalName}» برای پردازش مجدد به صف ارسال شد.`, 'success')
+    loadFilesStats()
+  } catch (err: any) {
+    uiStore.showToast(err?.message || 'خطا در تلاش مجدد فایل', 'error')
+  } finally {
+    isRetryingFile.value = null
+  }
+}
+
+function promptDeleteFile(file: AdminFileItem) {
+  deleteTarget.value = { type: 'file', id: file.id, name: file.originalName || 'فایل' }
+  deleteModalOpen.value = true
+}
+
+function openSignozDashboard() {
+  window.open('http://localhost:3301', '_blank')
+}
+
+function getFileDownloadUrl(fileId: string): string {
+  const token = localStorage.getItem('token')
+  const qs = token ? `?token=${encodeURIComponent(token)}` : ''
+  return buildUrl(`/files/${fileId}/content${qs}`)
+}
+
+function formatFileSize(bytes?: number): string {
+  const b = bytes || 0
+  if (b < 1024) return `${b} B`
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`
+  return `${(b / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function getStatusClass(status: string): string {
+  switch (status) {
+    case 'ready':
+      return 'status-ready'
+    case 'processing':
+      return 'status-processing'
+    case 'error':
+      return 'status-error'
+    case 'uploading':
+      return 'status-uploading'
+    default:
+      return ''
+  }
+}
+
+function getStatusLabel(status: string): string {
+  switch (status) {
+    case 'ready':
+      return 'آماده'
+    case 'processing':
+      return 'در حال پردازش...'
+    case 'error':
+      return 'خطا در پردازش'
+    case 'uploading':
+      return 'در حال آپلود...'
+    default:
+      return status
+  }
+}
+
+function getAttBadgeClass(fileType: string): string {
+  switch (fileType) {
+    case 'pdf':
+      return 'badge-pdf'
+    case 'excel':
+      return 'badge-excel'
+    case 'image':
+      return 'badge-image'
+    default:
+      return 'badge-text'
+  }
+}
+
+watch(debouncedSearchQuery, () => {
+  if (activeSection.value === 'files') {
+    filePage.value = 1
+    loadFiles()
+  }
+})
 
 async function loadData() {
   errorMessage.value = ''
@@ -734,6 +917,8 @@ onMounted(loadData)
                 ? labels.usersTitle
                 : activeSection === 'prompts'
                 ? labels.promptsTitle
+                : activeSection === 'files'
+                ? labels.filesTitle
                 : labels.chatsTitle
             }}
           </h1>
@@ -753,7 +938,7 @@ onMounted(loadData)
             <input
               v-model="searchQuery"
               class="admin-search search-input"
-              :placeholder="activeSection === 'chats' ? 'جستجو در چت‌ها بر اساس عنوان یا ایمیل...' : labels.search"
+              :placeholder="activeSection === 'chats' ? 'جستجو در چت‌ها بر اساس عنوان یا ایمیل...' : activeSection === 'files' ? 'جستجو در فایل‌ها بر اساس نام فایل یا کاربر...' : labels.search"
             />
             <Loader2 v-if="isSearchDebouncing" :size="14" class="search-debouncing-spinner animate-spin" />
             <button
@@ -1281,6 +1466,220 @@ onMounted(loadData)
           </template>
         </AdminTable>
       </section>
+
+      <!-- 7. FILES MANAGEMENT SECTION -->
+      <section v-else-if="activeSection === 'files'" class="admin-content files-panel">
+        <!-- Section Toolbar -->
+        <div class="section-toolbar">
+          <div class="section-title-wrap">
+            <h3 class="section-heading">{{ labels.filesTitle }}</h3>
+            <span class="record-badge">{{ fileTotal }} فایل ثبت‌شده</span>
+          </div>
+          <div class="toolbar-actions flex items-center gap-2">
+            <BaseButton
+              variant="secondary"
+              size="sm"
+              class="signoz-btn flex items-center gap-1.5 text-xs text-primary border-primary/30 hover:bg-primary/10"
+              title="باز کردن داشبورد مانیتورینگ SigNoz (پورت 3301)"
+              @click="openSignozDashboard"
+            >
+              <ExternalLink :size="14" />
+              <span>داشبورد SigNoz (مانیتورینگ تریس‌ها)</span>
+            </BaseButton>
+            <BaseButton
+              variant="ghost"
+              size="md"
+              icon
+              title="تازه‌سازی لیست فایل‌ها"
+              @click="loadFiles(); loadFilesStats()"
+            >
+              <RefreshCw :size="15" />
+            </BaseButton>
+          </div>
+        </div>
+
+        <!-- KPI Metrics for Files -->
+        <div class="kpi-strip files-kpi-strip">
+          <!-- Total Files -->
+          <article class="kpi-card metric-card">
+            <div class="kpi-head">
+              <span class="kpi-title">کل فایل‌ها</span>
+              <div class="kpi-icon-pill">
+                <FileText :size="16" />
+              </div>
+            </div>
+            <strong class="kpi-value">{{ fileStats?.totalFiles ?? fileTotal }}</strong>
+            <small class="kpi-sub">{{ fileStats?.totalSizeMb ?? 0 }} مگابایت مصرف فضا</small>
+          </article>
+
+          <!-- Processing Files -->
+          <article class="kpi-card metric-card">
+            <div class="kpi-head">
+              <span class="kpi-title">در حال پردازش در صف</span>
+              <div class="kpi-icon-pill status-pill-blue">
+                <Loader2 :size="16" class="animate-spin text-primary" />
+              </div>
+            </div>
+            <strong class="kpi-value">{{ fileStats?.processingFiles ?? 0 }}</strong>
+            <small class="kpi-sub">جاب‌های فعال صف BullMQ</small>
+          </article>
+
+          <!-- Ready Files -->
+          <article class="kpi-card metric-card">
+            <div class="kpi-head">
+              <span class="kpi-title">آماده و پردازش‌شده</span>
+              <div class="kpi-icon-pill status-pill-green">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+            </div>
+            <strong class="kpi-value text-green-500">{{ fileStats?.readyFiles ?? 0 }}</strong>
+            <small class="kpi-sub">متن استخراج‌شده و قابل چت</small>
+          </article>
+
+          <!-- Error Files -->
+          <article class="kpi-card metric-card" :class="{ 'card-has-error': (fileStats?.errorFiles || 0) > 0 }">
+            <div class="kpi-head">
+              <span class="kpi-title">دارای خطا</span>
+              <div class="kpi-icon-pill status-pill-red">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              </div>
+            </div>
+            <strong class="kpi-value" :class="(fileStats?.errorFiles || 0) > 0 ? 'text-red-500' : ''">
+              {{ fileStats?.errorFiles ?? 0 }}
+            </strong>
+            <small class="kpi-sub">نیازمند بازبینی یا تلاش مجدد</small>
+          </article>
+        </div>
+
+        <!-- Filter Chips Bar -->
+        <div class="file-filter-chips flex items-center gap-2 mb-4">
+          <span class="text-xs text-muted-foreground ml-1">فیلتر وضعیت:</span>
+          <button
+            type="button"
+            class="filter-chip"
+            :class="{ active: fileStatusFilter === 'all' }"
+            @click="changeFileStatusFilter('all')"
+          >
+            همه ({{ fileStats?.totalFiles ?? fileTotal }})
+          </button>
+          <button
+            type="button"
+            class="filter-chip filter-chip-processing"
+            :class="{ active: fileStatusFilter === 'processing' }"
+            @click="changeFileStatusFilter('processing')"
+          >
+            در حال پردازش ({{ fileStats?.processingFiles ?? 0 }})
+          </button>
+          <button
+            type="button"
+            class="filter-chip filter-chip-ready"
+            :class="{ active: fileStatusFilter === 'ready' }"
+            @click="changeFileStatusFilter('ready')"
+          >
+            آماده ({{ fileStats?.readyFiles ?? 0 }})
+          </button>
+          <button
+            type="button"
+            class="filter-chip filter-chip-error"
+            :class="{ active: fileStatusFilter === 'error' }"
+            @click="changeFileStatusFilter('error')"
+          >
+            دارای خطا ({{ fileStats?.errorFiles ?? 0 }})
+          </button>
+        </div>
+
+        <!-- Files Table -->
+        <AdminTable :columns="fileColumns" :items="files">
+          <template #row="{ item: file }">
+            <td>
+              <div class="file-name-cell flex items-center gap-2.5">
+                <span :class="['att-badge px-2 py-1 rounded text-[10px] font-bold uppercase', getAttBadgeClass(file.fileType)]">
+                  {{ file.fileType }}
+                </span>
+                <div class="overflow-hidden">
+                  <strong class="block truncate max-w-[200px]" :title="file.originalName">{{ file.originalName }}</strong>
+                  <span class="subtext mono text-[11px]">{{ file.id.slice(0, 8) }}...</span>
+                </div>
+              </div>
+            </td>
+            <td>
+              <div class="user-cell">
+                <span class="avatar-chip">{{ (file.user?.displayName || file.user?.email || 'U').charAt(0).toUpperCase() }}</span>
+                <div>
+                  <strong>{{ file.user?.displayName || '—' }}</strong>
+                  <span class="subtext">{{ file.user?.email || 'کاربر ناشناس' }}</span>
+                </div>
+              </div>
+            </td>
+            <td class="mono text-xs">
+              {{ formatFileSize(file.fileSize) }}
+            </td>
+            <td>
+              <div class="status-cell flex items-center gap-1.5">
+                <span :class="['status-badge-pill px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1', getStatusClass(file.status)]">
+                  <span v-if="file.status === 'processing'" class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping"></span>
+                  <span v-else-if="file.status === 'ready'" class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                  <span v-else-if="file.status === 'error'" class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                  {{ getStatusLabel(file.status) }}
+                </span>
+              </div>
+            </td>
+            <td class="mono subtext text-xs">
+              {{ new Date(file.createdAt).toLocaleDateString('fa-IR', { hour: '2-digit', minute: '2-digit' }) }}
+            </td>
+            <td class="actions-cell">
+              <div class="action-buttons flex items-center gap-1.5">
+                <BaseButton variant="secondary" size="sm" @click="openFileDetails(file)">
+                  مشاهده جزئیات
+                </BaseButton>
+                <BaseButton
+                  v-if="file.status === 'error'"
+                  variant="secondary"
+                  size="sm"
+                  :loading="isRetryingFile === file.id"
+                  @click="handleRetryFile(file)"
+                >
+                  تلاش مجدد
+                </BaseButton>
+                <BaseButton variant="danger" size="sm" @click="promptDeleteFile(file)">
+                  {{ labels.remove }}
+                </BaseButton>
+              </div>
+            </td>
+          </template>
+        </AdminTable>
+
+        <!-- Pagination for files -->
+        <div v-if="fileTotalPages > 1" class="table-pagination-bar flex items-center justify-between mt-4 p-2">
+          <span class="text-xs text-muted-foreground">
+            صفحه {{ filePage }} از {{ fileTotalPages }} (کل: {{ fileTotal }} فایل)
+          </span>
+          <div class="flex items-center gap-2">
+            <BaseButton
+              variant="secondary"
+              size="sm"
+              :disabled="filePage <= 1"
+              @click="changeFilePage(filePage - 1)"
+            >
+              صفحه قبل
+            </BaseButton>
+            <BaseButton
+              variant="secondary"
+              size="sm"
+              :disabled="filePage >= fileTotalPages"
+              @click="changeFilePage(filePage + 1)"
+            >
+              صفحه بعد
+            </BaseButton>
+          </div>
+        </div>
+      </section>
     </main>
 
     <!-- MODAL 1: Model Create / Edit -->
@@ -1592,6 +1991,32 @@ onMounted(loadData)
                     {{ new Date(msg.createdAt).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }) }}
                   </span>
                 </div>
+                <!-- Attached files for message in admin chat inspector -->
+                <div v-if="msg.attachments && msg.attachments.length > 0" class="admin-msg-attachments flex flex-wrap gap-2 mb-2">
+                  <div
+                    v-for="att in msg.attachments"
+                    :key="att.id"
+                    class="admin-att-card flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-background/80 border border-border text-xs"
+                  >
+                    <span :class="['att-badge px-1.5 py-0.5 rounded text-[10px] font-bold uppercase', getAttBadgeClass(att.fileType)]">
+                      {{ att.fileType }}
+                    </span>
+                    <span class="att-name max-w-[140px] truncate font-medium" :title="att.originalName">{{ att.originalName }}</span>
+                    <span class="att-size text-muted-foreground text-[10px]">({{ formatFileSize(att.fileSize) }})</span>
+                    <span :class="['att-status text-[10px] px-1.5 py-0.5 rounded', getStatusClass(att.status)]">
+                      {{ getStatusLabel(att.status) }}
+                    </span>
+                    <a
+                      v-if="att.id"
+                      :href="getFileDownloadUrl(att.id)"
+                      target="_blank"
+                      class="text-primary hover:underline flex items-center gap-0.5 text-[10px] mr-1"
+                      title="دانلود یا مشاهده محتوای فایل"
+                    >
+                      <Eye :size="12" />
+                    </a>
+                  </div>
+                </div>
                 <div class="bubble-text">{{ msg.content }}</div>
                 <div v-if="msg.isInterrupted" class="bubble-tag tag-interrupted">قطع ارتباط</div>
                 <div v-if="msg.stoppedByUser" class="bubble-tag tag-stopped">توقف توسط کاربر</div>
@@ -1602,6 +2027,106 @@ onMounted(loadData)
               هیچ پیامی در این گفتگو ثبت نشده است.
             </div>
           </div>
+        </div>
+      </div>
+    </AdminModal>
+
+    <!-- MODAL 6: File Details & Diagnostics Modal -->
+    <AdminModal
+      v-if="isFileDetailModalOpen && inspectingFile"
+      eyebrow="مدیریت فایل‌ها"
+      title="جزئیات فایل و بررسی لاگ پردازش"
+      @close="isFileDetailModalOpen = false"
+    >
+      <div class="file-detail-dialog space-y-4">
+        <!-- File Header Card -->
+        <div class="file-detail-head p-3 rounded-xl bg-card border border-border flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span :class="['att-badge px-2.5 py-1 rounded text-xs font-bold uppercase', getAttBadgeClass(inspectingFile.fileType)]">
+              {{ inspectingFile.fileType }}
+            </span>
+            <div>
+              <strong class="block text-sm font-semibold">{{ inspectingFile.originalName }}</strong>
+              <span class="text-xs text-muted-foreground mono">{{ formatFileSize(inspectingFile.fileSize) }} | {{ inspectingFile.mimeType }}</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span :class="['status-badge-pill px-2.5 py-1 rounded-full text-xs font-medium', getStatusClass(inspectingFile.status)]">
+              {{ getStatusLabel(inspectingFile.status) }}
+            </span>
+            <a
+              :href="getFileDownloadUrl(inspectingFile.id)"
+              target="_blank"
+              class="download-btn flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-foreground"
+              title="دانلود فایل اصلی"
+            >
+              <Eye :size="13" />
+              <span>مشاهده / دانلود</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Meta Grid -->
+        <div class="file-meta-grid grid grid-cols-2 gap-3 text-xs">
+          <div class="meta-item p-2.5 rounded-lg bg-card/60 border border-border">
+            <span class="text-muted-foreground block mb-1">کاربر ارسال‌کننده:</span>
+            <strong>{{ inspectingFile.user?.displayName || inspectingFile.user?.email || 'نامشخص' }}</strong>
+            <span v-if="inspectingFile.user?.displayName" class="block text-muted-foreground text-[11px]">{{ inspectingFile.user.email }}</span>
+          </div>
+          <div class="meta-item p-2.5 rounded-lg bg-card/60 border border-border">
+            <span class="text-muted-foreground block mb-1">زمان پردازش / تاریخ:</span>
+            <strong v-if="inspectingFile.metadata?.processingDurationMs">{{ inspectingFile.metadata.processingDurationMs }} میلی‌ثانیه</strong>
+            <strong v-else>—</strong>
+            <span class="block text-muted-foreground text-[11px]">{{ new Date(inspectingFile.createdAt).toLocaleString('fa-IR') }}</span>
+          </div>
+        </div>
+
+        <!-- Error Alert if status is error -->
+        <div v-if="inspectingFile.status === 'error'" class="error-detail-box p-3 rounded-xl bg-destructive/10 border border-destructive/30 space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-destructive flex items-center gap-1">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              پیام و علت خطای پردازش:
+            </span>
+            <BaseButton
+              variant="secondary"
+              size="sm"
+              :loading="isRetryingFile === inspectingFile.id"
+              @click="handleRetryFile(inspectingFile)"
+            >
+              تلاش مجدد پردازش
+            </BaseButton>
+          </div>
+          <p class="text-xs text-destructive/90 font-medium">{{ inspectingFile.errorMessage || 'خطای نامشخص در حین استخراج فایل' }}</p>
+          <pre v-if="inspectingFile.metadata?.errorDetails" class="text-[11px] p-2 rounded bg-black/20 overflow-x-auto text-destructive-foreground/80 mono">{{ inspectingFile.metadata.errorDetails }}</pre>
+        </div>
+
+        <!-- Extracted Text Area -->
+        <div class="extracted-text-section space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-foreground">محتوای استخراج‌شده از فایل (جهت ارسال به هوش مصنوعی):</span>
+            <span v-if="inspectingFile.extractedText" class="text-[11px] text-muted-foreground">
+              {{ inspectingFile.extractedText.length.toLocaleString('fa-IR') }} کاراکتر
+            </span>
+          </div>
+          <div v-if="inspectingFile.extractedText" class="extracted-content-box p-3 rounded-xl bg-card border border-border text-xs max-h-60 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+            {{ inspectingFile.extractedText }}
+          </div>
+          <div v-else class="empty-extracted p-4 rounded-xl bg-card/40 border border-dashed border-border text-center text-xs text-muted-foreground">
+            {{ inspectingFile.status === 'processing' ? 'فایل در حال پردازش در صف پس‌زمینه است...' : 'هیچ متنی از این فایل استخراج نشده است.' }}
+          </div>
+        </div>
+
+        <!-- Technical Metadata -->
+        <div v-if="inspectingFile.metadata" class="metadata-section space-y-1">
+          <span class="text-xs font-semibold text-muted-foreground">متادیتای فنی و تله‌متری (Trace):</span>
+          <pre class="text-[11px] p-2.5 rounded-xl bg-card border border-border overflow-x-auto mono text-muted-foreground max-h-32">{{ JSON.stringify(inspectingFile.metadata, null, 2) }}</pre>
+        </div>
+
+        <div class="modal-actions mt-4 flex justify-end">
+          <BaseButton variant="ghost" size="md" @click="isFileDetailModalOpen = false">
+            بستن
+          </BaseButton>
         </div>
       </div>
     </AdminModal>
@@ -2714,8 +3239,466 @@ onMounted(loadData)
   font-size: 13px;
 }
 
-.admin-sidebar-backdrop {
-  display: none;
+/* =======================================================
+   FILES MANAGEMENT PANEL STYLES
+   ======================================================= */
+.files-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.files-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.files-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.file-kpi-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 18px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: border-color 0.15s ease;
+}
+
+.file-kpi-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+}
+
+.file-kpi-num {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+}
+
+.file-kpi-card.kpi-processing .file-kpi-num {
+  color: #f59e0b;
+}
+
+.file-kpi-card.kpi-ready .file-kpi-num {
+  color: #10b981;
+}
+
+.file-kpi-card.kpi-error .file-kpi-num {
+  color: #ef4444;
+}
+
+.file-kpi-lbl {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  font-weight: 500;
+}
+
+.files-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.files-search-wrap {
+  position: relative;
+  flex: 1 1 260px;
+  max-width: 360px;
+  display: flex;
+  align-items: center;
+}
+
+.files-search-wrap .search-icon {
+  position: absolute;
+  inset-inline-start: 12px;
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+
+.files-search-wrap input {
+  width: 100%;
+  height: 38px;
+  padding: 0 14px;
+  padding-inline-start: 36px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.files-search-wrap input:focus {
+  border-color: var(--primary);
+}
+
+.files-status-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filter-chip:hover {
+  background: var(--secondary);
+  color: var(--foreground);
+}
+
+.filter-chip.is-active {
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.status-count {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--border) 60%, transparent);
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+}
+
+.filter-chip.is-active .status-count {
+  background: color-mix(in srgb, var(--primary) 25%, transparent);
+  color: var(--primary);
+}
+
+.signoz-shortcut-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  border: 1px solid var(--border);
+  background: var(--background);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.signoz-shortcut-btn:hover {
+  border-color: #8b5cf6;
+  color: #8b5cf6;
+  background: color-mix(in srgb, #8b5cf6 8%, transparent);
+}
+
+.files-table-container {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  overflow: hidden;
+}
+
+.files-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: start;
+}
+
+.files-table th {
+  padding: 12px 14px;
+  background: var(--secondary);
+  color: var(--muted-foreground);
+  font-weight: 600;
+  font-size: 11.5px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.files-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.file-row:last-child td {
+  border-bottom: none;
+}
+
+.file-row:hover td {
+  background: color-mix(in srgb, var(--secondary) 40%, transparent);
+}
+
+.file-user-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-user-cell strong {
+  font-size: 12.5px;
+  color: var(--foreground);
+}
+
+.file-user-cell .user-email {
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.icon-action-btn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.icon-action-btn:hover {
+  background: var(--secondary);
+  color: var(--foreground);
+  border-color: var(--border);
+}
+
+.icon-action-btn.delete:hover {
+  background: color-mix(in srgb, var(--destructive) 12%, transparent);
+  color: var(--destructive);
+  border-color: color-mix(in srgb, var(--destructive) 30%, transparent);
+}
+
+.empty-files-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 16px;
+  color: var(--muted-foreground);
+  font-size: 13.5px;
+}
+
+.files-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}
+
+/* File Badges & Status Pills */
+.att-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-pdf {
+  background: rgba(239, 68, 68, 0.14);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.badge-excel {
+  background: rgba(16, 185, 129, 0.14);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.badge-image {
+  background: rgba(59, 130, 246, 0.14);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.badge-text {
+  background: rgba(139, 92, 246, 0.14);
+  color: #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.25);
+}
+
+.badge-default {
+  background: var(--secondary);
+  color: var(--muted-foreground);
+  border: 1px solid var(--border);
+}
+
+.status-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 9999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.badge-ready {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.badge-processing {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.badge-error {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.badge-pending {
+  background: var(--secondary);
+  color: var(--muted-foreground);
+  border: 1px solid var(--border);
+}
+
+/* Chat modal file attachments in admin conversation inspection */
+.admin-msg-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.admin-att-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--card) 85%, var(--background));
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.admin-att-card .att-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.admin-att-card .att-size {
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+/* File Diagnostics & Details Modal */
+.file-detail-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.file-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+
+.file-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.meta-item {
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.meta-item strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.error-detail-box {
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--destructive) 25%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.extracted-content-box {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.empty-extracted {
+  padding: 24px 16px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px dashed var(--border);
+  text-align: center;
+  color: var(--muted-foreground);
+  font-size: 12.5px;
 }
 
 @media (max-width: 1080px) {

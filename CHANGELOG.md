@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] - 2026-09-17
+
+### Added
+- **Admin File Management Panel (`مدیریت فایل‌ها`) (`backend` & `frontend`)**:
+  - Implemented `AdminFilesController` with full administrative controls:
+    - `GET /admin/files/stats`: Aggregated KPI counters (total files, ready, processing, error counts, total storage size in MB/Bytes).
+    - `GET /admin/files`: Paginated file listing with status filtering (`all`, `processing`, `ready`, `error`), 3-second debounced search query (by file name, user email, display name, ID), and user relations.
+    - `GET /admin/files/:id`: Deep inspection of file records including extracted text for LLM, processing duration, and metadata.
+    - `POST /admin/files/:id/retry`: Re-enqueuing of failed or stuck files into background processing queue.
+    - `DELETE /admin/files/:id`: Administrative file deletion from MinIO storage and database.
+  - Added dedicated "مدیریت فایل‌ها" (Files Management) section in `AdminPanelView.vue` with KPI summary strip, status filter chips, comprehensive table, pagination controls, and file diagnostics inspection modal.
+  - Added attachment badges and download/preview links to Admin Chat Inspection modal (`admin-msg-attachments`).
+- **OpenTelemetry & SigNoz APM Integration (`backend` & `frontend`)**:
+  - Integrated lightweight, native OpenTelemetry OTLP HTTP trace exporter (`backend/src/shared/telemetry.ts`) sending trace spans directly to SigNoz collector on port `4318` (`/v1/traces`).
+  - Added tracing instrumentation to `file-processor.service.ts` tracking `file.process` spans with file size, type, extraction duration, and error status attributes.
+  - Added direct quick-launch action button in Admin Panel to open the standalone SigNoz APM dashboard (`http://localhost:3301`).
+- **Automated Test Suite for Admin Files (`backend`)**:
+  - Added `backend/test/admin-files.spec.ts` validating all endpoints, pagination, status filtering, retry, delete, and 403 Forbidden unauthorized access guard.
+
+### Fixed
+- **BullMQ Worker Redis Connection Hanging Bug (`backend`)**:
+  - Resolved critical issue where BullMQ Worker blocked the shared Redis client connection. Duplicated connection via `redisClient.duplicate()` ensuring queue operations and background workers run independently without hanging.
+- **Asynchronous File Processing & LLM Text Polling (`backend`)**:
+  - Added short polling loop in `ChatService.generate()` when a message contains processing attachments, ensuring extracted text is injected into LLM context without blocking overall chat responsiveness.
+- **Frontend File URL Resolution on Reload / Refresh (`frontend`)**:
+  - Replaced hardcoded relative `/api/v1/...` file URLs in `FilePreviewCard.vue` with `buildUrl()` from `api.ts`, resolving 404 errors during Vite dev server sessions (`:5173`).
+- **User Upload Visibility in Chat Bubbles (`frontend`)**:
+  - Refactored `MessageBubble.vue` to display full metadata cards (name, size, type badge, status, and retry action) for all user attachments.
+
 ## [1.2.0] - 2026-09-17
 
 ### Added

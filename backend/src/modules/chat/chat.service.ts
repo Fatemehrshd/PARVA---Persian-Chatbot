@@ -286,9 +286,23 @@ export class ChatService {
         );
       }
 
-      const attachments = await this.fileRepo.find({
+      let attachments = await this.fileRepo.find({
         where: fileIds.map((fid) => ({ id: fid, userId, isDeleted: false })),
       });
+
+      // If any attachment is still in 'processing' status, wait briefly for background worker to complete
+      if (attachments.some((a) => a.status === 'processing') && process.env.NODE_ENV !== 'test') {
+        const waitStart = Date.now();
+        while (
+          attachments.some((a) => a.status === 'processing') &&
+          Date.now() - waitStart < 8000
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          attachments = await this.fileRepo.find({
+            where: fileIds.map((fid) => ({ id: fid, userId, isDeleted: false })),
+          });
+        }
+      }
 
       for (const att of attachments) {
         if (att.fileType === 'image') {

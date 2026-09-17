@@ -6,6 +6,7 @@ import { UpdateSettingsDto } from './dto';
 
 export const DEFAULT_SYSTEM_PROMPT = 'You are a helpful and knowledgeable AI assistant.';
 export const DEFAULT_GLOBAL_TOKEN_LIMIT = 0; // 0 = unlimited
+export const WEB_SEARCH_ENABLED_KEY = 'web_search_enabled';
 
 @Injectable()
 export class SettingsService {
@@ -46,6 +47,11 @@ export class SettingsService {
     return this.get('system_prompt', DEFAULT_SYSTEM_PROMPT);
   }
 
+  async getWebSearchEnabled(): Promise<boolean> {
+    const v = await this.get(WEB_SEARCH_ENABLED_KEY, 'true');
+    return v !== 'false';
+  }
+
   async getAll(): Promise<{
     globalTokenLimit: number;
     systemPrompt: string;
@@ -54,6 +60,7 @@ export class SettingsService {
     fileMaxCount: number;
     excelMaxRows: number;
     fileProcessingTimeoutSec: number;
+    webSearchEnabled: boolean;
   }> {
     const [
       globalTokenLimit,
@@ -81,6 +88,7 @@ export class SettingsService {
       fileMaxCount: isNaN(fileMaxCount) ? 5 : fileMaxCount,
       excelMaxRows: isNaN(excelMaxRows) ? 5000 : excelMaxRows,
       fileProcessingTimeoutSec: isNaN(fileProcessingTimeoutSec) ? 120 : fileProcessingTimeoutSec,
+      webSearchEnabled: await this.getWebSearchEnabled(),
     };
   }
 
@@ -105,6 +113,9 @@ export class SettingsService {
     }
     if (dto.fileProcessingTimeoutSec !== undefined) {
       await this.set('file_processing_timeout_sec', String(dto.fileProcessingTimeoutSec));
+    }
+    if (dto.webSearchEnabled !== undefined) {
+      await this.set(WEB_SEARCH_ENABLED_KEY, dto.webSearchEnabled ? 'true' : 'false');
     }
     return this.getAll();
   }

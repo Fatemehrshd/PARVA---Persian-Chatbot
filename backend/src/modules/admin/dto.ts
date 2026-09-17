@@ -35,6 +35,10 @@ export class UpdateSettingsDto {
   @IsInt({ message: 'تایم‌اوت پردازش باید عدد صحیح باشد' })
   @Min(10)
   fileProcessingTimeoutSec?: number;
+
+  @IsOptional()
+  @IsBoolean({ message: 'وضعیت جستجوی وب باید boolean باشد' })
+  webSearchEnabled?: boolean;
 }
 
 export class UpdateUserAdminDto {

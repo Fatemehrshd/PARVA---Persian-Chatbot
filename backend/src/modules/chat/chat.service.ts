@@ -9,6 +9,7 @@ import { OpenAiCompatForwarder, ChatMessage } from '../ai/openai-compat.forwarde
 import { SettingsService } from '../admin/settings.service';
 import { UsersService } from '../users/users.service';
 import { ActiveStreamService, ActiveStreamStatus } from './active-stream.service';
+import { WebSearchService } from '../web-search/web-search.service';
 
 export interface ChatChunk {
   token?: string;
@@ -39,6 +40,7 @@ export class ChatService {
     @Optional() private users?: UsersService,
     @Optional() private activeStream?: ActiveStreamService,
     @Optional() @InjectRepository(FileAttachment) private fileRepo?: Repository<FileAttachment>,
+    @Optional() private webSearch?: WebSearchService,
   ) {}
 
   list(userId: string, limit: number = 50, page: number = 1) {

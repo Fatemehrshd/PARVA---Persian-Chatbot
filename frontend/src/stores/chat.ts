@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Conversation, Message, FileAttachmentItem } from '../types'
+import type { Conversation, Message, FileAttachmentItem, WebSource } from '../types'
 import { chatService } from '../services/chat.service'
 import { filesService } from '../services/files.service'
 import { checkBackendHealth } from '../services/api'
@@ -18,6 +18,9 @@ interface ConvStreamState {
   lastUserPrompt: string
   charBuffer: string[]
   releaseTimer: ReturnType<typeof setTimeout> | null
+  streamingSources: WebSource[] | null
+  isSearching: boolean
+  searchFailed: boolean
 }
 
 // Delay between rendered characters during streaming — small enough to feel
@@ -35,6 +38,9 @@ function makeDefaultState(): ConvStreamState {
     lastUserPrompt: '',
     charBuffer: [],
     releaseTimer: null,
+    streamingSources: null,
+    isSearching: false,
+    searchFailed: false,
   }
 }
 
@@ -76,6 +82,24 @@ export const useChatStore = defineStore('chat', () => {
   // Using a Map so each conversation can have completely independent streaming state.
   // We wrap it in a ref<Map> so Vue can track mutations when we replace entries.
   const convStreamStates = ref<Map<string, ConvStreamState>>(new Map())
+
+  // ─── Per-conversation feature flags (web search / thinking) ───────────────
+  // Survives refresh via localStorage; a new conversation starts with both off.
+  const convFlags = ref<Record<string, { web: boolean }>>({})
+  function persistConvFlags() {
+    try { localStorage.setItem('chat_conv_flags', JSON.stringify(convFlags.value)) } catch {}
+  }
+  function getConvFlag(convId: string) {
+    return convFlags.value[convId] ?? { web: false }
+  }
+  function setConvFlag(convId: string, patch: Partial<{ web: boolean }>) {
+    convFlags.value[convId] = { ...getConvFlag(convId), ...patch }
+    persistConvFlags()
+  }
+  try {
+    const raw = localStorage.getItem('chat_conv_flags')
+    if (raw) convFlags.value = JSON.parse(raw)
+  } catch {}
 
   // ─── Helper to get/init state for a convId ────────────────────────────────
   function getState(convId: string | null): ConvStreamState | null {
@@ -508,7 +532,8 @@ export const useChatStore = defineStore('chat', () => {
     convId: string,
     content: string,
     userMessage: Message,
-    fileIds?: string[]
+    fileIds?: string[],
+    opts?: { useWebSearch?: boolean }
   ) {
     // Prepare streaming state
     {
@@ -537,6 +562,10 @@ export const useChatStore = defineStore('chat', () => {
       convStreamStates.value.set(convId, { ...s })
     }
     resetWatchdog(convId, 35000)
+
+    // Explicit opts win (composer passes the toggled value); every other path
+    // (queue, files, resume/retry) inherits the stored per-conversation flag.
+    const useWebSearch = opts?.useWebSearch ?? getConvFlag(convId).web
 
     await chatService.sendMessageStream(
       convId,
@@ -643,7 +672,31 @@ export const useChatStore = defineStore('chat', () => {
         convStreamStates.value.set(convId, { ...s })
         resetWatchdog(convId, 25000)
       },
-      fileIds
+      fileIds,
+      (searchState: string) => {
+        const s = ensureState(convId)
+        s.isSearching = searchState === 'searching'
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 25000)
+      },
+      (sources: WebSource[]) => {
+        const s = ensureState(convId)
+        s.isSearching = false
+        s.streamingSources = sources
+        streamedAny = true
+        userMessage.status = 'sent'
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 25000)
+      },
+      (_message: string) => {
+        const s = ensureState(convId)
+        s.isSearching = false
+        s.searchFailed = true
+        streamedAny = true
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 25000)
+      },
+      { useWebSearch }
     )
   }
 
@@ -710,7 +763,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   // ─── Send message ──────────────────────────────────────────────────────────
-  async function sendMessage(content: string, files?: FileAttachmentItem[]) {
+  async function sendMessage(content: string, files?: FileAttachmentItem[], opts?: { useWebSearch?: boolean }) {
     if (!content.trim() && (!files || files.length === 0)) return
 
     const currentActiveState = currentConversationId.value ? convStreamStates.value.get(currentConversationId.value) : null
@@ -794,6 +847,12 @@ export const useChatStore = defineStore('chat', () => {
             pendingMessageQueue.value.delete(convId)
             pendingMessageQueue.value.set(created.id, oldQueue)
           }
+          // Move pre-send feature flags ('__new__' → real id)
+          if (convFlags.value['__new__']) {
+            convFlags.value[created.id] = { ...getConvFlag(created.id), ...convFlags.value['__new__'] }
+            delete convFlags.value['__new__']
+            persistConvFlags()
+          }
           convId = created.id
         }
       } catch (err) {
@@ -831,7 +890,7 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     // 3. Dispatch stream immediately
-    await executeMessageStream(convId, content, userMessage, fileIds)
+    await executeMessageStream(convId, content, userMessage, fileIds, opts)
   }
 
   // ─── Retry failed file in message ──────────────────────────────────────────
@@ -918,6 +977,12 @@ export const useChatStore = defineStore('chat', () => {
       convStreamStates.value.set(convId, { ...s })
     }
     resetWatchdog(convId, 35000)
+
+    // Delete-then-regenerate inherits the stored per-conversation flag.
+    // (This regenerate block predates this feature; only the added lines below
+    // must stay error-free — hence the local non-null id alias.)
+    const regenConvId: string = convId ?? ''
+    const useWebSearchRegen = getConvFlag(regenConvId).web
 
     await chatService.sendMessageStream(
       convId,
@@ -1011,7 +1076,28 @@ export const useChatStore = defineStore('chat', () => {
         s.currentStreamingText = syncText
         convStreamStates.value.set(convId, { ...s })
         resetWatchdog(convId, 25000)
-      }
+      },
+      (searchState: string) => {
+        const s = ensureState(regenConvId)
+        s.isSearching = searchState === 'searching'
+        convStreamStates.value.set(regenConvId, { ...s })
+        resetWatchdog(regenConvId, 25000)
+      },
+      (sources: WebSource[]) => {
+        const s = ensureState(regenConvId)
+        s.isSearching = false
+        s.streamingSources = sources
+        convStreamStates.value.set(regenConvId, { ...s })
+        resetWatchdog(regenConvId, 25000)
+      },
+      (_message: string) => {
+        const s = ensureState(regenConvId)
+        s.isSearching = false
+        s.searchFailed = true
+        convStreamStates.value.set(regenConvId, { ...s })
+        resetWatchdog(regenConvId, 25000)
+      },
+      { useWebSearch: useWebSearchRegen }
     )
   }
 
@@ -1040,13 +1126,18 @@ export const useChatStore = defineStore('chat', () => {
           role: 'assistant',
           content: textToSave,
           createdAt: new Date().toISOString(),
-          isInterrupted
+          isInterrupted,
+          sources: s.streamingSources,
+          searchFailed: s.searchFailed || undefined
         })
       }
     }
     s.currentStreamingText = ''
     s.isStreaming = false
     s.isThinking = false
+    s.streamingSources = null
+    s.isSearching = false
+    s.searchFailed = false
     convStreamStates.value.set(convId, { ...s })
   }
 
@@ -1218,6 +1309,10 @@ export const useChatStore = defineStore('chat', () => {
     // Per-conv streaming state (for sidebar indicators)
     convStreamStates,
     getConvIsStreaming,
+    // Per-conversation feature flags (web search / thinking)
+    convFlags,
+    getConvFlag,
+    setConvFlag,
     // Actions
     loadConversations,
     loadMoreConversations,

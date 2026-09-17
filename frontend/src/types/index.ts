@@ -96,6 +96,12 @@ export interface FileAttachmentItem {
   metadata?: Record<string, any>
 }
 
+export interface WebSource {
+  title: string
+  url: string
+  snippet?: string
+}
+
 export interface Message {
   id: string
   conversationId: string
@@ -108,6 +114,8 @@ export interface Message {
   errorText?: string
   attachments?: FileAttachmentItem[]
   fileIds?: string[]
+  sources?: WebSource[] | null
+  searchFailed?: boolean
 }
 
 export interface ActiveStreamStatus {
@@ -121,6 +129,7 @@ export interface ActiveStreamStatus {
 export interface SendMessageRequest {
   content: string
   fileIds?: string[]
+  useWebSearch?: boolean
 }
 
 export interface SearchResult {

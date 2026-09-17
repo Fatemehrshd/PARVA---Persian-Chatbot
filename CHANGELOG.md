@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.3] - 2026-09-17
+
+### Changed
+- **Responsive Admin Console Tables & Modals (`frontend`)**:
+  - Admin tables (`AdminTable.vue`) switch below 768px to a stacked card layout: the header row hides and every cell is labeled from its column label via a new `data-label` contract (table sets labels for default rows; each parent row template in `AdminPanelView.vue` labels its custom cells).
+  - Filled the 768–1080px layout gap: KPI grid collapses to 2 columns; forms and dashboard grids collapse to one column below 1080px while `provider-grid` keeps its intrinsic `auto-fill` behavior.
+  - Modal hardening: `DeleteConfirmModal` action buttons stack full-width on narrow screens; `ModelsModal` card is viewport-bounded (`calc(100svh - 32px)`) with internal scrolling; `AdminModal` keeps its existing responsive behavior.
+  - Mobile layout fix: removed the leftover `margin-inline-start: 260px` content offset below 768px (sidebar is off-canvas) and compacted topbar/content spacing.
+  - No visual change on desktop; previous features untouched. See Task 26 in `docs/wiki/features.md`.
+
+---
+
 ## [1.2.1] - 2026-09-17
 
 ### Added

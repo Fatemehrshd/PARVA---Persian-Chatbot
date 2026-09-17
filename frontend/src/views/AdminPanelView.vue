@@ -78,6 +78,8 @@ const users = ref<AdminUser[]>([])
 const stats = ref<AdminDashboardStats | null>(null)
 const conversations = ref<AdminConversationSummary[]>([])
 const isLoadingConversations = ref(false)
+const chatPage = ref(1)
+const chatLimit = ref(50)
 
 // Chat Inspection Modal State
 const isChatModalOpen = ref(false)
@@ -617,10 +619,14 @@ async function saveSystemPrompt() {
 }
 
 // Conversation viewer handlers
-async function loadConversations() {
+async function loadConversations(page = chatPage.value) {
   isLoadingConversations.value = true
+  chatPage.value = page
   try {
-    conversations.value = await adminService.listConversations()
+    conversations.value = await adminService.listConversations({
+      page: chatPage.value,
+      limit: chatLimit.value,
+    })
   } catch (err: any) {
     console.error('Failed to load conversations:', err)
   } finally {
@@ -1112,15 +1118,15 @@ onMounted(loadData)
             table-class="dashboard-table"
           >
             <template #row="{ item: model }">
-              <td>
+              <td :data-label="labels.modelName">
                 <div class="cell-primary">
                   <strong>{{ model.name }}</strong>
                   <span v-if="model.isDefault" class="subtext-badge">{{ labels.default }}</span>
                 </div>
               </td>
-              <td><span class="tag">{{ model.provider }}</span></td>
-              <td class="mono subtext">{{ model.apiIdentifier }}</td>
-              <td>
+              <td :data-label="labels.provider"><span class="tag">{{ model.provider }}</span></td>
+              <td :data-label="labels.apiId" class="mono subtext">{{ model.apiIdentifier }}</td>
+              <td :data-label="labels.status">
                 <BaseToggle
                   :model-value="model.isActive"
                   size="sm"
@@ -1232,22 +1238,22 @@ onMounted(loadData)
           table-class="dashboard-table"
         >
           <template #row="{ item: model }">
-            <td>
+            <td :data-label="labels.modelName">
               <div class="cell-primary">
                 <strong>{{ model.name }}</strong>
                 <span v-if="model.isDefault" class="subtext-badge">{{ labels.default }}</span>
               </div>
             </td>
-            <td><span class="tag">{{ model.provider }}</span></td>
-            <td class="mono subtext">{{ model.apiIdentifier }}</td>
-            <td>
+            <td :data-label="labels.provider"><span class="tag">{{ model.provider }}</span></td>
+            <td :data-label="labels.apiId" class="mono subtext">{{ model.apiIdentifier }}</td>
+            <td :data-label="labels.status">
               <BaseToggle
                 :model-value="model.isActive"
                 size="sm"
                 @update:model-value="toggleModel(model)"
               />
             </td>
-            <td class="actions-cell">
+            <td :data-label="labels.actions" class="actions-cell">
               <div class="action-buttons">
                 <BaseButton
                   variant="ghost"
@@ -1281,7 +1287,7 @@ onMounted(loadData)
 
         <AdminTable :columns="userColumns" :items="filteredUsers">
           <template #row="{ item: user }">
-            <td>
+            <td :data-label="labels.user">
               <div class="user-cell">
                 <span class="avatar-chip">{{ (user.displayName || user.email).charAt(0).toUpperCase() }}</span>
                 <div>
@@ -1290,24 +1296,24 @@ onMounted(loadData)
                 </div>
               </div>
             </td>
-            <td>
+            <td :data-label="labels.role">
               <span class="tag" :class="{ 'tag-admin': user.role === 'admin' }">
                 {{ user.role === 'admin' ? 'مدیر سیستم' : 'کاربر عادی' }}
               </span>
             </td>
-            <td class="mono">{{ user.conversationsCount }}</td>
-            <td class="mono">{{ user.usedTokens.toLocaleString() }}</td>
-            <td class="mono">
+            <td :data-label="labels.conversations" class="mono">{{ user.conversationsCount }}</td>
+            <td :data-label="labels.usedTokens" class="mono">{{ user.usedTokens.toLocaleString() }}</td>
+            <td :data-label="labels.tokenLimit" class="mono">
               {{ user.tokenLimit !== null && user.tokenLimit !== undefined ? user.tokenLimit.toLocaleString() : 'سقف سراسری' }}
             </td>
-            <td>
+            <td :data-label="labels.status">
               <BaseToggle
                 :model-value="user.isActive !== false"
                 size="sm"
                 @update:model-value="toggleUser(user)"
               />
             </td>
-            <td class="actions-cell">
+            <td :data-label="labels.actions" class="actions-cell">
               <div class="action-buttons">
                 <BaseButton variant="ghost" size="sm" @click="openUserEditor(user)">
                   {{ labels.edit }}
@@ -1429,7 +1435,7 @@ onMounted(loadData)
 
         <AdminTable :columns="chatColumns" :items="filteredChats">
           <template #row="{ item: conv }">
-            <td>
+            <td data-label="عنوان گفتگو">
               <div class="chat-title-cell">
                 <MessageSquare :size="15" class="chat-row-icon" />
                 <div>
@@ -1438,7 +1444,7 @@ onMounted(loadData)
                 </div>
               </div>
             </td>
-            <td>
+            <td data-label="کاربر">
               <div class="user-cell">
                 <span class="avatar-chip">{{ (conv.user?.displayName || conv.user?.email || 'U').charAt(0).toUpperCase() }}</span>
                 <div>
@@ -1447,13 +1453,13 @@ onMounted(loadData)
                 </div>
               </div>
             </td>
-            <td class="mono">
+            <td data-label="تعداد پیام‌ها" class="mono">
               <span class="message-count-badge">{{ conv.messageCount }} پیام</span>
             </td>
-            <td class="mono subtext">
+            <td data-label="تاریخ آخرین فعالیت" class="mono subtext">
               {{ new Date(conv.updatedAt || conv.createdAt).toLocaleDateString('fa-IR') }}
             </td>
-            <td class="actions-cell">
+            <td :data-label="labels.actions" class="actions-cell">
               <div class="action-buttons">
                 <BaseButton variant="secondary" size="sm" @click="openChatViewer(conv)">
                   مشاهده پیام‌ها
@@ -1465,6 +1471,33 @@ onMounted(loadData)
             </td>
           </template>
         </AdminTable>
+
+        <!-- Pagination Controls for Chats Table -->
+        <div class="table-pagination-bar" v-if="filteredChats.length > 0 || chatPage > 1">
+          <div class="pagination-info">
+            <span>صفحه {{ chatPage.toLocaleString('fa-IR') }}</span>
+            <span class="pagination-subtext">(نمایش ۵۰ مورد در هر صفحه)</span>
+          </div>
+          <div class="pagination-actions">
+            <BaseButton
+              variant="ghost"
+              size="sm"
+              :disabled="chatPage <= 1 || isLoadingConversations"
+              @click="loadConversations(chatPage - 1)"
+            >
+              صفحه قبل
+            </BaseButton>
+            <span class="pagination-page-badge">{{ chatPage.toLocaleString('fa-IR') }}</span>
+            <BaseButton
+              variant="ghost"
+              size="sm"
+              :disabled="conversations.length < chatLimit || isLoadingConversations"
+              @click="loadConversations(chatPage + 1)"
+            >
+              صفحه بعد
+            </BaseButton>
+          </div>
+        </div>
       </section>
 
       <!-- 7. FILES MANAGEMENT SECTION -->
@@ -3708,11 +3741,28 @@ onMounted(loadData)
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 768px) {
   .admin-menu-button {
     display: block;
+  }
+
+  /* Sidebar is off-canvas below 768px, so the content offset must go. */
+  .admin-main {
+    margin-inline-start: 0;
+  }
+
+  .admin-topbar {
+    min-height: 64px;
+    padding: 14px 12px;
+  }
+
+  .admin-content {
+    padding: 12px 0 20px;
   }
 
   .admin-sidebar {
@@ -3748,5 +3798,53 @@ onMounted(loadData)
   .form-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ────────────── Chats Table Pagination ────────────── */
+.table-pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding: 12px 18px;
+  background: color-mix(in srgb, var(--card) 95%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 13px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.pagination-subtext {
+  font-size: 11.5px;
+  color: var(--muted-foreground);
+  font-weight: normal;
+}
+
+.pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pagination-page-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
 }
 </style>

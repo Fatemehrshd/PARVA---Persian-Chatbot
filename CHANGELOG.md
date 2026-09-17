@@ -39,39 +39,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.0] - 2026-09-17
 
 ### Added
-- **Plain Text & Markdown File Attachment Support (`frontend` & `backend`)**:
-  - Added full support for `.txt`, `.md`, `.text`, and `.markdown` documents across composer file picker, drag-and-drop, upload pipeline, and AI context ingestion.
-  - Implemented asynchronous text extraction in `FileProcessorService` with UTF-8 encoding support, metadata tracking (character count, markdown format flag), and configurable character limits (`text_max_chars`).
-  - Added dedicated `.text-icon` and dynamic `TXT`/`MD` badge in `FilePreviewCard.vue`.
-- **Authenticated File Content Serving (`backend` & `frontend`)**:
-  - Added `GET /api/v1/files/:id/content` route to stream file attachments directly from MinIO with secure user ownership verification.
-  - Enhanced `JwtAuthGuard` to support `?token=` query parameters for direct image `src` rendering in `<img>` tags.
-  - Added preview fallback in `FilePreviewCard.vue` so images persist and display reliably across browser reloads or expired blob URLs.
-- **Google Gemini 3.5 Flash Provider & Vision Support (`backend` & `database`)**:
-  - Integrated and verified Google Gemini OpenAI-compatible endpoint (`/v1beta/openai/chat/completions`) with streaming and multimodal vision (image understanding).
-  - Seeded `Google Gemini` provider and `gemini-3.5-flash` model into PostgreSQL database for immediate chat use.
-
-### Fixed
-- **Message Retry Image Attachment Preservation (`frontend`)**:
-  - Fixed an issue where retrying a failed or interrupted message deleted attached images.
-  - `retryLastMessage` now captures existing attachments and re-submits them without triggering redundant uploads, preserving file IDs and previews in the chat bubble.
-- **Image & File Upload Send Button Disabled State & Reactivity Fix (`frontend`)**:
-  - Resolved an issue where attaching an image or document kept the send button permanently disabled (`disabled: true`). The root cause was that raw JavaScript objects were passed to `startUpload`, bypassing Vue 3's reactive proxy `set` traps and preventing computed `hasUploadingFiles` from updating after server completion.
-  - Ensured `attachedFiles` uses reactive array proxies so upload status (`uploading` -> `processing` -> `ready`) and progress indicators update in real-time.
-  - Enhanced `ChatComposer.vue` to allow sending immediately when files are attached (even without accompanying prompt text).
-  - Added `waitForUploads` synchronization in `handleSubmit` so if a user clicks Send while bytes are still in-flight, it smoothly awaits upload completion before dispatching.
-  - Prevented sending only when an attached file is in an `error` state, requiring the user to retry or remove it first.
-- **File Preview Card Error Layout & Action Button Collision Fix (`frontend`)**:
-  - Resolved layout collision where the error status text ("خطا در پردازش"), retry button ("تلاش مجدد"), and file metadata overlapped in RTL mode.
-  - Re-architected `FilePreviewCard.vue` to place status tag and retry action inline inside `.file-meta` with clean flex gap spacing.
-  - Added dedicated `.error-badge` indicator on the thumbnail corner and graceful `@error` fallback to SVG icon when image sources fail.
-- **Composer Streaming Lock & Upload Guard (`frontend`)**:
-  - Completely prevented message dispatch and file uploads while the AI model is loading or generating a response (`isStreaming || isThinking`).
-  - The send button is replaced by the Stop button (`btn-stop`), attachment button (`+`) is disabled, and Enter key, Drag & Drop, and file paste actions are blocked with user-friendly Persian warning toasts.
-- **Single-Source Provider Credentials & Streamlined Model Configuration (`frontend` & `backend`)**:
-  - Removed duplicate `baseUrl` and `apiKey` inputs from the Model definition and edit forms in `AdminPanelView.vue` and `ModelsModal.vue`.
-  - Established Providers (`AiProvider`) as the exclusive single source of truth for `baseUrl` and authentication tokens (`apiKey`).
-  - Model configurations now exclusively require the model display name, associated provider selection, and API model identifier (`apiIdentifier`), automatically inheriting connection parameters.
+- **Paced Streaming & Auto-Scroll (`backend` & `frontend`)**:
+  - Implemented token pacing delay (~25ms cadence) in `chat.service.ts` for natural real-time streaming visualization, guarded by `process.env.NODE_ENV !== 'test'` to ensure automated tests run at maximum speed (0ms).
+  - Enhanced `MessageList.vue` with seamless auto-scroll tracking during active streaming responses while preserving user manual scroll position when navigating upwards.
+- **Branded Logo Loading State on Chat Switch / Open (`frontend`)**:
+  - Added `.chat-branded-loader` in `MessageList.vue` displaying the site's dynamic hummingbird logo (`useThemeLogo().activeLogo`) with a pulsating ambient glow and Persian subtitle ("در حال بارگذاری گفتگو...") while message history is loading (`chatStore.isLoadingMessages`).
+  - Enforced a minimum 500ms smooth display duration (`MIN_CHAT_LOAD_DELAY_MS = 500ms`, 0ms in test) so the loading state and logo pulse render beautifully without abrupt micro-flickers.
+  - Completely prevented the EmptyState welcome message from flashing during chat loading by keeping `isLoadingMessages = true` on view entrance and immediately clearing stale messages when switching conversations.
+- **Skeleton Placeholder in Sidebar (`frontend`)**:
+  - Added `.sb-skeleton-wrap` with 5 pulsing placeholder skeleton rows in `AppSidebar.vue` displayed when loading conversations (`chatStore.isLoadingConversations`).
+- **50-Item Pagination for Conversations (`backend` & `frontend`)**:
+  - Backend: Added `page` and `limit` pagination parameters to `GET /chat/conversations` (defaulting to 50 items per page with `skip: (page - 1) * take`) and `GET /admin/conversations`.
+  - Frontend User Sidebar: Added "بارگذاری گفتگوهای بیشتر..." button in `AppSidebar.vue` and `loadMoreConversations()` in `chat.ts` to seamlessly load and append older conversations.
+  - Frontend Admin Panel: Added `.table-pagination-bar` beneath the conversations table in `AdminPanelView.vue` with previous/next page navigation, active page badge, and 50-item indicator.
+- **User Token Limit Exceeded Feedback & Lockdown (`frontend`)**:
+  - Detected quota exhaustion (`سقف مجاز مصرف توکن`) in `chat.ts` to set `isTokenLimitExceeded`.
+  - Displayed a dedicated amber/red alert banner (`.stream-error-banner--limit`) above the composer without a futile retry button, informing the user to contact the administrator.
+  - Added red error badge ("خطا در ارسال پیام") beneath the failed message bubble in `MessageBubble.vue`.
+  - Locked composer textarea and disabled send button when token limit is exceeded.
+- **Provider / Model Configuration Separation**:
+  - Centralized API token and Base URL configuration at the Provider level, ensuring Model definitions only require the model identifier/name.
 
 ## [1.1.0] - 2026-09-16
 

@@ -151,41 +151,14 @@ function copyContent() {
         </div>
       </div>
 
-      <!-- Subtitle / Processing status for user message -->
-      <div v-if="isUser && message.status === 'processing_files'" class="user-status-subtitle flex items-center gap-1.5 mt-1.5 px-1 text-xs text-muted-foreground animate-pulse">
-        <svg class="w-3.5 h-3.5 animate-spin text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
-          <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
-        </svg>
-        <span>در حال پردازش فایل...</span>
-      </div>
-
-      <div v-else-if="isUser && message.status === 'queued'" class="user-status-subtitle flex items-center gap-1.5 mt-1.5 px-1 text-xs text-muted-foreground">
-        <svg class="w-3.5 h-3.5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <!-- Error notice for failed user message -->
+      <div v-if="isUser && message.status === 'error'" class="flex items-center gap-1.5 mt-1.5 px-1 text-xs text-destructive font-medium">
+        <svg class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10"/>
-          <polyline points="12 6 12 12 16 14"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
-        <span>در انتظار ارسال…</span>
-      </div>
-
-      <div v-else-if="isUser && message.status === 'error'" class="user-status-error flex flex-col gap-1.5 mt-2 px-1">
-        <span class="text-xs text-destructive font-medium">خطا در پردازش فایل‌های پیوست</span>
-        <div class="flex items-center gap-2 mt-1">
-          <button
-            type="button"
-            class="px-2.5 py-1 text-xs rounded-md bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer"
-            @click="handleRetryFiles"
-          >
-            تلاش مجدد پردازش
-          </button>
-          <button
-            type="button"
-            class="px-2.5 py-1 text-xs rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors cursor-pointer"
-            @click="handleRemoveFilesAndSend"
-          >
-            حذف فایل و ارسال بدون آن
-          </button>
-        </div>
+        <span>{{ message.errorText || 'خطا در ارسال پیام' }}</span>
       </div>
 
       <!-- Action bar under message (Available for both user and assistant) -->

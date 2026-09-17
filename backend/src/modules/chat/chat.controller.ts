@@ -23,8 +23,14 @@ import { CreateConvDto, UpdateConvDto, SendMsgDto } from './dto';
 @Controller('chat/conversations')
 export class ChatController {
   constructor(private chat: ChatService) {}
-  @Get() list(@Req() req: any) {
-    return this.chat.list(req.user.sub);
+  @Get() list(
+    @Req() req: any,
+    @Query('limit') limit?: string,
+    @Query('page') page?: string,
+  ) {
+    const l = limit ? parseInt(limit, 10) : 50;
+    const p = page ? parseInt(page, 10) : 1;
+    return this.chat.list(req.user.sub, l, p);
   }
   @Get('search') search(@Req() req: any, @Query('q') query: string) {
     return this.chat.search(req.user.sub, query);

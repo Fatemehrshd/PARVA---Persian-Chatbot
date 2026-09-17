@@ -46,7 +46,7 @@ withDefaults(
               class="table-row"
             >
               <slot name="row" :item="item" :index="index">
-                <td v-for="col in columns" :key="col.key">
+                <td v-for="col in columns" :key="col.key" :data-label="col.label">
                   {{ item[col.key] }}
                 </td>
               </slot>
@@ -145,5 +145,61 @@ withDefaults(
   margin: 0;
   font-size: 13.5px;
   color: var(--muted-foreground);
+}
+
+/* Mobile: table becomes stacked cards; each cell shows its column label
+   from the data-label attribute (set by the table itself or the parent row slot). */
+@media (max-width: 767px) {
+  .admin-table-scroll {
+    overflow-x: visible;
+  }
+
+  .admin-table thead {
+    display: none;
+  }
+
+  .admin-table,
+  .admin-table :deep(tbody),
+  .admin-table :deep(tr),
+  .admin-table :deep(td) {
+    display: block;
+    width: 100%;
+  }
+
+  .admin-table :deep(tr.table-row) {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .admin-table :deep(tr.table-row:hover) {
+    background: transparent;
+  }
+
+  .admin-table :deep(tr:last-child) {
+    border-bottom: none;
+  }
+
+  .admin-table :deep(td) {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 5px 0;
+    border: none;
+    text-align: left;
+  }
+
+  .admin-table :deep(td)::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+  }
+
+  .admin-table :deep(td[data-label=''])::before {
+    content: none;
+  }
 }
 </style>

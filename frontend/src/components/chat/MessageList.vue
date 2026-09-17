@@ -2,12 +2,14 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useChatStore } from '../../stores/chat'
 import { getTextDirection } from '../../utils/textDirection'
+import { useThemeLogo } from '../../composables/useThemeLogo'
 import MessageBubble from './MessageBubble.vue'
 import MarkdownContent from './MarkdownContent.vue'
 import EmptyState from './EmptyState.vue'
 import ThinkingIndicator from './ThinkingIndicator.vue'
 
 const chatStore = useChatStore()
+const { activeLogo } = useThemeLogo()
 
 const containerRef = ref<HTMLElement | null>(null)
 const contentRef = ref<HTMLElement | null>(null)
@@ -204,8 +206,20 @@ onBeforeUnmount(() => {
   <div class="message-list-wrapper relative flex-1 flex flex-col min-h-0 overflow-hidden">
     <div ref="containerRef" class="message-list-viewport flex-1 overflow-y-auto overflow-x-hidden flex flex-col">
       <div ref="contentRef" class="chat-content-wrapper message-list-content flex flex-col">
+        <!-- Branded Loading State with Site Logo when Opening/Switching Chat -->
+        <div v-if="chatStore.isLoadingMessages || (chatStore.isLoadingConversations && chatStore.messages.length === 0)" class="chat-branded-loader">
+          <div class="loader-logo-wrap">
+            <div class="loader-logo-pulse"></div>
+            <img :src="activeLogo" alt="پروا" class="loader-logo-img" />
+          </div>
+          <div class="loader-text-wrap">
+            <span class="loader-title">پروا</span>
+            <span class="loader-subtitle">در حال بارگذاری گفتگو...</span>
+          </div>
+        </div>
+
         <!-- Empty State -->
-        <EmptyState v-if="chatStore.messages.length === 0 && !chatStore.isStreaming" />
+        <EmptyState v-else-if="chatStore.messages.length === 0 && !chatStore.isStreaming" />
 
         <!-- Render Existing Messages -->
         <template v-else>
@@ -423,6 +437,84 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: reduce) {
   .streaming-row {
     animation: none;
+  }
+}
+
+/* ─── Branded Site Logo Loader ───────────────────────────────────────────── */
+.chat-branded-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+  gap: 1.25rem;
+  animation: fadeIn 250ms ease-out;
+  user-select: none;
+}
+
+.loader-logo-wrap {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loader-logo-pulse {
+  position: absolute;
+  inset: -8px;
+  border-radius: 22px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--primary) 35%, transparent) 0%, transparent 72%);
+  animation: pulse-glow 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.loader-logo-img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.08));
+}
+
+.loader-text-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.loader-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--foreground);
+  letter-spacing: -0.02em;
+}
+
+.loader-subtitle {
+  font-size: 0.825rem;
+  color: var(--muted-foreground);
+  animation: pulse-text 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    transform: scale(0.92);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 0.9;
+  }
+}
+
+@keyframes pulse-text {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
   }
 }
 </style>

@@ -313,3 +313,11 @@
 - Added a responsive sidebar with Dashboard, Providers, Models, and Users & Usage sections plus a mobile drawer.
 - Connected dashboard statistics, provider CRUD/status/default actions, model CRUD/status/default actions, and user token usage/status to the existing API contract.
 - Added typed frontend admin services and regression coverage for navigation, filtering, model creation, and loading states.
+
+## Task 26: Admin Console Mobile Tables & Modals (Frontend)
+- Mobile-first card layout for all admin tables (`AdminTable.vue`): below 768px the header row hides and each row becomes a stacked card whose cells are labeled from the column labels via a `data-label` contract (set by the table for default rows and by each parent row template in `AdminPanelView.vue`).
+- Filled the 768–1080px layout gap: KPI grid collapses to 2 columns, forms/dashboard grids collapse to a single column below 1080px; `provider-grid` keeps its intrinsic `auto-fill` responsiveness.
+- Modal hardening: `DeleteConfirmModal` action buttons stack full-width on narrow screens; `ModelsModal` card gains viewport-bounded max-height with internal scroll.
+- Fixed pre-existing branch issues to restore the green gate: removed duplicate `UpdateUserStatusDto` in backend `admin/dto.ts`, removed two unused imports (ProfileModal `DialogDescription`, AdminPanelView `authStore`), and updated stale test expectations in `LoginView.spec.ts` / `SettingsModal.spec.ts` to the current Persian UI strings.
+- Verification: frontend suite 126/126 green (23 files) and production build (`vue-tsc -b && vite build`) passes.
+- Mobile layout fix: below 768px the admin sidebar goes off-canvas, so `margin-inline-start: 260px` on `.admin-main` is now reset (it previously stayed applied, pushing all admin content sideways on phones); topbar and content padding are also compacted on small screens.

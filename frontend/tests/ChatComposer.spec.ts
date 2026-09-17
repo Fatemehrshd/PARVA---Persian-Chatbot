@@ -105,6 +105,37 @@ describe('ChatComposer.vue', () => {
     expect(chatStore.messages[0].content).toBe('سلام این یک پیام تست است')
   })
 
+  it('locks composer and displays token limit banner without retry button when isTokenLimitExceeded is true', async () => {
+    const wrapper = mount(ChatComposer)
+    const chatStore = useChatStore()
+    chatStore.isTokenLimitExceeded = true
+    chatStore.convStreamStates.set(chatStore.currentConversationId, {
+      isStreaming: false,
+      isThinking: false,
+      streamError: 'سقف مجاز مصرف توکن به پایان رسیده است',
+      currentStreamingText: '',
+      abortController: null,
+      watchdogTimer: null,
+      lastUserPrompt: 'پیام'
+    })
+    await wrapper.vm.$nextTick()
+
+    // Alert banner exists with limit styling
+    const limitBanner = wrapper.find('.stream-error-banner--limit')
+    expect(limitBanner.exists()).toBe(true)
+    expect(limitBanner.text()).toContain('سقف مجاز مصرف توکن به پایان رسیده است')
+
+    // Retry button MUST NOT exist for quota limit errors
+    const retryBtn = wrapper.find('.stream-error-retry-btn')
+    expect(retryBtn.exists()).toBe(false)
+
+    // Send button and textarea are disabled
+    const sendBtn = wrapper.find('.btn-send')
+    expect(sendBtn.attributes('disabled')).toBeDefined()
+    const textarea = wrapper.find('textarea')
+    expect(textarea.attributes('disabled')).toBeDefined()
+  })
+
   it('switches text direction dynamically between LTR and RTL as user types English and Persian characters', async () => {
     const wrapper = mount(ChatComposer)
     const textarea = wrapper.find('textarea')

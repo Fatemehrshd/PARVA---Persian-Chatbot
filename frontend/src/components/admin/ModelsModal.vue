@@ -240,6 +240,8 @@ async function handleDelete(id: string) {
 .modal-card {
   width: 100%;
   max-width: 580px;
+  max-height: calc(100svh - 32px);
+  overflow-y: auto;
   background-color: var(--card);
   border: 1px solid var(--border);
   border-radius: 12px;

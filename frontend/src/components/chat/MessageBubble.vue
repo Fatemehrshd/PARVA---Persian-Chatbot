@@ -116,6 +116,16 @@ function copyContent() {
         </div>
       </div>
 
+      <!-- Error notice for failed user message -->
+      <div v-if="isUser && message.status === 'error'" class="flex items-center gap-1.5 mt-1.5 px-1 text-xs text-destructive font-medium">
+        <svg class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span>{{ message.errorText || 'خطا در ارسال پیام' }}</span>
+      </div>
+
       <!-- Action bar under message (Available for both user and assistant) -->
       <div v-if="!message.id.startsWith('msg-err-')" class="meta-bar flex items-center gap-3 mt-2 px-1 text-xs text-muted-foreground">
         <span class="timestamp font-sans text-[11px] opacity-75">{{ formattedTime }}</span>

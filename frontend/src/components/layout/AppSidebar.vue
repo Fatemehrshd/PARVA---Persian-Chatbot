@@ -233,42 +233,63 @@ const userInitial = computed(() => {
         <p class="sb-section-label">گفتگوهای اخیر</p>
 
         <div class="sb-conversations">
-          <div
-            v-for="conv in chatStore.conversations"
-            :key="conv.id"
-            :class="['sb-conv-item', { 'is-active': conv.id === chatStore.currentConversationId }]"
-            @click="handleSelect(conv.id)"
-          >
-            <!-- Streaming indicator: pulsing dot when this conv is streaming in background -->
-            <span
-              v-if="chatStore.getConvIsStreaming(conv.id)"
-              class="sb-conv-streaming-dot"
-              title="در حال دریافت پاسخ..."
-            />
-            <MessageSquare v-else :size="13" class="sb-conv-icon" />
-            <span class="sb-conv-title">{{ conv.title }}</span>
-
-            <div class="sb-conv-actions">
-              <button
-                class="sb-conv-btn"
-                @click="openEditModal($event, conv)"
-                title="ویرایش"
-              >
-                <Pencil :size="11" />
-              </button>
-              <button
-                class="sb-conv-btn sb-conv-btn--danger"
-                @click="openDeleteModal($event, conv)"
-                title="حذف"
-              >
-                <Trash2 :size="11" />
-              </button>
+          <!-- Loading skeleton state -->
+          <div v-if="chatStore.isLoadingConversations && chatStore.conversations.length === 0" class="sb-skeleton-wrap">
+            <div v-for="i in 5" :key="i" class="sb-skeleton-row">
+              <div class="sb-skeleton-icon"></div>
+              <div class="sb-skeleton-text"></div>
             </div>
           </div>
 
-          <p v-if="chatStore.conversations.length === 0" class="sb-empty-hint">
-            هنوز گفتگویی ندارید
-          </p>
+          <template v-else>
+            <div
+              v-for="conv in chatStore.conversations"
+              :key="conv.id"
+              :class="['sb-conv-item', { 'is-active': conv.id === chatStore.currentConversationId }]"
+              @click="handleSelect(conv.id)"
+            >
+              <!-- Streaming indicator: pulsing dot when this conv is streaming in background -->
+              <span
+                v-if="chatStore.getConvIsStreaming(conv.id)"
+                class="sb-conv-streaming-dot"
+                title="در حال دریافت پاسخ..."
+              />
+              <MessageSquare v-else :size="13" class="sb-conv-icon" />
+              <span class="sb-conv-title">{{ conv.title }}</span>
+
+              <div class="sb-conv-actions">
+                <button
+                  class="sb-conv-btn"
+                  @click="openEditModal($event, conv)"
+                  title="ویرایش"
+                >
+                  <Pencil :size="11" />
+                </button>
+                <button
+                  class="sb-conv-btn sb-conv-btn--danger"
+                  @click="openDeleteModal($event, conv)"
+                  title="حذف"
+                >
+                  <Trash2 :size="11" />
+                </button>
+              </div>
+            </div>
+
+            <!-- Load more conversations pagination button -->
+            <button
+              v-if="chatStore.hasMoreConversations"
+              class="sb-load-more-btn"
+              :disabled="chatStore.isLoadingConversations"
+              @click="chatStore.loadMoreConversations"
+            >
+              <span v-if="chatStore.isLoadingConversations" class="sb-loading-spinner"></span>
+              <span v-else>بارگذاری گفتگوهای بیشتر...</span>
+            </button>
+
+            <p v-if="chatStore.conversations.length === 0" class="sb-empty-hint">
+              هنوز گفتگویی ندارید
+            </p>
+          </template>
         </div>
       </div>
 
@@ -722,6 +743,86 @@ const userInitial = computed(() => {
   color: var(--muted-foreground);
   text-align: center;
   padding: 20px 8px;
+}
+
+/* ────────────── Skeleton Loader & Pagination ────────────── */
+.sb-skeleton-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.sb-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: var(--radius-md, 8px);
+  background: color-mix(in srgb, var(--muted) 40%, transparent);
+  animation: sb-pulse 1.6s ease-in-out infinite;
+}
+
+.sb-skeleton-icon {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--muted-foreground) 25%, transparent);
+  flex-shrink: 0;
+}
+
+.sb-skeleton-text {
+  flex: 1;
+  height: 12px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--muted-foreground) 20%, transparent);
+}
+
+@keyframes sb-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
+}
+
+.sb-load-more-btn {
+  width: 100%;
+  padding: 7px 10px;
+  margin-top: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.sb-load-more-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.sb-load-more-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sb-loading-spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 /* ────────────── Footer ────────────── */

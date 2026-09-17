@@ -19,6 +19,11 @@ export interface ChatChunk {
 
 const SYSTEM_PROMPT = 'You are a helpful and knowledgeable AI assistant.';
 const HISTORY_LIMIT = 20;
+const STREAM_DELAY_MS = process.env.NODE_ENV === 'test' ? 0 : 25;
+const paceToken = () =>
+  STREAM_DELAY_MS > 0
+    ? new Promise((r) => setTimeout(r, STREAM_DELAY_MS))
+    : Promise.resolve();
 
 @Injectable()
 export class ChatService {
@@ -34,8 +39,15 @@ export class ChatService {
     @Optional() private activeStream?: ActiveStreamService,
   ) {}
 
-  list(userId: string) {
-    return this.conv.find({ where: { userId }, order: { updatedAt: 'DESC' } });
+  list(userId: string, limit: number = 50, page: number = 1) {
+    const take = limit > 0 ? limit : 50;
+    const skip = page > 0 ? (page - 1) * take : 0;
+    return this.conv.find({
+      where: { userId },
+      order: { updatedAt: 'DESC' },
+      take,
+      skip,
+    });
   }
 
   async create(userId: string, modelId?: string, title?: string) {
@@ -257,6 +269,7 @@ export class ChatService {
       const full = `Echo: ${content}`;
       for (const w of full.split(/(\s+)/)) {
         if (w) {
+          await paceToken();
           this.activeStream?.appendToken(id, w);
           yield { token: w };
         }
@@ -312,6 +325,7 @@ export class ChatService {
           signal: session?.abortController.signal,
         })) {
           if (session?.abortController.signal.aborted) break;
+          await paceToken();
           full += token;
           this.activeStream?.appendToken(id, token);
           yield { token };
@@ -420,7 +434,10 @@ export class ChatService {
       this.logger.warn('No API key configured — using offline echo fallback for resume.');
       const continuation = ' (resumed)';
       for (const w of continuation.split(/(\s+)/)) {
-        if (w) yield { token: w };
+        if (w) {
+          await paceToken();
+          yield { token: w };
+        }
       }
       targetMsg.content = targetMsg.content + continuation;
       targetMsg.isInterrupted = false;
@@ -457,6 +474,7 @@ export class ChatService {
     let failedMidStream = false;
     try {
       for await (const token of this.forwarder.stream(target, messages)) {
+        await paceToken();
         continuationText += token;
         yield { token };
       }

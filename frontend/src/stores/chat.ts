@@ -48,6 +48,11 @@ export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
   const currentConversationId = ref<string | null>(null)
   const messages = ref<Message[]>([])
+  const isLoadingConversations = ref(false)
+  const isLoadingMessages = ref(false)
+  const conversationPage = ref(1)
+  const hasMoreConversations = ref(false)
+  const isTokenLimitExceeded = ref(false)
 
   // ─── Per-conversation stream state map ────────────────────────────────────
   // Using a Map so each conversation can have completely independent streaming state.
@@ -120,15 +125,19 @@ export const useChatStore = defineStore('chat', () => {
 
   // ─── Load conversations ────────────────────────────────────────────────────
   async function loadConversations(targetId?: string) {
+    isLoadingConversations.value = true
+    isLoadingMessages.value = true
+    conversationPage.value = 1
     const savedActive = sessionStorage.getItem('active_streaming_conv')
     if (savedActive && (!targetId || targetId === savedActive)) {
       targetId = savedActive
     }
 
     try {
-      const data = await chatService.listConversations()
+      const data = await chatService.listConversations(1, 50)
       if (Array.isArray(data)) {
         conversations.value = data
+        hasMoreConversations.value = data.length >= 50
         if (data.length > 0) {
           let idToSelect: string = data[0].id
           if (targetId && data.some((c) => c.id === targetId)) {
@@ -146,18 +155,45 @@ export const useChatStore = defineStore('chat', () => {
           } else {
             currentConversationId.value = null
             messages.value = []
+            isLoadingMessages.value = false
           }
         }
         return
       }
     } catch (err) {
       console.warn('Backend listConversations failed:', err)
+      isLoadingMessages.value = false
+    } finally {
+      isLoadingConversations.value = false
     }
     if (targetId) {
       await selectConversation(targetId)
     } else if (conversations.value.length === 0) {
       currentConversationId.value = null
       messages.value = []
+      isLoadingMessages.value = false
+    }
+  }
+
+  async function loadMoreConversations() {
+    if (!hasMoreConversations.value || isLoadingConversations.value) return
+    isLoadingConversations.value = true
+    try {
+      const nextPage = conversationPage.value + 1
+      const data = await chatService.listConversations(nextPage, 50)
+      if (Array.isArray(data) && data.length > 0) {
+        const existingIds = new Set(conversations.value.map((c) => c.id))
+        const newItems = data.filter((c) => !existingIds.has(c.id))
+        conversations.value.push(...newItems)
+        conversationPage.value = nextPage
+        hasMoreConversations.value = data.length >= 50
+      } else {
+        hasMoreConversations.value = false
+      }
+    } catch (err) {
+      console.warn('loadMoreConversations failed:', err)
+    } finally {
+      isLoadingConversations.value = false
     }
   }
 
@@ -166,8 +202,14 @@ export const useChatStore = defineStore('chat', () => {
   // Each conversation keeps its own streaming state in convStreamStates.
   async function selectConversation(id: string) {
     if (!id) return
+    isLoadingMessages.value = true
     const savedActive = sessionStorage.getItem('active_streaming_conv')
     const isSavedStream = savedActive === id
+
+    // If switching to a different conversation, immediately clear messages so old chat does not linger
+    if (currentConversationId.value && currentConversationId.value !== id) {
+      messages.value = []
+    }
 
     // Simply switch the active conversation — do NOT abort background streams
     currentConversationId.value = id
@@ -192,79 +234,94 @@ export const useChatStore = defineStore('chat', () => {
       modelsStore.selectModel(conv.modelId)
     }
 
+    const isTestEnv =
+      (typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test') ||
+      (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test')
+    const minDelayMs = isTestEnv ? 0 : 500
+    const delayPromise =
+      minDelayMs > 0 ? new Promise((resolve) => setTimeout(resolve, minDelayMs)) : Promise.resolve()
+
     try {
-      const data = await chatService.getMessages(id)
-      if (Array.isArray(data)) {
-        messages.value = data
-      } else {
-        messages.value = []
-      }
-    } catch (err) {
-      console.warn('Backend getMessages failed:', err)
-      messages.value = []
-    }
-
-    // Check if the last message is a pending user turn awaiting reply
-    const lastMsg = messages.value[messages.value.length - 1]
-    const hasPendingUserTurn = lastMsg && lastMsg.role === 'user'
-
-    if (isSavedStream || hasPendingUserTurn) {
-      const s = ensureState(id)
-      s.isStreaming = true
-      s.isThinking = true
-      convStreamStates.value.set(id, { ...s })
-      sessionStorage.setItem('active_streaming_conv', id)
-      resetWatchdog(id, 35000)
-    }
-
-    // Check if there is an active background generation for this conv (e.g. after refresh)
-    if (!id.startsWith('c-') && typeof chatService.getActiveStream === 'function') {
       try {
-        const streamStatus = await chatService.getActiveStream(id)
-        if (streamStatus && streamStatus.active) {
-          const s = ensureState(id)
-          s.isStreaming = true
-          if (streamStatus.status === 'thinking' && !streamStatus.accumulatedText) {
-            s.isThinking = true
-            s.currentStreamingText = ''
-          } else {
-            s.isThinking = false
-            s.currentStreamingText = streamStatus.accumulatedText || ''
-          }
-          convStreamStates.value.set(id, { ...s })
-          if (streamStatus.title && conv) {
-            conv.title = streamStatus.title
-          }
-          reconnectToActiveStream(id)
+        const [data] = await Promise.all([
+          chatService.getMessages(id),
+          delayPromise
+        ])
+        if (Array.isArray(data)) {
+          messages.value = data
         } else {
-          // Stream is no longer active on backend
-          clearWatchdog(id)
-          const s = ensureState(id)
-          if (hasPendingUserTurn && !messages.value.some((m) => m.role === 'assistant' && new Date(m.createdAt) > new Date(lastMsg.createdAt))) {
-            s.isStreaming = false
-            s.isThinking = false
-            sessionStorage.removeItem('active_streaming_conv')
-            s.streamError = streamStatus?.status === 'error'
-              ? 'زمان انتظار برای دریافت پاسخ به پایان رسید (تایم‌اوت)'
-              : 'خطا در برقراری ارتباط با مدل هوش مصنوعی'
-          } else {
-            s.isStreaming = false
-            s.isThinking = false
-            sessionStorage.removeItem('active_streaming_conv')
-          }
-          convStreamStates.value.set(id, { ...s })
+          messages.value = []
         }
       } catch (err) {
-        if (isSavedStream || hasPendingUserTurn) {
-          clearWatchdog(id)
-          const s = ensureState(id)
-          s.isStreaming = false
-          s.isThinking = false
-          s.streamError = 'خطا در برقراری ارتباط با مدل هوش مصنوعی'
-          convStreamStates.value.set(id, { ...s })
-          sessionStorage.removeItem('active_streaming_conv')
+        await delayPromise
+        console.warn('Backend getMessages failed:', err)
+        messages.value = []
+      }
+
+      // Check if the last message is a pending user turn awaiting reply
+      const lastMsg = messages.value[messages.value.length - 1]
+      const hasPendingUserTurn = lastMsg && lastMsg.role === 'user'
+
+      if (isSavedStream || hasPendingUserTurn) {
+        const s = ensureState(id)
+        s.isStreaming = true
+        s.isThinking = true
+        convStreamStates.value.set(id, { ...s })
+        sessionStorage.setItem('active_streaming_conv', id)
+        resetWatchdog(id, 35000)
+      }
+
+      // Check if there is an active background generation for this conv (e.g. after refresh)
+      if (!id.startsWith('c-') && typeof chatService.getActiveStream === 'function') {
+        try {
+          const streamStatus = await chatService.getActiveStream(id)
+          if (streamStatus && streamStatus.active) {
+            const s = ensureState(id)
+            s.isStreaming = true
+            if (streamStatus.status === 'thinking' && !streamStatus.accumulatedText) {
+              s.isThinking = true
+              s.currentStreamingText = ''
+            } else {
+              s.isThinking = false
+              s.currentStreamingText = streamStatus.accumulatedText || ''
+            }
+            convStreamStates.value.set(id, { ...s })
+            if (streamStatus.title && conv) {
+              conv.title = streamStatus.title
+            }
+            reconnectToActiveStream(id)
+          } else {
+            // Stream is no longer active on backend
+            clearWatchdog(id)
+            const s = ensureState(id)
+            if (hasPendingUserTurn && !messages.value.some((m) => m.role === 'assistant' && new Date(m.createdAt) > new Date(lastMsg.createdAt))) {
+              s.isStreaming = false
+              s.isThinking = false
+              sessionStorage.removeItem('active_streaming_conv')
+              s.streamError = streamStatus?.status === 'error'
+                ? 'زمان انتظار برای دریافت پاسخ به پایان رسید (تایم‌اوت)'
+                : 'خطا در برقراری ارتباط با مدل هوش مصنوعی'
+            } else {
+              s.isStreaming = false
+              s.isThinking = false
+              sessionStorage.removeItem('active_streaming_conv')
+            }
+            convStreamStates.value.set(id, { ...s })
+          }
+        } catch (err) {
+          if (isSavedStream || hasPendingUserTurn) {
+            clearWatchdog(id)
+            const s = ensureState(id)
+            s.isStreaming = false
+            s.isThinking = false
+            s.streamError = 'خطا در برقراری ارتباط با مدل هوش مصنوعی'
+            convStreamStates.value.set(id, { ...s })
+            sessionStorage.removeItem('active_streaming_conv')
+          }
         }
       }
+    } finally {
+      isLoadingMessages.value = false
     }
   }
 
@@ -574,6 +631,15 @@ export const useChatStore = defineStore('chat', () => {
         sessionStorage.removeItem('active_streaming_conv')
 
         const rawMsg = typeof err === 'string' ? err : err?.message
+        const isLimit =
+          Boolean(rawMsg && (rawMsg.includes('سقف مجاز مصرف توکن') || rawMsg.includes('سقف مجاز') || rawMsg.includes('توکن'))) ||
+          err?.statusCode === 400
+
+        if (isLimit) {
+          isTokenLimitExceeded.value = true
+          uiStore.showToast('سقف مجاز مصرف توکن به پایان رسیده است.', 'error')
+        }
+
         const errorMessage =
           rawMsg &&
           !rawMsg.includes('Failed to fetch') &&
@@ -777,11 +843,28 @@ export const useChatStore = defineStore('chat', () => {
     finishStream(convId, `msg-${Date.now()}`, true, content)
   }
 
+  function clearStreamError() {
+    const convId = currentConversationId.value
+    if (convId) {
+      const s = convStreamStates.value.get(convId)
+      if (s) {
+        s.streamError = null
+        convStreamStates.value.set(convId, { ...s })
+      }
+    }
+    isTokenLimitExceeded.value = false
+  }
+
   return {
     conversations,
     currentConversationId,
     activeConversation,
     messages,
+    isLoadingConversations,
+    isLoadingMessages,
+    conversationPage,
+    hasMoreConversations,
+    isTokenLimitExceeded,
     // Computed aliases (backward-compatible)
     isStreaming,
     isThinking,
@@ -793,6 +876,7 @@ export const useChatStore = defineStore('chat', () => {
     getConvIsStreaming,
     // Actions
     loadConversations,
+    loadMoreConversations,
     selectConversation,
     reconnectToActiveStream,
     createNewConversation,

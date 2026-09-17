@@ -97,7 +97,7 @@ async function handleSubmit() {
             <img :src="activeLogo" alt="پروا" class="w-full h-full object-cover" />
           </div>
           <div class="text-start">
-            <span class="text-2xl font-bold tracking-tight text-foreground block leading-tight">پروا</span>
+            <span class="text-2xl font-bold tracking-tight text-foreground block leading-tight">پروا<span class="sr-only">PARVA</span></span>
           </div>
         </div>
 

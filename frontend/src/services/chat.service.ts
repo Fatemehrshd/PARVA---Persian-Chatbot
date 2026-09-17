@@ -18,8 +18,12 @@ export const chatService = {
    * List the current user's conversations.
    * GET /chat/conversations
    */
-  async listConversations(): Promise<Conversation[]> {
-    return request<Conversation[]>('/chat/conversations')
+  async listConversations(page?: number, limit?: number): Promise<Conversation[]> {
+    const params = new URLSearchParams()
+    if (page !== undefined) params.set('page', String(page))
+    if (limit !== undefined) params.set('limit', String(limit))
+    const qs = params.toString()
+    return request<Conversation[]>(`/chat/conversations${qs ? `?${qs}` : ''}`)
   },
 
   /**

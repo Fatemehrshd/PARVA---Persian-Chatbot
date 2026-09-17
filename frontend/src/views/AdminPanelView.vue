@@ -72,6 +72,8 @@ const users = ref<AdminUser[]>([])
 const stats = ref<AdminDashboardStats | null>(null)
 const conversations = ref<AdminConversationSummary[]>([])
 const isLoadingConversations = ref(false)
+const chatPage = ref(1)
+const chatLimit = ref(50)
 
 // Chat Inspection Modal State
 const isChatModalOpen = ref(false)
@@ -578,10 +580,14 @@ async function saveSystemPrompt() {
 }
 
 // Conversation viewer handlers
-async function loadConversations() {
+async function loadConversations(page = chatPage.value) {
   isLoadingConversations.value = true
+  chatPage.value = page
   try {
-    conversations.value = await adminService.listConversations()
+    conversations.value = await adminService.listConversations({
+      page: chatPage.value,
+      limit: chatLimit.value,
+    })
   } catch (err: any) {
     console.error('Failed to load conversations:', err)
   } finally {
@@ -1280,6 +1286,33 @@ onMounted(loadData)
             </td>
           </template>
         </AdminTable>
+
+        <!-- Pagination Controls for Chats Table -->
+        <div class="table-pagination-bar" v-if="filteredChats.length > 0 || chatPage > 1">
+          <div class="pagination-info">
+            <span>صفحه {{ chatPage.toLocaleString('fa-IR') }}</span>
+            <span class="pagination-subtext">(نمایش ۵۰ مورد در هر صفحه)</span>
+          </div>
+          <div class="pagination-actions">
+            <BaseButton
+              variant="ghost"
+              size="sm"
+              :disabled="chatPage <= 1 || isLoadingConversations"
+              @click="loadConversations(chatPage - 1)"
+            >
+              صفحه قبل
+            </BaseButton>
+            <span class="pagination-page-badge">{{ chatPage.toLocaleString('fa-IR') }}</span>
+            <BaseButton
+              variant="ghost"
+              size="sm"
+              :disabled="conversations.length < chatLimit || isLoadingConversations"
+              @click="loadConversations(chatPage + 1)"
+            >
+              صفحه بعد
+            </BaseButton>
+          </div>
+        </div>
       </section>
     </main>
 
@@ -2731,5 +2764,53 @@ onMounted(loadData)
   .form-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ────────────── Chats Table Pagination ────────────── */
+.table-pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding: 12px 18px;
+  background: color-mix(in srgb, var(--card) 95%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 13px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.pagination-subtext {
+  font-size: 11.5px;
+  color: var(--muted-foreground);
+  font-weight: normal;
+}
+
+.pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pagination-page-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
 }
 </style>

@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.1] - 2026-09-17
+
+### Added
+- **Paced Streaming & Auto-Scroll (`backend` & `frontend`)**:
+  - Implemented token pacing delay (~25ms cadence) in `chat.service.ts` for natural real-time streaming visualization, guarded by `process.env.NODE_ENV !== 'test'` to ensure automated tests run at maximum speed (0ms).
+  - Enhanced `MessageList.vue` with seamless auto-scroll tracking during active streaming responses while preserving user manual scroll position when navigating upwards.
+- **Branded Logo Loading State on Chat Switch / Open (`frontend`)**:
+  - Added `.chat-branded-loader` in `MessageList.vue` displaying the site's dynamic hummingbird logo (`useThemeLogo().activeLogo`) with a pulsating ambient glow and Persian subtitle ("در حال بارگذاری گفتگو...") while message history is loading (`chatStore.isLoadingMessages`).
+  - Enforced a minimum 500ms smooth display duration (`MIN_CHAT_LOAD_DELAY_MS = 500ms`, 0ms in test) so the loading state and logo pulse render beautifully without abrupt micro-flickers.
+  - Completely prevented the EmptyState welcome message from flashing during chat loading by keeping `isLoadingMessages = true` on view entrance and immediately clearing stale messages when switching conversations.
+- **Skeleton Placeholder in Sidebar (`frontend`)**:
+  - Added `.sb-skeleton-wrap` with 5 pulsing placeholder skeleton rows in `AppSidebar.vue` displayed when loading conversations (`chatStore.isLoadingConversations`).
+- **50-Item Pagination for Conversations (`backend` & `frontend`)**:
+  - Backend: Added `page` and `limit` pagination parameters to `GET /chat/conversations` (defaulting to 50 items per page with `skip: (page - 1) * take`) and `GET /admin/conversations`.
+  - Frontend User Sidebar: Added "بارگذاری گفتگوهای بیشتر..." button in `AppSidebar.vue` and `loadMoreConversations()` in `chat.ts` to seamlessly load and append older conversations.
+  - Frontend Admin Panel: Added `.table-pagination-bar` beneath the conversations table in `AdminPanelView.vue` with previous/next page navigation, active page badge, and 50-item indicator.
+- **User Token Limit Exceeded Feedback & Lockdown (`frontend`)**:
+  - Detected quota exhaustion (`سقف مجاز مصرف توکن`) in `chat.ts` to set `isTokenLimitExceeded`.
+  - Displayed a dedicated amber/red alert banner (`.stream-error-banner--limit`) above the composer without a futile retry button, informing the user to contact the administrator.
+  - Added red error badge ("خطا در ارسال پیام") beneath the failed message bubble in `MessageBubble.vue`.
+  - Locked composer textarea and disabled send button when token limit is exceeded.
+- **Provider / Model Configuration Separation**:
+  - Centralized API token and Base URL configuration at the Provider level, ensuring Model definitions only require the model identifier/name.
+
 ## [1.1.0] - 2026-09-16
 
 ### Added

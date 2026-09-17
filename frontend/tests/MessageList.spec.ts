@@ -162,4 +162,31 @@ describe('MessageList streaming scroll behavior', () => {
     await scrollBtn.trigger('click')
     expect(container.scrollTo).toHaveBeenCalled()
   })
-})
+
+  it('renders branded logo loader when isLoadingMessages is true', async () => {
+    const chatStore = useChatStore()
+    chatStore.currentConversationId = TEST_CONV_ID
+    chatStore.isLoadingMessages = true
+
+    const wrapper = mount(MessageList, {
+      global: {
+        stubs: {
+          EmptyState: true,
+          MessageBubble: true,
+          MarkdownContent: true,
+          ThinkingIndicator: true
+        }
+      }
+    })
+
+    const loader = wrapper.find('.chat-branded-loader')
+    expect(loader.exists()).toBe(true)
+    expect(loader.find('.loader-logo-img').exists()).toBe(true)
+    expect(loader.text()).toContain('در حال بارگذاری گفتگو...')
+
+    // When loading finishes, branded loader is removed
+    chatStore.isLoadingMessages = false
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.chat-branded-loader').exists()).toBe(false)
+  })
+})

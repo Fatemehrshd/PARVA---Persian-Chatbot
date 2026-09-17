@@ -109,6 +109,13 @@ function handleDocChange(e: Event) {
   }
 }
 
+function handlePaste(e: ClipboardEvent) {
+  if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
+    const files = Array.from(e.clipboardData.files)
+    addFiles(files)
+  }
+}
+
 function updateDirection() {
   inputDirection.value = getActiveTypingDirection(
     inputContent.value,
@@ -313,6 +320,7 @@ onUnmounted(() => {
           @keyup="handleCursorMove"
           @click="handleCursorMove"
           @select="handleCursorMove"
+          @paste="handlePaste"
         ></textarea>
 
         <div class="composer-footer">

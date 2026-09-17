@@ -137,7 +137,9 @@ export class ChatController {
     @Param('id') id: string,
     @Body(new ValidationPipe({ whitelist: true })) d: SendMsgDto,
   ) {
-    const gen = this.chat.generate(req.user.sub, id, d.content, d.fileIds);
+    const gen = this.chat.generate(req.user.sub, id, d.content, d.fileIds, {
+      useWebSearch: d.useWebSearch === true,
+    });
     const accept = (req.headers['accept'] as string) ?? '';
     if (accept.includes('application/json')) {
       // Buffer the whole stream: nothing has been written yet, so provider

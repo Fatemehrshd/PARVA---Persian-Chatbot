@@ -1,4 +1,4 @@
-import { IsString, IsOptional, MinLength, IsUUID, IsArray, ValidateIf } from 'class-validator';
+import { IsString, IsOptional, MinLength, IsUUID, IsArray, ValidateIf, IsBoolean } from 'class-validator';
 import { FA } from '../../shared/messages.fa';
 
 export class CreateConvDto {
@@ -31,4 +31,8 @@ export class SendMsgDto {
   @IsOptional()
   @IsArray()
   fileIds?: string[];
+
+  @IsOptional()
+  @IsBoolean({ message: 'گزینه جستجوی وب باید boolean باشد' })
+  useWebSearch?: boolean;
 }

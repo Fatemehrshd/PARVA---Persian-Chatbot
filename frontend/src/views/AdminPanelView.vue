@@ -712,7 +712,6 @@ onMounted(loadData)
           </svg>
           {{ labels.back }}
         </button>
-        <span class="admin-user-pill">{{ authStore.user?.email || 'admin' }}</span>
       </div>
     </aside>
 
@@ -1727,17 +1726,6 @@ onMounted(loadData)
 
 .admin-back {
   font-size: 12.5px;
-}
-
-.admin-user-pill {
-  overflow: hidden;
-  padding: 10px 14px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  color: var(--muted-foreground);
-  font: 11px var(--font-mono);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* Topbar */

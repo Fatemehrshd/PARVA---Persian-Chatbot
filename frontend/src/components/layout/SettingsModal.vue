@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   Sparkles,
 } from '@lucide/vue'
+import { Button } from '@/components/ui/button'
 import { useUiStore } from '../../stores/ui'
 import { useAuthStore } from '../../stores/auth'
 
@@ -45,11 +46,8 @@ function navigateToAdmin() {
           </div>
           <div>
             <h2 id="settings-dialog-title" class="text-base sm:text-lg font-semibold text-foreground leading-tight">
-              تنظیمات سامانه
+              تنظیمات
             </h2>
-            <p class="text-xs text-muted-foreground mt-0.5">
-              شخصی‌سازی ظاهر و تم برنامه
-            </p>
           </div>
         </div>
 
@@ -74,12 +72,9 @@ function navigateToAdmin() {
             <div class="flex items-center gap-2">
               <Palette :size="16" class="text-primary" />
               <label class="text-sm font-semibold text-foreground">
-                تم و رنگ‌بندی ظاهری
+                تم و رنگ‌بندی 
               </label>
             </div>
-            <span class="text-xs font-mono px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
-              {{ uiStore.theme === 'dark' ? 'تیره' : 'روشن' }}
-            </span>
           </div>
 
           <!-- Cards Grid -->
@@ -142,11 +137,7 @@ function navigateToAdmin() {
                   <div class="min-w-0">
                     <div class="text-xs sm:text-sm font-semibold text-foreground flex items-center gap-1.5">
                       <span>حالت تیره</span>
-                      <span class="text-[10px] font-normal text-muted-foreground">(Slate)</span>
                     </div>
-                    <p class="text-[11px] text-muted-foreground truncate">
-                      کنتراست نرم، حداقل خستگی چشم
-                    </p>
                   </div>
                 </div>
 
@@ -221,11 +212,7 @@ function navigateToAdmin() {
                   <div class="min-w-0">
                     <div class="text-xs sm:text-sm font-semibold text-foreground flex items-center gap-1.5">
                       <span>حالت روشن</span>
-                      <span class="text-[10px] font-normal text-muted-foreground">(Cream)</span>
                     </div>
-                    <p class="text-[11px] text-muted-foreground truncate">
-                      پالت کرم و گرم، شفاف و پرنور
-                    </p>
                   </div>
                 </div>
 
@@ -273,16 +260,10 @@ function navigateToAdmin() {
       </div>
 
       <!-- Footer -->
-      <div class="px-6 py-3.5 border-t border-border bg-surface-alt flex items-center justify-between">
-       
-
-        <button
-          type="button"
-          @click="uiStore.closeSettings"
-          class="px-4 py-1.5 rounded-lg bg-card hover:bg-secondary border border-border text-foreground text-xs font-medium transition-colors shadow-xs cursor-pointer"
-        >
-          تأیید و بستن
-        </button>
+      <div class="px-6 py-3.5 border-t border-border bg-surface-alt flex items-center justify-end">
+        <Button @click="uiStore.closeSettings">
+          تأیید
+        </Button>
       </div>
 
     </div>

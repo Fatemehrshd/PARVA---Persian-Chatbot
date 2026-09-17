@@ -16,7 +16,13 @@ interface ConvStreamState {
   abortController: AbortController | null
   watchdogTimer: ReturnType<typeof setTimeout> | null
   lastUserPrompt: string
+  charBuffer: string[]
+  releaseTimer: ReturnType<typeof setTimeout> | null
 }
+
+// Delay between rendered characters during streaming — slows the visual
+// reveal so the response feels more like a human is typing.
+const STREAM_CHAR_DELAY_MS = 22
 
 function makeDefaultState(): ConvStreamState {
   return {
@@ -27,6 +33,8 @@ function makeDefaultState(): ConvStreamState {
     abortController: null,
     watchdogTimer: null,
     lastUserPrompt: '',
+    charBuffer: [],
+    releaseTimer: null,
   }
 }
 
@@ -486,7 +494,25 @@ export const useChatStore = defineStore('chat', () => {
         streamedAny = true
         userMessage.status = 'sent'
         s.streamError = null
-        s.currentStreamingText += token
+        // Buffer the characters and release them slowly so the response
+        // streams in like a human is typing rather than dumping instantly.
+        if (token) {
+          s.charBuffer.push(...token.split(''))
+          if (!s.releaseTimer) {
+            const release = () => {
+              const cur = ensureState(convId)
+              if (cur.charBuffer.length > 0) {
+                cur.currentStreamingText += cur.charBuffer.shift()!
+                convStreamStates.value.set(convId, { ...cur })
+                cur.releaseTimer = setTimeout(release, STREAM_CHAR_DELAY_MS)
+              } else {
+                cur.releaseTimer = null
+                convStreamStates.value.set(convId, { ...cur })
+              }
+            }
+            s.releaseTimer = setTimeout(release, STREAM_CHAR_DELAY_MS)
+          }
+        }
         convStreamStates.value.set(convId, { ...s })
         resetWatchdog(convId, 25000)
 
@@ -832,6 +858,15 @@ export const useChatStore = defineStore('chat', () => {
     sessionStorage.removeItem('active_streaming_conv')
     const s = ensureState(convId)
     s.abortController = null
+    // Flush any pending streaming chars so the saved text isn't truncated.
+    if (s.charBuffer.length > 0) {
+      s.currentStreamingText += s.charBuffer.join('')
+      s.charBuffer = []
+      if (s.releaseTimer) {
+        clearTimeout(s.releaseTimer)
+        s.releaseTimer = null
+      }
+    }
     const textToSave = overrideContent !== undefined ? overrideContent : s.currentStreamingText
     if (textToSave) {
       // Only push to messages if this is the current conv (otherwise it would be stale)

@@ -2,7 +2,6 @@
 import {
   User,
   Palette,
-  Settings,
   ShieldCheck,
   LogOut,
   Moon,
@@ -33,19 +32,13 @@ const emit = defineEmits<{
       </button>
 
       <!-- Customization & Theme -->
-      <button class="menu-item" role="menuitem" >
+      <button class="menu-item" role="menuitem" @click="emit('openSettings')">
         <Palette :size="15" class="menu-icon text-primary" />
         <span class="menu-label">شخصی‌سازی و تم</span>
         <span class="theme-badge" :title="uiStore.theme === 'dark' ? 'حالت تیره' : 'حالت روشن'">
           <Moon v-if="uiStore.theme === 'dark'" :size="12" />
           <Sun v-else :size="12" />
         </span>
-      </button>
-
-      <!-- Settings -->
-      <button class="menu-item" role="menuitem" @click="emit('openSettings')">
-        <Settings :size="15" class="menu-icon" />
-        <span class="menu-label">تنظیمات </span>
       </button>
 
       <!-- Admin Panel (admin only) -->

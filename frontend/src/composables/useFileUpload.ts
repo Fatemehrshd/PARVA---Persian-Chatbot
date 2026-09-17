@@ -63,7 +63,7 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
     )
     const newTotalBytes = newFiles.reduce((sum, f) => sum + f.size, 0)
 
-    const ALLOWED_IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg']
+    const ALLOWED_IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.jfif', '.webp', '.gif', '.svg']
     const ALLOWED_DOC_EXTS = ['.pdf', '.xlsx', '.xls', '.csv']
     const ALL_ALLOWED_EXTS = [...ALLOWED_IMAGE_EXTS, ...ALLOWED_DOC_EXTS]
 
@@ -74,7 +74,7 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
       if (!hasValidExt || !isFileTypeSupported(f)) {
         return {
           valid: false,
-          message: `فرمت فایل «${f.name}» مجاز نیست. تنها فرمت‌های عکس (PNG, JPG, WEBP, GIF, SVG)، اسناد PDF و اکسل (XLSX, XLS, CSV) مجاز هستند.`,
+          message: `فرمت فایل «${f.name}» مجاز نیست. تنها فرمت‌های عکس (PNG, JPG, JFIF, WEBP, GIF, SVG)، اسناد PDF و اکسل (XLSX, XLS, CSV) مجاز هستند.`,
         }
       }
       if (f.size > limits.value.maxFileSizeBytes) {
@@ -97,7 +97,7 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
 
   function isFileTypeSupported(file: File): boolean {
     const name = file.name.toLowerCase()
-    const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(name)
+    const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|jfif|webp|gif|svg)$/i.test(name)
     const isPdf = file.type === 'application/pdf' || name.endsWith('.pdf')
     const isExcel =
       file.type.includes('spreadsheet') ||
@@ -110,7 +110,7 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
 
   function resolveFileType(file: File): 'image' | 'pdf' | 'excel' {
     const name = file.name.toLowerCase()
-    if (file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(name)) {
+    if (file.type.startsWith('image/') || /\.(png|jpe?g|jfif|webp|gif|svg)$/i.test(name)) {
       return 'image'
     }
     if (file.type === 'application/pdf' || name.endsWith('.pdf')) {

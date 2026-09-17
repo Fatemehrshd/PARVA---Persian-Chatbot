@@ -62,13 +62,13 @@ function handleImageChange(e: Event) {
     const files = Array.from(target.files)
     const nonImages = files.filter((f) => {
       const name = f.name.toLowerCase()
-      const isImg = f.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(name)
+      const isImg = f.type.startsWith('image/') || /\.(jpg|jpeg|jfif|png|webp|gif|svg)$/i.test(name)
       return !isImg
     })
 
     if (nonImages.length > 0) {
       uiStore.showToast(
-        `فایل «${nonImages[0].name}» تصویر نیست. در این بخش فقط فایل‌های عکس (PNG, JPG, WEBP, GIF, SVG) مجاز هستند.`,
+        `فایل «${nonImages[0].name}» تصویر نیست. در این بخش فقط فایل‌های عکس (PNG, JPG, JPEG, JFIF, WEBP, GIF, SVG) مجاز هستند.`,
         'error',
       )
       target.value = ''
@@ -265,7 +265,7 @@ onUnmounted(() => {
       <input
         ref="imageInputRef"
         type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.png,.jpg,.jpeg,.webp,.gif,.svg"
+        accept="image/png,image/jpeg,image/pjpeg,image/webp,image/gif,image/svg+xml,.png,.jpg,.jpeg,.jfif,.webp,.gif,.svg"
         multiple
         style="display: none"
         @change="handleImageChange"

@@ -60,9 +60,9 @@ export class FilesService {
   resolveFileType(mimeType: string, filename: string): FileAttachmentType {
     const lowerName = filename.toLowerCase();
 
-    // 1. Image formats: PNG, JPG, JPEG, WEBP, GIF, SVG
-    const isImageExt = /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(lowerName);
-    const isImageMime = mimeType.startsWith('image/');
+    // 1. Image formats: PNG, JPG, JPEG, JFIF, WEBP, GIF, SVG
+    const isImageExt = /\.(jpg|jpeg|jfif|png|webp|gif|svg)$/i.test(lowerName);
+    const isImageMime = mimeType.startsWith('image/') || mimeType === 'image/jpeg' || mimeType === 'image/pjpeg';
     if (isImageExt && (isImageMime || mimeType === 'application/octet-stream')) {
       return 'image';
     }
@@ -89,7 +89,7 @@ export class FilesService {
     }
 
     throw new BadRequestException(
-      'فرمت فایل انتخاب‌شده مجاز نیست. تنها فرمت‌های عکس (PNG, JPG, WEBP, GIF, SVG)، اسناد PDF و اکسل (XLSX, XLS, CSV) پشتیبانی می‌شوند.',
+      'فرمت فایل انتخاب‌شده مجاز نیست. تنها فرمت‌های عکس (PNG, JPG, JPEG, JFIF, WEBP, GIF, SVG)، اسناد PDF و اکسل (XLSX, XLS, CSV) پشتیبانی می‌شوند.',
     );
   }
 

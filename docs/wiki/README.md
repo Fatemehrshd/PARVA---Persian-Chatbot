@@ -11,6 +11,7 @@ Welcome to the project documentation wiki.
 - [Streaming Comprehensive Guide (README)](../STREAMING_README.md)
 - [Features History](features.md)
 - [Admin Panel Guide (راهنمای پنل مدیریت)](admin.md)
+- [SigNoz APM & Telemetry Guide (راهنمای سیگنوز)](signoz.md)
 - [Architectural Decisions (ADRs)](decisions.md)
 
 ## Development Workflow & Testing

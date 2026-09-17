@@ -16,6 +16,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { AdminGuard } from '../../shared/admin.guard';
 
+import { FileAttachment } from '../files/file-attachment.entity';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -25,6 +27,7 @@ import { AdminGuard } from '../../shared/admin.guard';
       Message,
       AiModel,
       AiProvider,
+      FileAttachment,
     ]),
     JwtModule.register({ secret: process.env.JWT_SECRET ?? 'dev-secret' }),
     UsersModule,

@@ -1,5 +1,14 @@
 import { request } from './api'
-import type { AdminDashboardStats, AdminUser, UpdateAdminUserRequest, AdminConversationSummary, AdminConversationDetail } from '../types'
+import type {
+  AdminDashboardStats,
+  AdminUser,
+  UpdateAdminUserRequest,
+  AdminConversationSummary,
+  AdminConversationDetail,
+  AdminFileListResponse,
+  AdminFileStats,
+  AdminFileDetail,
+} from '../types'
 
 export const adminService = {
   async getDashboardStats(): Promise<AdminDashboardStats> {
@@ -13,14 +22,14 @@ export const adminService = {
   async updateUser(userId: string, data: UpdateAdminUserRequest): Promise<AdminUser> {
     return request<AdminUser>(`/admin/users/${userId}`, {
       method: 'PATCH',
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     })
   },
 
   async updateUserStatus(userId: string, isActive: boolean): Promise<AdminUser> {
     return request<AdminUser>(`/admin/users/${userId}/status`, {
       method: 'PATCH',
-      body: JSON.stringify({ isActive })
+      body: JSON.stringify({ isActive }),
     })
   },
 
@@ -37,11 +46,16 @@ export const adminService = {
   }): Promise<{ globalTokenLimit: number; systemPrompt: string }> {
     return request<{ globalTokenLimit: number; systemPrompt: string }>('/admin/settings', {
       method: 'PUT',
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     })
   },
 
-  async listConversations(params?: { search?: string; userId?: string; page?: number; limit?: number }): Promise<AdminConversationSummary[]> {
+  async listConversations(params?: {
+    search?: string
+    userId?: string
+    page?: number
+    limit?: number
+  }): Promise<AdminConversationSummary[]> {
     const searchParams = new URLSearchParams()
     if (params?.search) searchParams.set('search', params.search)
     if (params?.userId) searchParams.set('userId', params.userId)
@@ -57,7 +71,45 @@ export const adminService = {
 
   async deleteConversation(id: string): Promise<void> {
     return request<void>(`/admin/conversations/${id}`, {
-      method: 'DELETE'
+      method: 'DELETE',
     })
-  }
+  },
+
+  // Files management
+  async getFileStats(): Promise<AdminFileStats> {
+    return request<AdminFileStats>('/admin/files/stats')
+  },
+
+  async listFiles(params?: {
+    page?: number
+    limit?: number
+    status?: string
+    search?: string
+    userId?: string
+  }): Promise<AdminFileListResponse> {
+    const searchParams = new URLSearchParams()
+    if (params?.page) searchParams.set('page', String(params.page))
+    if (params?.limit) searchParams.set('limit', String(params.limit))
+    if (params?.status) searchParams.set('status', params.status)
+    if (params?.search) searchParams.set('search', params.search)
+    if (params?.userId) searchParams.set('userId', params.userId)
+    const qs = searchParams.toString()
+    return request<AdminFileListResponse>(`/admin/files${qs ? `?${qs}` : ''}`)
+  },
+
+  async getFileDetail(id: string): Promise<AdminFileDetail> {
+    return request<AdminFileDetail>(`/admin/files/${id}`)
+  },
+
+  async retryFile(id: string): Promise<{ id: string; status: string; message: string }> {
+    return request<{ id: string; status: string; message: string }>(`/admin/files/${id}/retry`, {
+      method: 'POST',
+    })
+  },
+
+  async deleteFile(id: string): Promise<void> {
+    return request<void>(`/admin/files/${id}`, {
+      method: 'DELETE',
+    })
+  },
 }

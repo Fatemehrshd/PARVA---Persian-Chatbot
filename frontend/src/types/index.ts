@@ -250,3 +250,48 @@ export interface ApiErrorResponse {
   statusCode?: number
   error?: string
 }
+
+// ========================
+// Admin Files Schemas
+// ========================
+
+export interface AdminFileItem {
+  id: string
+  originalName: string
+  mimeType: string
+  fileType: 'image' | 'pdf' | 'excel' | 'text'
+  fileSize: number
+  status: 'uploading' | 'processing' | 'ready' | 'error'
+  errorMessage?: string
+  createdAt: string
+  updatedAt: string
+  conversationId?: string
+  messageId?: string
+  hasExtractedText: boolean
+  metadata?: Record<string, any>
+  user?: { id: string; email: string; displayName?: string } | null
+}
+
+export interface AdminFileListResponse {
+  items: AdminFileItem[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
+export interface AdminFileStats {
+  totalFiles: number
+  processingFiles: number
+  readyFiles: number
+  errorFiles: number
+  totalSizeBytes: number
+  totalSizeMb: number
+}
+
+export interface AdminFileDetail extends AdminFileItem {
+  extractedText?: string
+  minioKey?: string
+  conversationTitle?: string
+}
+

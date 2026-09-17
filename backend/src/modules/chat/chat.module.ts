@@ -10,15 +10,19 @@ import { OpenAiCompatController } from './openai-compat.controller';
 import { ModelsAdminModule } from '../models-admin/models-admin.module';
 import { AiModule } from '../ai/ai.module';
 import { AdminModule } from '../admin/admin.module';
-import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
+import { FileAttachment } from '../files/file-attachment.entity';
+import { FilesModule } from '../files/files.module';
 import { UsersModule } from '../users/users.module';
+import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
+
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Conversation, Message]),
+    TypeOrmModule.forFeature([Conversation, Message, FileAttachment]),
     ModelsAdminModule,
     AiModule,
     AdminModule,
     UsersModule,
+    FilesModule,
     JwtModule.register({ secret: process.env.JWT_SECRET ?? 'dev-secret' }),
   ],
   controllers: [ChatController, OpenAiCompatController],

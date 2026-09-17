@@ -100,8 +100,6 @@ const modelForm = ref({
   provider: '',
   providerId: '',
   apiIdentifier: '',
-  baseUrl: '',
-  apiKey: '',
   isActive: true,
 })
 
@@ -158,6 +156,9 @@ const PROMPT_PRESETS = [
 const settingsForm = ref({
   globalTokenLimit: 0,
   systemPrompt: '',
+  fileMaxSizeMb: 20,
+  fileMaxTotalSizeMb: 50,
+  fileMaxCount: 5,
 })
 
 // Persian Labels
@@ -320,8 +321,6 @@ function openModelEditor(model?: Model) {
       provider: model.provider,
       providerId: model.providerId || '',
       apiIdentifier: model.apiIdentifier,
-      baseUrl: model.baseUrl || '',
-      apiKey: '',
       isActive: model.isActive,
     }
   } else {
@@ -330,8 +329,6 @@ function openModelEditor(model?: Model) {
       provider: providers.value[0]?.name || '',
       providerId: providers.value[0]?.id || '',
       apiIdentifier: '',
-      baseUrl: '',
-      apiKey: '',
       isActive: true,
     }
   }
@@ -352,8 +349,6 @@ async function saveModel() {
       provider: provider?.name || modelForm.value.provider.trim(),
       providerId: provider?.id || undefined,
       apiIdentifier: modelForm.value.apiIdentifier.trim(),
-      baseUrl: modelForm.value.baseUrl.trim() || undefined,
-      apiKey: modelForm.value.apiKey.trim() || undefined,
       isActive: modelForm.value.isActive,
     }
 
@@ -528,6 +523,9 @@ function openSettingsEditor() {
   settingsForm.value = {
     globalTokenLimit: stats.value?.globalTokenLimit ?? 0,
     systemPrompt: stats.value?.systemPrompt ?? '',
+    fileMaxSizeMb: (stats.value as any)?.fileMaxSizeMb ?? 20,
+    fileMaxTotalSizeMb: (stats.value as any)?.fileMaxTotalSizeMb ?? 50,
+    fileMaxCount: (stats.value as any)?.fileMaxCount ?? 5,
   }
   settingsModalOpen.value = true
   errorMessage.value = ''
@@ -540,6 +538,9 @@ async function saveSettings() {
     const res = await adminService.updateSettings({
       globalTokenLimit: Number(settingsForm.value.globalTokenLimit) || 0,
       systemPrompt: settingsForm.value.systemPrompt.trim() || undefined,
+      fileMaxSizeMb: Number(settingsForm.value.fileMaxSizeMb) || 20,
+      fileMaxTotalSizeMb: Number(settingsForm.value.fileMaxTotalSizeMb) || 50,
+      fileMaxCount: Number(settingsForm.value.fileMaxCount) || 5,
     })
     if (stats.value) {
       stats.value.globalTokenLimit = res.globalTokenLimit
@@ -1307,20 +1308,6 @@ onMounted(loadData)
             <span class="field-label">{{ labels.apiId }} <span class="req">*</span></span>
             <input id="apiIdentifier" v-model="modelForm.apiIdentifier" class="mono" required :disabled="isSaving" />
           </label>
-          <label class="col-span-full">
-            <span class="field-label">{{ labels.baseUrl }}</span>
-            <input v-model="modelForm.baseUrl" class="mono" :disabled="isSaving" />
-          </label>
-          <label class="col-span-full">
-            <span class="field-label">{{ labels.apiKey }}</span>
-            <input
-              v-model="modelForm.apiKey"
-              type="password"
-              class="mono"
-              placeholder="در صورت عدم تغییر، خالی بگذارید"
-              :disabled="isSaving"
-            />
-          </label>
           <label class="toggle-label col-span-full">
             <BaseToggle v-model="modelForm.isActive" :disabled="isSaving" />
             <span>مدل در پلتفرم فعال باشد</span>
@@ -1462,6 +1449,41 @@ onMounted(loadData)
               placeholder="دستورالعمل سیستم را به زبان فارسی وارد کنید..."
               :disabled="isSaving"
             ></textarea>
+          </label>
+
+          <!-- File Upload Limits -->
+          <div class="col-span-full settings-section-divider">
+            <span class="settings-section-label">تنظیمات آپلود فایل</span>
+          </div>
+          <label>
+            <span class="field-label">حداکثر حجم هر فایل (مگابایت)</span>
+            <input
+              v-model.number="settingsForm.fileMaxSizeMb"
+              type="number"
+              min="1"
+              max="100"
+              :disabled="isSaving"
+            />
+          </label>
+          <label>
+            <span class="field-label">حداکثر مجموع حجم در هر پیام (مگابایت)</span>
+            <input
+              v-model.number="settingsForm.fileMaxTotalSizeMb"
+              type="number"
+              min="1"
+              max="500"
+              :disabled="isSaving"
+            />
+          </label>
+          <label>
+            <span class="field-label">حداکثر تعداد فایل در هر پیام</span>
+            <input
+              v-model.number="settingsForm.fileMaxCount"
+              type="number"
+              min="1"
+              max="20"
+              :disabled="isSaving"
+            />
           </label>
         </div>
         <div class="modal-actions">
@@ -2553,6 +2575,30 @@ onMounted(loadData)
   margin-top: 8px;
   padding-top: 16px;
   border-top: 1px solid var(--border);
+}
+
+.settings-section-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+  margin: 4px 0;
+}
+
+.settings-section-divider::before,
+.settings-section-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+
+.settings-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
 /* Provider Details Modal */

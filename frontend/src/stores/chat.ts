@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Conversation, Message } from '../types'
+import type { Conversation, Message, FileAttachmentItem } from '../types'
 import { chatService } from '../services/chat.service'
+import { filesService } from '../services/files.service'
 import { checkBackendHealth } from '../services/api'
 import { useModelsStore } from './models'
 import { useUiStore } from './ui'
@@ -35,6 +36,15 @@ function makeDefaultState(): ConvStreamState {
     charBuffer: [],
     releaseTimer: null,
   }
+}
+
+interface QueuedMessageJob {
+  id: string
+  convId: string
+  content: string
+  fileIds?: string[]
+  attachments?: FileAttachmentItem[]
+  userMessage: Message
 }
 
 export const useChatStore = defineStore('chat', () => {
@@ -426,102 +436,27 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  // ─── Send message ──────────────────────────────────────────────────────────
-  async function sendMessage(content: string) {
-    const convId_check = currentConversationId.value
-    const currentState = convId_check ? convStreamStates.value.get(convId_check) : null
-    if (!content.trim() || currentState?.isStreaming) return
+  // ─── Pending Message Queue (per-conversation) ────────────────────────────
+  const pendingMessageQueue = ref<Map<string, QueuedMessageJob[]>>(new Map())
 
-    if (!currentConversationId.value) {
-      const tempId = `c-${Date.now()}`
-      const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
-      const newConv: Conversation = {
-        id: tempId,
-        title: content.slice(0, 30),
-        modelId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-      conversations.value.unshift(newConv)
-      currentConversationId.value = tempId
-    }
+  function checkAndProcessQueue(convId: string) {
+    const queue = pendingMessageQueue.value.get(convId)
+    if (!queue || queue.length === 0) return
 
-    let convId = currentConversationId.value!
+    const nextJob = queue.shift()!
+    const targetMsg = messages.value.find((m) => m.id === nextJob.id) || nextJob.userMessage
+    targetMsg.status = 'sent'
 
-    // Track prompt immediately for retry capability
-    const state = ensureState(convId)
-    state.lastUserPrompt = content
-    convStreamStates.value.set(convId, { ...state })
+    executeMessageStream(convId, nextJob.content, targetMsg, nextJob.fileIds)
+  }
 
-    // Add user message immediately with sending status
-    const userMessage: Message = {
-      id: `msg-${Date.now()}`,
-      conversationId: convId,
-      role: 'user',
-      content: content.trim(),
-      createdAt: new Date().toISOString(),
-      status: 'sending'
-    }
-    messages.value.push(userMessage)
-
-    // Move this conversation to the top of the sidebar list whenever a new
-    // message lands in it — keeps the most-recently-active chat in view.
-    const convIndex = conversations.value.findIndex((c) => c.id === convId)
-    if (convIndex > 0) {
-      const [moved] = conversations.value.splice(convIndex, 1)
-      conversations.value.unshift(moved)
-    } else if (convIndex === -1) {
-      // Conversation isn't in the list yet (e.g. local placeholder from
-      // createNewConversation that hasn't been persisted). Skip — the conv
-      // join logic further down handles that case.
-    }
-
-    // Clear any previous transient stream error for this conversation
-    {
-      const s = ensureState(convId)
-      s.streamError = null
-      convStreamStates.value.set(convId, { ...s })
-    }
-
-    // Pre-flight health check
-    const isHealthy = await checkBackendHealth()
-    if (!isHealthy) {
-      userMessage.status = 'error'
-      const s = ensureState(convId)
-      s.streamError = 'خطا در برقراری ارتباط'
-      convStreamStates.value.set(convId, { ...s })
-      uiStore.showToast('خطا در برقراری ارتباط', 'error')
-      return
-    }
-
-    // Update conversation title if it's the first user message
-    const conv = conversations.value.find((c) => c.id === convId)
-    if (conv && (conv.title === 'گفتگوی جدید' || conv.title === 'New Chat')) {
-      conv.title = content.slice(0, 30) + (content.length > 30 ? '...' : '')
-    }
-
-    // If conversation is a local placeholder, persist it to backend
-    if (convId.startsWith('c-')) {
-      try {
-        const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
-        const created = await chatService.createConversation(modelId, conv?.title || content.slice(0, 30))
-        if (created && created.id) {
-          if (conv) conv.id = created.id
-          currentConversationId.value = created.id
-          userMessage.conversationId = created.id
-          // Move stream state to new ID
-          const oldState = convStreamStates.value.get(convId)
-          if (oldState) {
-            convStreamStates.value.delete(convId)
-            convStreamStates.value.set(created.id, oldState)
-          }
-          convId = created.id
-        }
-      } catch (err) {
-        console.warn('Could not persist conversation to backend before streaming:', err)
-      }
-    }
-
+  // ─── Execute streaming response for a message ──────────────────────────────
+  async function executeMessageStream(
+    convId: string,
+    content: string,
+    userMessage: Message,
+    fileIds?: string[]
+  ) {
     // Prepare streaming state
     {
       const s = ensureState(convId)
@@ -602,6 +537,7 @@ export const useChatStore = defineStore('chat', () => {
         convStreamStates.value.set(convId, { ...s })
         userMessage.status = 'sent'
         finishStream(convId, messageId)
+        checkAndProcessQueue(convId)
       },
       async (err: any) => {
         clearWatchdog(convId)
@@ -634,6 +570,8 @@ export const useChatStore = defineStore('chat', () => {
           s.currentStreamingText = ''
           convStreamStates.value.set(convId, { ...s })
         }
+
+        checkAndProcessQueue(convId)
       },
       abortCtrl.signal,
       (newTitle: string) => {
@@ -651,8 +589,267 @@ export const useChatStore = defineStore('chat', () => {
         s.currentStreamingText = syncText
         convStreamStates.value.set(convId, { ...s })
         resetWatchdog(convId, 25000)
-      }
+      },
+      fileIds
     )
+  }
+
+  // ─── Poll files until ready then dispatch ──────────────────────────────────
+  function waitForFilesReadyAndDispatch(
+    convId: string,
+    userMessage: Message,
+    content: string,
+    fileList: FileAttachmentItem[]
+  ) {
+    let attempts = 0
+    const maxAttempts = 60
+    const timer = setInterval(async () => {
+      attempts++
+      let allReady = true
+      let anyError = false
+
+      for (const file of fileList) {
+        if (file.status === 'ready') continue
+        try {
+          const res = await filesService.getFileStatus(file.id)
+          file.status = res.status
+          file.errorMessage = res.errorMessage
+          if (res.status === 'error') anyError = true
+          if (res.status !== 'ready') allReady = false
+        } catch {
+          allReady = false
+        }
+      }
+
+      if (anyError) {
+        clearInterval(timer)
+        userMessage.status = 'error'
+        uiStore.showToast('خطا در پردازش فایل‌های پیوست', 'error')
+        return
+      }
+
+      if (allReady) {
+        clearInterval(timer)
+        const currentState = convStreamStates.value.get(convId)
+        if (currentState?.isStreaming) {
+          userMessage.status = 'queued'
+          if (!pendingMessageQueue.value.has(convId)) {
+            pendingMessageQueue.value.set(convId, [])
+          }
+          pendingMessageQueue.value.get(convId)!.push({
+            id: userMessage.id,
+            convId,
+            content,
+            fileIds: fileList.map((f) => f.id),
+            attachments: fileList,
+            userMessage,
+          })
+        } else {
+          userMessage.status = 'sent'
+          executeMessageStream(convId, content, userMessage, fileList.map((f) => f.id))
+        }
+      } else if (attempts >= maxAttempts) {
+        clearInterval(timer)
+        userMessage.status = 'error'
+        uiStore.showToast('زمان پردازش فایل‌ها به پایان رسید', 'error')
+      }
+    }, 2000)
+  }
+
+  // ─── Send message ──────────────────────────────────────────────────────────
+  async function sendMessage(content: string, files?: FileAttachmentItem[]) {
+    if (!content.trim() && (!files || files.length === 0)) return
+
+    const currentActiveState = currentConversationId.value ? convStreamStates.value.get(currentConversationId.value) : null
+    if (currentActiveState?.isStreaming || currentActiveState?.isThinking) {
+      uiStore.showToast('در حال دریافت پاسخ، امکان ارسال پیام جدید وجود ندارد', 'warning')
+      return
+    }
+
+    if (!currentConversationId.value) {
+      const tempId = `c-${Date.now()}`
+      const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
+      const newConv: Conversation = {
+        id: tempId,
+        title: content.slice(0, 30) || 'گفتگوی جدید',
+        modelId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+      conversations.value.unshift(newConv)
+      currentConversationId.value = tempId
+    }
+
+    let convId = currentConversationId.value!
+
+    const fileList = files && files.length > 0 ? [...files] : undefined
+    const fileIds = fileList ? fileList.map((f) => f.id) : undefined
+
+    // Track prompt immediately for retry capability
+    const state = ensureState(convId)
+    state.lastUserPrompt = content
+    convStreamStates.value.set(convId, { ...state })
+
+    // Add user message immediately
+    const userMessage: Message = {
+      id: `msg-${Date.now()}`,
+      conversationId: convId,
+      role: 'user',
+      content: content.trim(),
+      createdAt: new Date().toISOString(),
+      status: 'sent',
+      attachments: fileList,
+      fileIds,
+    }
+    messages.value.push(userMessage)
+
+    // Clear any previous transient stream error for this conversation
+    {
+      const s = ensureState(convId)
+      s.streamError = null
+      convStreamStates.value.set(convId, { ...s })
+    }
+
+    // Pre-flight health check
+    const isHealthy = await checkBackendHealth()
+    if (!isHealthy) {
+      userMessage.status = 'error'
+      const s = ensureState(convId)
+      s.streamError = 'خطا در برقراری ارتباط'
+      convStreamStates.value.set(convId, { ...s })
+      uiStore.showToast('خطا در برقراری ارتباط', 'error')
+      return
+    }
+
+    // Update conversation title if it's the first user message
+    const conv = conversations.value.find((c) => c.id === convId)
+    if (conv && (conv.title === 'گفتگوی جدید' || conv.title === 'New Chat')) {
+      conv.title = content.slice(0, 30) + (content.length > 30 ? '...' : '')
+    }
+
+    // If conversation is a local placeholder, persist it to backend
+    if (convId.startsWith('c-')) {
+      try {
+        const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
+        const created = await chatService.createConversation(modelId, conv?.title || content.slice(0, 30))
+        if (created && created.id) {
+          if (conv) conv.id = created.id
+          currentConversationId.value = created.id
+          userMessage.conversationId = created.id
+          // Move stream state to new ID
+          const oldState = convStreamStates.value.get(convId)
+          if (oldState) {
+            convStreamStates.value.delete(convId)
+            convStreamStates.value.set(created.id, oldState)
+          }
+          const oldQueue = pendingMessageQueue.value.get(convId)
+          if (oldQueue) {
+            pendingMessageQueue.value.delete(convId)
+            pendingMessageQueue.value.set(created.id, oldQueue)
+          }
+          convId = created.id
+        }
+      } catch (err) {
+        console.warn('Could not persist conversation to backend before streaming:', err)
+      }
+    }
+
+    // 1. Check if attached files are still processing
+    const hasProcessing = fileList && fileList.some((f) => f.status === 'processing')
+    if (hasProcessing) {
+      userMessage.status = 'processing_files'
+      waitForFilesReadyAndDispatch(convId, userMessage, content, fileList)
+      return
+    }
+
+    // 2. Check if currently streaming or thinking
+    const currentState = convStreamStates.value.get(convId)
+    if (currentState?.isStreaming || currentState?.isThinking) {
+      uiStore.showToast('در حال دریافت پاسخ، امکان ارسال پیام جدید وجود ندارد', 'warning')
+      return
+    }
+
+    // 3. Dispatch stream immediately
+    await executeMessageStream(convId, content, userMessage, fileIds)
+  }
+
+  // ─── Retry failed file in message ──────────────────────────────────────────
+  async function retryFailedMessageFile(messageId: string, fileId: string) {
+    const msg = messages.value.find((m) => m.id === messageId)
+    if (!msg || !msg.attachments) return
+
+    const targetFile = msg.attachments.find((f) => f.id === fileId)
+    if (!targetFile) return
+
+    targetFile.status = 'processing'
+    targetFile.errorMessage = undefined
+    msg.status = 'processing_files'
+
+    try {
+      await filesService.retryFile(fileId)
+      waitForFilesReadyAndDispatch(msg.conversationId, msg, msg.content, msg.attachments)
+    } catch (err: any) {
+      targetFile.status = 'error'
+      msg.status = 'error'
+      uiStore.showToast(err?.message || 'خطا در تلاش مجدد فایل', 'error')
+    }
+  }
+
+  // ─── Remove failed file and send without it ────────────────────────────────
+  async function removeMessageFileAndSend(messageId: string, fileId: string) {
+    const msg = messages.value.find((m) => m.id === messageId)
+    if (!msg) return
+
+    if (msg.attachments) {
+      msg.attachments = msg.attachments.filter((f) => f.id !== fileId)
+      msg.fileIds = msg.attachments.map((f) => f.id)
+    }
+
+    // Delete file from backend
+    filesService.deleteFile(fileId).catch(() => {})
+
+    // If remaining files are still processing, keep waiting
+    const hasRemainingProcessing = msg.attachments && msg.attachments.some((f) => f.status === 'processing')
+    if (hasRemainingProcessing && msg.attachments) {
+      msg.status = 'processing_files'
+      waitForFilesReadyAndDispatch(msg.conversationId, msg, msg.content, msg.attachments)
+      return
+    }
+
+    // Otherwise dispatch stream
+    const convId = msg.conversationId
+    const currentState = convStreamStates.value.get(convId)
+    if (currentState?.isStreaming) {
+      msg.status = 'queued'
+      if (!pendingMessageQueue.value.has(convId)) {
+        pendingMessageQueue.value.set(convId, [])
+      }
+      pendingMessageQueue.value.get(convId)!.push({
+        id: msg.id,
+        convId,
+        content: msg.content,
+        fileIds: msg.fileIds,
+        attachments: msg.attachments,
+        userMessage: msg,
+      })
+    } else {
+      msg.status = 'sent'
+      await executeMessageStream(convId, msg.content, msg, msg.fileIds)
+    }
+  }
+
+  // ─── Soft Delete Message ───────────────────────────────────────────────────
+  async function deleteMessage(messageId: string) {
+    const convId = currentConversationId.value
+    messages.value = messages.value.filter((m) => m.id !== messageId)
+    uiStore.showToast('حذف شد', 'success')
+    if (convId && !convId.startsWith('c-')) {
+      try {
+        await chatService.deleteMessage(convId, messageId)
+      } catch (err) {
+        console.warn('Backend deleteMessage failed:', err)
+      }
+    }
   }
 
   // ─── Finish stream ─────────────────────────────────────────────────────────
@@ -705,11 +902,14 @@ export const useChatStore = defineStore('chat', () => {
     if (!convId) return
 
     const s = convStreamStates.value.get(convId)
+    const lastUserMsg = [...messages.value].reverse().find((m) => m.role === 'user')
     const promptToRetry =
-      s?.lastUserPrompt?.trim() ||
-      [...messages.value].reverse().find((m) => m.role === 'user')?.content?.trim()
+      s?.lastUserPrompt?.trim()
+        ? s.lastUserPrompt
+        : (lastUserMsg?.content || '')
+    const filesToRetry = lastUserMsg?.attachments ? [...lastUserMsg.attachments] : undefined
 
-    if (!promptToRetry) return
+    if (!promptToRetry.trim() && (!filesToRetry || filesToRetry.length === 0)) return
 
     // Clear transient error & abort any hanging controller / watchdog
     clearWatchdog(convId)
@@ -735,15 +935,15 @@ export const useChatStore = defineStore('chat', () => {
       }
     }
 
-    // Remove trailing user message so sendMessage can re-add it cleanly
+    // Remove trailing user message so sendMessage can re-add it cleanly with its attachments preserved
     if (messages.value.length > 0 && messages.value[messages.value.length - 1].role === 'user') {
       const last = messages.value[messages.value.length - 1]
-      if (last.content.trim() === promptToRetry) {
+      if (last.id === lastUserMsg?.id || last.content.trim() === promptToRetry.trim()) {
         messages.value.pop()
       }
     }
 
-    await sendMessage(promptToRetry)
+    await sendMessage(promptToRetry, filesToRetry)
   }
 
   // ─── Resume interrupted message ────────────────────────────────────────────
@@ -844,13 +1044,17 @@ export const useChatStore = defineStore('chat', () => {
     reconnectToActiveStream,
     createNewConversation,
     deleteConversation,
+    deleteMessage,
     updateConversationTitle,
     switchConversationModel,
     sendMessage,
+    retryFailedMessageFile,
+    removeMessageFileAndSend,
     retryLastMessage,
     continueLastMessage,
     resumeInterruptedMessage,
     stopStreaming,
-    clearStreamError
+    clearStreamError,
+    pendingMessageQueue
   }
 })

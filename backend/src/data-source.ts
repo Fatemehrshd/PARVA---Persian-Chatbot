@@ -13,6 +13,7 @@ import { Message } from './modules/chat/message.entity';
 import { AiModel } from './modules/models-admin/ai-model.entity';
 import { AiProvider } from './modules/models-admin/ai-provider.entity';
 import { SystemSetting } from './modules/admin/system-setting.entity';
+import { FileAttachment } from './modules/files/file-attachment.entity';
 
 export default new DataSource({
   type: 'postgres',
@@ -21,7 +22,7 @@ export default new DataSource({
   username: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASS || 'postgres',
   database: process.env.DB_NAME || 'codeless',
-  entities: [User, Conversation, Message, AiModel, AiProvider, SystemSetting],
+  entities: [User, Conversation, Message, AiModel, AiProvider, SystemSetting, FileAttachment],
   migrations: [__dirname + '/migrations/*{.ts,.js}'],
   synchronize: false,
 });

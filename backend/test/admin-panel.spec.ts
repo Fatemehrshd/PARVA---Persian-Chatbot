@@ -310,10 +310,12 @@ describe('Admin Panel Suite', () => {
           return null;
         },
         delete: async () => ({ affected: 1 }),
+        save: async (entity: any) => entity,
       },
       messages: {
         count: async () => 25,
         find: async () => [],
+        update: async () => ({ affected: 1 }),
       },
     };
 

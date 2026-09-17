@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Conversation } from './conversation.entity';
 import { Message } from './message.entity';
+import { FileAttachment } from '../files/file-attachment.entity';
 import { ModelsAdminService } from '../models-admin/models-admin.service';
 import { OpenAiCompatForwarder, ChatMessage } from '../ai/openai-compat.forwarder';
 import { SettingsService } from '../admin/settings.service';
@@ -32,10 +33,11 @@ export class ChatService {
     @Optional() private settings?: SettingsService,
     @Optional() private users?: UsersService,
     @Optional() private activeStream?: ActiveStreamService,
+    @Optional() @InjectRepository(FileAttachment) private fileRepo?: Repository<FileAttachment>,
   ) {}
 
   list(userId: string) {
-    return this.conv.find({ where: { userId }, order: { updatedAt: 'DESC' } });
+    return this.conv.find({ where: { userId, isDeleted: false }, order: { updatedAt: 'DESC' } });
   }
 
   async create(userId: string, modelId?: string, title?: string) {
@@ -78,7 +80,7 @@ export class ChatService {
   async assertOwned(userId: string, id: string) {
     let c;
     try {
-      c = await this.conv.findOne({ where: { id, userId } });
+      c = await this.conv.findOne({ where: { id, userId, isDeleted: false } });
     } catch (err: any) {
       if (err?.code === '22P02') {
         throw new NotFoundException('Resource not found');
@@ -91,14 +93,31 @@ export class ChatService {
 
   history(userId: string, id: string) {
     return this.assertOwned(userId, id).then(() =>
-      this.msg.find({ where: { conversationId: id }, order: { createdAt: 'ASC' } }),
+      this.msg.find({
+        where: { conversationId: id, isDeleted: false },
+        relations: ['attachments'],
+        order: { createdAt: 'ASC' },
+      }),
     );
   }
 
   async delete(userId: string, id: string): Promise<void> {
+    const c = await this.assertOwned(userId, id);
+    c.isDeleted = true;
+    await this.conv.save(c);
+    if (typeof this.msg.update === 'function') {
+      await this.msg.update({ conversationId: id }, { isDeleted: true });
+    }
+  }
+
+  async deleteMessage(userId: string, id: string, messageId: string): Promise<void> {
     await this.assertOwned(userId, id);
-    await this.msg.delete({ conversationId: id });
-    await this.conv.delete(id);
+    const m = await this.msg.findOne({
+      where: { id: messageId, conversationId: id, isDeleted: false },
+    });
+    if (!m) throw new NotFoundException('پیام یافت نشد');
+    m.isDeleted = true;
+    await this.msg.save(m);
   }
 
   async updateTitle(userId: string, id: string, title: string) {
@@ -162,7 +181,12 @@ export class ChatService {
    * ONLY for environments without any configured credential (dev/tests);
    * once a key exists, provider failures surface instead of echoing.
    */
-  async *generate(userId: string, id: string, content: string): AsyncGenerator<ChatChunk> {
+  async *generate(
+    userId: string,
+    id: string,
+    content: string,
+    fileIds?: string[],
+  ): AsyncGenerator<ChatChunk> {
     const conversation = await this.assertOwned(userId, id);
 
     // Two-tier token quota enforcement (User-specific limit overrides global limit)
@@ -220,14 +244,15 @@ export class ChatService {
     let existingMsgCount = 0;
     if (typeof this.msg.count === 'function') {
       try {
-        existingMsgCount = await this.msg.count({ where: { conversationId: id } });
+        existingMsgCount = await this.msg.count({ where: { conversationId: id, isDeleted: false } });
       } catch {
         existingMsgCount = 0;
       }
     }
     const shouldGenerateTitle = isDefaultTitle && existingMsgCount === 0;
 
-    const session = this.activeStream?.startSession(id, userId, content);
+    const rawContent = (content || '').trim();
+    const session = this.activeStream?.startSession(id, userId, rawContent);
 
     // If the last message in DB is already an unanswered user message with the exact same content (e.g. from retry),
     // avoid saving duplicate user messages in DB.
@@ -235,7 +260,7 @@ export class ChatService {
     if (typeof this.msg.findOne === 'function') {
       try {
         lastMsg = await this.msg.findOne({
-          where: { conversationId: id },
+          where: { conversationId: id, isDeleted: false },
           order: { createdAt: 'DESC' },
         });
       } catch {
@@ -243,18 +268,45 @@ export class ChatService {
       }
     }
 
-    if (!lastMsg || lastMsg.role !== 'user' || lastMsg.content !== content) {
-      await this.msg.save(this.msg.create({ conversationId: id, role: 'user', content }));
+    let savedUserMsg: Message | null = null;
+    if (!lastMsg || lastMsg.role !== 'user' || lastMsg.content !== rawContent) {
+      savedUserMsg = await this.msg.save(this.msg.create({ conversationId: id, role: 'user', content: rawContent }));
+    } else {
+      savedUserMsg = lastMsg;
+    }
+
+    let effectiveContent = rawContent || (fileIds?.length ? 'لطفاً فایل(های) پیوست‌شده را بررسی و تحلیل کن.' : '');
+    const imageAttachments: FileAttachment[] = [];
+
+    if (fileIds && fileIds.length > 0 && this.fileRepo && savedUserMsg) {
+      for (const fid of fileIds) {
+        await this.fileRepo.update(
+          { id: fid, userId },
+          { messageId: savedUserMsg.id, conversationId: id },
+        );
+      }
+
+      const attachments = await this.fileRepo.find({
+        where: fileIds.map((fid) => ({ id: fid, userId, isDeleted: false })),
+      });
+
+      for (const att of attachments) {
+        if (att.fileType === 'image') {
+          imageAttachments.push(att);
+        } else if (att.extractedText) {
+          effectiveContent += `\n\n[محتوای استخراج‌شده از فایل پیوست "${att.originalName}":]\n${att.extractedText}`;
+        }
+      }
     }
 
     const target = this.forwarder.resolveTarget(model, provider);
-    const titlePromise = shouldGenerateTitle ? this.generateTitle(target, content) : null;
+    const titlePromise = shouldGenerateTitle ? this.generateTitle(target, rawContent || 'تحلیل فایل پیوست') : null;
 
     if (!target) {
       this.logger.warn(
         'No API key configured for the resolved model/provider (and no global OPENAI_API_KEY) — using offline echo fallback.',
       );
-      const full = `Echo: ${content}`;
+      const full = `Echo: ${effectiveContent}`;
       for (const w of full.split(/(\s+)/)) {
         if (w) {
           this.activeStream?.appendToken(id, w);
@@ -291,17 +343,34 @@ export class ChatService {
     }
 
     const history = await this.msg.find({
-      where: { conversationId: id },
+      where: { conversationId: id, isDeleted: false },
       order: { createdAt: 'ASC' },
       take: HISTORY_LIMIT,
     });
     const activeSystemPrompt = this.settings
       ? await this.settings.getSystemPrompt()
       : SYSTEM_PROMPT;
+
+    const historyWithoutLast = history.length > 0 ? history.slice(0, -1) : [];
     const messages: ChatMessage[] = [
       { role: 'system', content: activeSystemPrompt },
-      ...history.map((m) => ({ role: m.role, content: m.content })),
+      ...historyWithoutLast.map((m) => ({ role: m.role, content: m.content })),
     ];
+
+    if (imageAttachments.length > 0) {
+      const visionParts: any[] = [{ type: 'text', text: effectiveContent }];
+      for (const img of imageAttachments) {
+        if (img.metadata?.dataUrl) {
+          visionParts.push({
+            type: 'image_url',
+            image_url: { url: img.metadata.dataUrl },
+          });
+        }
+      }
+      messages.push({ role: 'user', content: visionParts });
+    } else {
+      messages.push({ role: 'user', content: effectiveContent });
+    }
 
     let full = '';
     let savedAssistant: Message | null = null;
@@ -588,6 +657,7 @@ export class ChatService {
     const titleMatches = await this.conv
       .createQueryBuilder('c')
       .where('c.userId = :userId', { userId })
+      .andWhere('c.isDeleted = false')
       .andWhere('c.title ILIKE :q', { q: `%${q}%` })
       .orderBy('c.updatedAt', 'DESC')
       .take(20)
@@ -598,6 +668,8 @@ export class ChatService {
       .createQueryBuilder('m')
       .innerJoin(Conversation, 'c', 'c.id = m.conversationId')
       .where('c.userId = :userId', { userId })
+      .andWhere('c.isDeleted = false')
+      .andWhere('m.isDeleted = false')
       .andWhere('m.content ILIKE :q', { q: `%${q}%` })
       .select([
         'm.id AS "msgId"',

@@ -5,6 +5,7 @@ import { useAuthStore } from '../../stores/auth'
 import { useChatStore } from '../../stores/chat'
 import { getTextDirection, getLineDirection } from '../../utils/textDirection'
 import MarkdownContent from './MarkdownContent.vue'
+import FilePreviewCard from './FilePreviewCard.vue'
 
 const props = defineProps<{
   message: Message
@@ -14,6 +15,25 @@ const props = defineProps<{
 const authStore = useAuthStore()
 const chatStore = useChatStore()
 const copied = ref(false)
+
+function handleRetryFiles() {
+  if (props.message.attachments) {
+    for (const f of props.message.attachments) {
+      if (f.status === 'error' || f.status === 'processing') {
+        chatStore.retryFailedMessageFile(props.message.id, f.id)
+      }
+    }
+  }
+}
+
+function handleRemoveFilesAndSend() {
+  if (props.message.attachments) {
+    const errorFiles = props.message.attachments.filter((f) => f.status === 'error')
+    for (const f of errorFiles) {
+      chatStore.removeMessageFileAndSend(props.message.id, f.id)
+    }
+  }
+}
 
 const isUser = computed(() => props.message.role === 'user')
 const textDirection = computed(() => getTextDirection(props.message.content))
@@ -98,8 +118,23 @@ function copyContent() {
         ]"
         :dir="textDirection"
       >
+        <!-- Attachments if any -->
+        <div
+          v-if="isUser && message.attachments && message.attachments.length > 0"
+          class="message-attachments flex flex-wrap gap-2"
+          :class="{ 'mb-3': !!props.message.content?.trim() }"
+        >
+          <FilePreviewCard
+            v-for="file in message.attachments"
+            :key="file.id"
+            :file="file"
+            read-only
+            compact
+          />
+        </div>
+
         <!-- User: Plain text with per-line hybrid directional alignment -->
-        <div v-if="isUser" class="message-text leading-relaxed text-[14px] md:text-[15px] space-y-0.5">
+        <div v-if="isUser && props.message.content?.trim()" class="message-text leading-relaxed text-[14px] md:text-[15px] space-y-0.5">
           <div
             v-for="(line, idx) in userMessageLines"
             :key="idx"
@@ -113,6 +148,43 @@ function copyContent() {
         <!-- Assistant: Rich Markdown -->
         <div v-else class="message-text">
           <MarkdownContent :content="message.content" />
+        </div>
+      </div>
+
+      <!-- Subtitle / Processing status for user message -->
+      <div v-if="isUser && message.status === 'processing_files'" class="user-status-subtitle flex items-center gap-1.5 mt-1.5 px-1 text-xs text-muted-foreground animate-pulse">
+        <svg class="w-3.5 h-3.5 animate-spin text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+          <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+        </svg>
+        <span>در حال پردازش فایل...</span>
+      </div>
+
+      <div v-else-if="isUser && message.status === 'queued'" class="user-status-subtitle flex items-center gap-1.5 mt-1.5 px-1 text-xs text-muted-foreground">
+        <svg class="w-3.5 h-3.5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span>در انتظار ارسال…</span>
+      </div>
+
+      <div v-else-if="isUser && message.status === 'error'" class="user-status-error flex flex-col gap-1.5 mt-2 px-1">
+        <span class="text-xs text-destructive font-medium">خطا در پردازش فایل‌های پیوست</span>
+        <div class="flex items-center gap-2 mt-1">
+          <button
+            type="button"
+            class="px-2.5 py-1 text-xs rounded-md bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer"
+            @click="handleRetryFiles"
+          >
+            تلاش مجدد پردازش
+          </button>
+          <button
+            type="button"
+            class="px-2.5 py-1 text-xs rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors cursor-pointer"
+            @click="handleRemoveFilesAndSend"
+          >
+            حذف فایل و ارسال بدون آن
+          </button>
         </div>
       </div>
 

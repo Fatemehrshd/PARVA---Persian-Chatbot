@@ -12,7 +12,6 @@ import {
   Trash2,
   ChevronUp,
   LogIn,
-  Settings,
 } from '@lucide/vue'
 import { useUiStore } from '../../stores/ui'
 import { useChatStore } from '../../stores/chat'

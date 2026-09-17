@@ -65,7 +65,9 @@ describe('Network Resilience and Recovery Actions', () => {
       currentStreamingText: 'این یک پاسخ نیمه...',
       abortController: null,
       watchdogTimer: null,
-      lastUserPrompt: ''
+      lastUserPrompt: '',
+      charBuffer: [],
+      releaseTimer: null
     })
 
     chatStore.stopStreaming()
@@ -100,7 +102,8 @@ describe('Network Resilience and Recovery Actions', () => {
     chatStore.convStreamStates.set('conv-with-err', {
       isStreaming: false, isThinking: false,
       streamError: 'خطا در برقراری ارتباط',
-      currentStreamingText: '', abortController: null, watchdogTimer: null, lastUserPrompt: ''
+      currentStreamingText: '', abortController: null, watchdogTimer: null, lastUserPrompt: '',
+      charBuffer: [], releaseTimer: null
     })
 
     chatStore.selectConversation('conv-new')
@@ -127,7 +130,8 @@ describe('Network Resilience and Recovery Actions', () => {
       isStreaming: false, isThinking: false,
       streamError: 'زمان انتظار برای دریافت پاسخ به پایان رسید (تایم‌اوت)',
       currentStreamingText: '', abortController: null, watchdogTimer: null,
-      lastUserPrompt: '' // empty, e.g. after full page reload
+      lastUserPrompt: '', // empty, e.g. after full page reload
+      charBuffer: [], releaseTimer: null
     })
     chatStore.messages = [
       {

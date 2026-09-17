@@ -170,9 +170,6 @@ watch(
             <DialogTitle class="profile-modal-title">
               نمایه کاربری
             </DialogTitle>
-            <DialogDescription class="profile-modal-description">
-              اطلاعات حساب خود را مدیریت کنید.
-            </DialogDescription>
           </div>
           <DialogClose as-child>
             <Button variant="ghost" size="icon-sm" aria-label="بستن">
@@ -245,7 +242,6 @@ watch(
             <div class="profile-field">
               <Label for="profile-username">نام کاربری</Label>
               <Input id="profile-username" v-model="username" :loading="profileSubmit.isSubmitting.value" placeholder="username" />
-              <span class="profile-helper">۳ تا ۳۰ کاراکتر انگلیسی، عدد یا _</span>
             </div>
           </form>
 

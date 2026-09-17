@@ -102,6 +102,15 @@ export class ChatController {
         if (chunk.sync) {
           res.write(`event: sync\ndata: ${JSON.stringify({ content: chunk.sync })}\n\n`);
         }
+        if (chunk.searchStatus) {
+          res.write(`event: search-status\ndata: ${JSON.stringify({ state: chunk.searchStatus })}\n\n`);
+        }
+        if (chunk.sources) {
+          res.write(`event: sources\ndata: ${JSON.stringify({ sources: chunk.sources })}\n\n`);
+        }
+        if (chunk.searchFailed) {
+          res.write(`event: sources-error\ndata: ${JSON.stringify({ message: 'جستجوی وب ناموفق بود؛ پاسخ بدون منابع ادامه می‌یابد' })}\n\n`);
+        }
         if (chunk.token) {
           res.write(`event: token\ndata: ${JSON.stringify({ content: chunk.token })}\n\n`);
         }
@@ -194,6 +203,27 @@ export class ChatController {
         if (chunk.sync && !clientDisconnected && !res.writableEnded) {
           try {
             res.write(`event: sync\ndata: ${JSON.stringify({ content: chunk.sync })}\n\n`);
+          } catch {
+            clientDisconnected = true;
+          }
+        }
+        if (chunk.searchStatus && !clientDisconnected && !res.writableEnded) {
+          try {
+            res.write(`event: search-status\ndata: ${JSON.stringify({ state: chunk.searchStatus })}\n\n`);
+          } catch {
+            clientDisconnected = true;
+          }
+        }
+        if (chunk.sources && !clientDisconnected && !res.writableEnded) {
+          try {
+            res.write(`event: sources\ndata: ${JSON.stringify({ sources: chunk.sources })}\n\n`);
+          } catch {
+            clientDisconnected = true;
+          }
+        }
+        if (chunk.searchFailed && !clientDisconnected && !res.writableEnded) {
+          try {
+            res.write(`event: sources-error\ndata: ${JSON.stringify({ message: 'جستجوی وب ناموفق بود؛ پاسخ بدون منابع ادامه می‌یابد' })}\n\n`);
           } catch {
             clientDisconnected = true;
           }

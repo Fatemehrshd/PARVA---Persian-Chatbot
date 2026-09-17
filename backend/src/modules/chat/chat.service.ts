@@ -690,6 +690,9 @@ export class ChatService {
     if (session.accumulatedText) {
       yield { sync: session.accumulatedText };
     }
+    if (session.sources) {
+      yield { sources: session.sources };
+    }
     if (session.title) {
       yield { title: session.title };
     }
@@ -705,6 +708,8 @@ export class ChatService {
     const unsubscribe = this.activeStream?.subscribe(id, (event: any) => {
       if (event.type === 'token') {
         queue.push({ token: event.content });
+      } else if (event.type === 'sources') {
+        queue.push({ sources: event.sources });
       } else if (event.type === 'title') {
         queue.push({ title: event.title });
       } else if (event.type === 'done') {

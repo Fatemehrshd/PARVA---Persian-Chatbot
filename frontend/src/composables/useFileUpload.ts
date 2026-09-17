@@ -135,16 +135,25 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
   async function startUpload(item: FileAttachmentItem, file: File) {
     const convId = conversationIdProvider() || undefined
 
+    // Smooth visual progress ticker for instant/local uploads
+    item.progress = 20
+    const progressTimer = setInterval(() => {
+      if (item.status === 'uploading' && (item.progress || 0) < 85) {
+        item.progress = Math.min(85, (item.progress || 20) + 20)
+      }
+    }, 100)
+
     try {
       const result = await filesService.uploadFile(
         file,
         convId,
         (percent) => {
-          item.progress = percent
+          item.progress = Math.max(item.progress || 20, percent)
         },
         item.abortController?.signal,
       )
 
+      clearInterval(progressTimer)
       // Replace tempId with actual server id
       item.id = result.id
       item.status = (result.status as any) || 'processing'
@@ -153,6 +162,7 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
       // Start polling for processing status until ready or error
       pollFileStatus(item)
     } catch (err: any) {
+      clearInterval(progressTimer)
       if (err?.name === 'AbortError' || err?.message === 'Upload aborted') {
         // User cancelled, ignore
         return
@@ -166,7 +176,28 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
 
   async function pollFileStatus(item: FileAttachmentItem) {
     let attempts = 0
-    const maxAttempts = 60 // 60 * 2s = 120s (matching timeout)
+    const maxAttempts = 60 // 60 * 1.5s = 90s
+
+    // Check immediately first: small files/images process in ~10ms
+    try {
+      const immediateRes = await filesService.getFileStatus(item.id)
+      item.status = immediateRes.status
+      item.errorMessage = immediateRes.errorMessage
+      item.metadata = immediateRes.metadata
+
+      if (immediateRes.status === 'ready') {
+        return
+      }
+      if (immediateRes.status === 'error') {
+        uiStore.showToast(
+          `خطا در پردازش فایل "${item.originalName}": ${immediateRes.errorMessage || 'خطا'}`,
+          'error',
+        )
+        return
+      }
+    } catch {
+      // continue to polling
+    }
 
     const interval = setInterval(async () => {
       // If item was removed from array, stop polling
@@ -201,7 +232,7 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
         item.errorMessage = 'پردازش فایل به دلیل اتمام زمان مجاز با خطا مواجه شد'
         uiStore.showToast(item.errorMessage, 'error')
       }
-    }, 2000)
+    }, 1500)
   }
 
   /**
@@ -212,7 +243,7 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
       item.abortController.abort()
     }
 
-    // Revoke blob URL
+    // Revoke blob URL when explicitly removed
     if (item.previewUrl) {
       try {
         URL.revokeObjectURL(item.previewUrl)
@@ -243,13 +274,7 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
   }
 
   function clearAttachedFiles() {
-    for (const item of attachedFiles.value) {
-      if (item.previewUrl) {
-        try {
-          URL.revokeObjectURL(item.previewUrl)
-        } catch {}
-      }
-    }
+    // Preserve blob URLs so sent message bubble can still display thumbnails
     attachedFiles.value = []
   }
 

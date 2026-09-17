@@ -251,7 +251,8 @@ export class ChatService {
     }
     const shouldGenerateTitle = isDefaultTitle && existingMsgCount === 0;
 
-    const session = this.activeStream?.startSession(id, userId, content);
+    const rawContent = (content || '').trim();
+    const session = this.activeStream?.startSession(id, userId, rawContent);
 
     // If the last message in DB is already an unanswered user message with the exact same content (e.g. from retry),
     // avoid saving duplicate user messages in DB.
@@ -268,13 +269,13 @@ export class ChatService {
     }
 
     let savedUserMsg: Message | null = null;
-    if (!lastMsg || lastMsg.role !== 'user' || lastMsg.content !== content) {
-      savedUserMsg = await this.msg.save(this.msg.create({ conversationId: id, role: 'user', content }));
+    if (!lastMsg || lastMsg.role !== 'user' || lastMsg.content !== rawContent) {
+      savedUserMsg = await this.msg.save(this.msg.create({ conversationId: id, role: 'user', content: rawContent }));
     } else {
       savedUserMsg = lastMsg;
     }
 
-    let effectiveContent = content;
+    let effectiveContent = rawContent || (fileIds?.length ? 'لطفاً فایل(های) پیوست‌شده را بررسی و تحلیل کن.' : '');
     const imageAttachments: FileAttachment[] = [];
 
     if (fileIds && fileIds.length > 0 && this.fileRepo && savedUserMsg) {
@@ -299,7 +300,7 @@ export class ChatService {
     }
 
     const target = this.forwarder.resolveTarget(model, provider);
-    const titlePromise = shouldGenerateTitle ? this.generateTitle(target, content) : null;
+    const titlePromise = shouldGenerateTitle ? this.generateTitle(target, rawContent || 'تحلیل فایل پیوست') : null;
 
     if (!target) {
       this.logger.warn(

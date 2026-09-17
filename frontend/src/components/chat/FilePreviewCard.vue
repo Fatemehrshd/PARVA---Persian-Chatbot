@@ -140,6 +140,21 @@ function handleRetryClick(e: MouseEvent) {
           ✕
         </button>
       </div>
+
+      <!-- Processing Spinner Overlay -->
+      <div v-if="isProcessing" class="processing-overlay">
+        <svg class="spinner-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="3">
+          <circle cx="12" cy="12" r="9" stroke="rgba(59, 130, 246, 0.25)" />
+          <path d="M12 3a9 9 0 0 1 9 9" stroke-linecap="round" />
+        </svg>
+      </div>
+
+      <!-- Ready Check Badge -->
+      <div v-if="isReady && !compact" class="ready-badge" title="آماده ارسال">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      </div>
     </div>
 
     <!-- Info Area (Name & Size) -->
@@ -319,6 +334,44 @@ function handleRetryClick(e: MouseEvent) {
 
 .btn-cancel-circle:hover {
   transform: scale(1.15);
+}
+
+.processing-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(1px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.spinner-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ready-badge {
+  position: absolute;
+  bottom: 2px;
+  inset-inline-end: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(34, 197, 94, 0.2);
+  border: 1px solid rgba(34, 197, 94, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .card-info {

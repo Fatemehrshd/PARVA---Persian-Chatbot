@@ -299,7 +299,6 @@ const userInitial = computed(() => {
             <div v-else class="sb-avatar">{{ userInitial }}</div>
             <div class="sb-user-info">
               <span class="sb-user-name">{{ authStore.user?.displayName || authStore.user?.email }}</span>
-              <span v-if="authStore.isAdmin" class="sb-user-role">ادمین</span>
             </div>
             <ChevronUp :size="13" class="sb-chevron" :class="{ 'is-flipped': !profileMenuOpen }" />
           </button>

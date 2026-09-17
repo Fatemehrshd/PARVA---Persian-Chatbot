@@ -128,7 +128,7 @@ describe('Network Resilience and Recovery Actions', () => {
     // lastUserPrompt/streamError/isStreaming are all computed from the Map
     chatStore.convStreamStates.set('conv-retry-fallback', {
       isStreaming: false, isThinking: false,
-      streamError: 'زمان انتظار برای دریافت پاسخ به پایان رسید (تایم‌اوت)',
+      streamError: 'زمان انتظار برای دریافت پاسخ به پایان رسید',
       currentStreamingText: '', abortController: null, watchdogTimer: null,
       lastUserPrompt: '', // empty, e.g. after full page reload
       charBuffer: [], releaseTimer: null

@@ -80,7 +80,7 @@ describe('ChatComposer.vue', () => {
     // Set stream error state via the Map (streamError/isStreaming are computed from Map)
     chatStore.convStreamStates.set('conv-err', {
       isStreaming: false, isThinking: false,
-      streamError: 'زمان انتظار برای دریافت پاسخ به پایان رسید (تایم‌اوت)',
+      streamError: 'زمان انتظار برای دریافت پاسخ به پایان رسید',
       currentStreamingText: '', abortController: null, watchdogTimer: null,
       lastUserPrompt: 'سلام این یک پیام تست است'
     })

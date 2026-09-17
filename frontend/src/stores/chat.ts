@@ -121,7 +121,7 @@ export const useChatStore = defineStore('chat', () => {
         }
         s.isStreaming = false
         s.isThinking = false
-        s.streamError = 'زمان انتظار برای دریافت پاسخ به پایان رسید (تایم‌اوت)'
+        s.streamError = 'زمان انتظار برای دریافت پاسخ به پایان رسید'
         // Force reactivity — replace the map entry
         convStreamStates.value.set(convId, { ...s })
       }
@@ -313,7 +313,7 @@ export const useChatStore = defineStore('chat', () => {
               s.isThinking = false
               sessionStorage.removeItem('active_streaming_conv')
               s.streamError = streamStatus?.status === 'error'
-                ? 'زمان انتظار برای دریافت پاسخ به پایان رسید (تایم‌اوت)'
+                ? 'زمان انتظار برای دریافت پاسخ به پایان رسید'
                 : 'خطا در برقراری ارتباط با مدل هوش مصنوعی'
             } else {
               s.isStreaming = false

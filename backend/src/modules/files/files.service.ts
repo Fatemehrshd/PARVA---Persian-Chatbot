@@ -115,55 +115,67 @@ export class FilesService {
   ): Promise<UploadedFileInfo> {
     const limits = await this.getUploadLimits();
 
-    // 1. Validate file size
-    if (file.size > limits.maxFileSizeBytes) {
-      throw new BadRequestException(
-        `حجم فایل (${(file.size / (1024 * 1024)).toFixed(1)} مگابایت) بیشتر از سقف مجاز (${limits.maxFileSizeMb} مگابایت) است`,
-      );
+    try {
+      // 1. Validate file size
+      if (file.size > limits.maxFileSizeBytes) {
+        throw new BadRequestException(
+          `حجم فایل (${(file.size / (1024 * 1024)).toFixed(1)} مگابایت) بیشتر از سقف مجاز (${limits.maxFileSizeMb} مگابایت) است`,
+        );
+      }
+
+      // 2. Validate file type
+      const fileType = this.resolveFileType(file.mimetype, file.originalname);
+
+      // 3. Pre-storage Security & Malware Scan Pipeline
+      const scanResult = await this.scanner.scanBuffer(file.buffer, file.originalname);
+      if (scanResult.isInfected) {
+        throw new BadRequestException('فایل ناسالم تشخیص داده شد');
+      }
+
+      // 4. Store in MinIO with Server-Side Encryption
+      const safeExt = file.originalname.split('.').pop() || '';
+      const minioKey = `attachments/${userId}/${randomUUID()}.${safeExt}`;
+      await this.storage.put(minioKey, file.buffer, file.mimetype);
+
+      // 5. Persist record in database
+      const twoDaysFromNow = new Date(Date.now() + 48 * 60 * 60 * 1000);
+      const record = this.fileRepo.create({
+        userId,
+        conversationId,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        fileType,
+        fileSize: file.size,
+        minioKey,
+        status: 'processing',
+        expiresAt: twoDaysFromNow,
+      });
+
+      const saved = await this.fileRepo.save(record);
+
+      // 6. Enqueue for Async processing in BullMQ
+      await this.queue.enqueueFileProcessing(saved.id);
+
+      return {
+        id: saved.id,
+        originalName: saved.originalName,
+        mimeType: saved.mimeType,
+        fileType: saved.fileType,
+        fileSize: saved.fileSize,
+        status: saved.status,
+        expiresAt: saved.expiresAt,
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+
+      const message =
+        error instanceof Error ? error.message : 'خطا در ذخیره‌سازی فایل روی سرور';
+
+      this.logger.error(`Upload failed for user ${userId}: ${message}`);
+      throw new Error(`آپلود فایل با خطا مواجه شد: ${message}`);
     }
-
-    // 2. Validate file type
-    const fileType = this.resolveFileType(file.mimetype, file.originalname);
-
-    // 3. Pre-storage Security & Malware Scan Pipeline
-    const scanResult = await this.scanner.scanBuffer(file.buffer, file.originalname);
-    if (scanResult.isInfected) {
-      throw new BadRequestException('فایل ناسالم تشخیص داده شد');
-    }
-
-    // 4. Store in MinIO with Server-Side Encryption
-    const safeExt = file.originalname.split('.').pop() || '';
-    const minioKey = `attachments/${userId}/${randomUUID()}.${safeExt}`;
-    await this.storage.put(minioKey, file.buffer, file.mimetype);
-
-    // 5. Persist record in database
-    const twoDaysFromNow = new Date(Date.now() + 48 * 60 * 60 * 1000);
-    const record = this.fileRepo.create({
-      userId,
-      conversationId,
-      originalName: file.originalname,
-      mimeType: file.mimetype,
-      fileType,
-      fileSize: file.size,
-      minioKey,
-      status: 'processing',
-      expiresAt: twoDaysFromNow,
-    });
-
-    const saved = await this.fileRepo.save(record);
-
-    // 6. Enqueue for Async processing in BullMQ
-    await this.queue.enqueueFileProcessing(saved.id);
-
-    return {
-      id: saved.id,
-      originalName: saved.originalName,
-      mimeType: saved.mimeType,
-      fileType: saved.fileType,
-      fileSize: saved.fileSize,
-      status: saved.status,
-      expiresAt: saved.expiresAt,
-    };
   }
 
   /**

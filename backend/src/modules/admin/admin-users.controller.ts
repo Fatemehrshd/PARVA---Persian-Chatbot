@@ -5,6 +5,7 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   UseGuards,
   UsePipes,
   ValidationPipe,
@@ -16,6 +17,7 @@ import { UpdateUserAdminDto, UpdateUserStatusDto } from './dto';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { AdminGuard } from '../../shared/admin.guard';
 import { CurrentUser } from '../../shared/current-user.decorator';
+import { ApiFeatures } from '../../shared/api-features';
 
 @UseGuards(JwtAuthGuard, AdminGuard)
 @Controller('admin/users')
@@ -23,8 +25,21 @@ export class AdminUsersController {
   constructor(private users: UsersService) {}
 
   @Get()
-  listUsers() {
-    return this.users.listWithStats();
+  async listUsers(@Query() query: Record<string, any>) {
+    const all = await this.users.listWithStats();
+    if (!query || Object.keys(query).length === 0) {
+      return all;
+    }
+    const result = ApiFeatures.applyToArray(all, query, {
+      searchableFields: ['displayName', 'email', 'username'],
+      allowedFilterFields: ['role', 'isActive'],
+      defaultSortField: 'createdAt',
+      defaultSortOrder: 'ASC',
+    });
+    if (query.page || query.limit) {
+      return result;
+    }
+    return result.items;
   }
 
   @Patch(':userId')

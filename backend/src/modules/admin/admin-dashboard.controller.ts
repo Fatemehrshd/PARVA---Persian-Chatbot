@@ -72,6 +72,7 @@ export class AdminDashboardController {
       totalMessages,
       totalTokensUsed,
       globalTokenLimit: settingsData.globalTokenLimit,
+      tokenRatePer1000: settingsData.tokenRatePer1000,
       systemPrompt: settingsData.systemPrompt,
     };
   }

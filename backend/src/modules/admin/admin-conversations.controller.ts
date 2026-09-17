@@ -14,6 +14,7 @@ import { Conversation } from '../chat/conversation.entity';
 import { Message } from '../chat/message.entity';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { AdminGuard } from '../../shared/admin.guard';
+import { ApiFeatures } from '../../shared/api-features';
 
 @UseGuards(JwtAuthGuard, AdminGuard)
 @Controller('admin/conversations')
@@ -29,6 +30,8 @@ export class AdminConversationsController {
     @Query('userId') userId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
   ) {
     const conversations = await this.convRepo
       .find({
@@ -38,7 +41,7 @@ export class AdminConversationsController {
       })
       .catch(async () => this.convRepo.find({ where: { isDeleted: false } }));
 
-    let results = (conversations || []).map((c) => ({
+    const results = (conversations || []).map((c) => ({
       id: c.id,
       title: c.title || 'بدون عنوان',
       userId: c.userId,
@@ -49,34 +52,26 @@ export class AdminConversationsController {
             displayName: c.user.displayName,
           }
         : null,
+      userDisplayName: c.user?.displayName || null,
+      userEmail: c.user?.email || null,
       messageCount: Array.isArray(c.messages) ? c.messages.filter((m) => !m.isDeleted).length : 0,
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
       modelId: c.modelId,
     }));
 
-    if (userId) {
-      results = results.filter((c) => c.userId === userId);
-    }
+    const applied = ApiFeatures.applyToArray(
+      results,
+      { search, userId, page, limit, sortBy, sortOrder },
+      {
+        searchableFields: ['title', 'userDisplayName', 'userEmail', 'modelId'],
+        allowedFilterFields: ['userId', 'modelId'],
+        defaultSortField: 'updatedAt',
+        defaultSortOrder: 'DESC',
+      },
+    );
 
-    if (search && search.trim()) {
-      const q = search.trim().toLowerCase();
-      results = results.filter(
-        (c) =>
-          (c.title && c.title.toLowerCase().includes(q)) ||
-          (c.user?.email && c.user.email.toLowerCase().includes(q)) ||
-          (c.user?.displayName && c.user.displayName.toLowerCase().includes(q)),
-      );
-    }
-
-    if (page || limit) {
-      const p = page ? Math.max(1, parseInt(page, 10)) : 1;
-      const l = limit ? Math.max(1, parseInt(limit, 10)) : 50;
-      const skip = (p - 1) * l;
-      return results.slice(skip, skip + l);
-    }
-
-    return results;
+    return applied.items;
   }
 
   @Get(':id')

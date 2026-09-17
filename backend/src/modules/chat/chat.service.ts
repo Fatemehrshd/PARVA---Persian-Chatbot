@@ -26,6 +26,37 @@ const paceToken = () =>
     ? new Promise((r) => setTimeout(r, STREAM_DELAY_MS))
     : Promise.resolve();
 
+/**
+ * محاسبه توکن‌های مصرفی برای فایل‌های پیوست‌شده (عکس، ابعاد و حجم)
+ * طبق استانداردهای پیشرفته مدل‌های چندوجهی (Multimodal Vision Tokens):
+ * ۱. اگر ابعاد تصویر مشخص باشد: تصویر به کاشی‌های ۵۱۲×۵۱۲ تقسیم شده و به ازای هر تایل ۱۷۰ توکن + ۸۵ توکن پایه محاسبه می‌شود.
+ * ۲. اگر ابعاد مشخص نباشد: پایه ۸۵ توکن + ۶۵ توکن به ازای هر ۱۲۸ کیلوبایت حجم فایل تصویر محاسبه می‌گردد.
+ * ۳. فایل‌های غیر تصویری از این محاسبه تایل مستثنی هستند و توکن متنی آن‌ها جداگانه محاسبه می‌شود.
+ */
+export function calculateAttachmentTokens(
+  attachments: Array<{ fileType?: string; fileSize?: number | string; metadata?: any }>,
+): number {
+  let totalAttachmentTokens = 0;
+  if (!attachments || attachments.length === 0) return 0;
+
+  for (const att of attachments) {
+    if (att.fileType === 'image') {
+      const width = att.metadata?.width;
+      const height = att.metadata?.height;
+      if (typeof width === 'number' && typeof height === 'number' && width > 0 && height > 0) {
+        const tilesX = Math.ceil(width / 512);
+        const tilesY = Math.ceil(height / 512);
+        totalAttachmentTokens += 85 + tilesX * tilesY * 170;
+      } else {
+        const size = Number(att.fileSize) || 0;
+        const chunks = Math.ceil(size / (128 * 1024));
+        totalAttachmentTokens += 85 + Math.max(1, chunks) * 65;
+      }
+    }
+  }
+  return totalAttachmentTokens;
+}
+
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
@@ -228,12 +259,12 @@ export class ChatService {
       const usedTokens = user?.usedTokens || 0;
       if (user && user.tokenLimit !== null && user.tokenLimit !== undefined) {
         if (user.tokenLimit > 0 && usedTokens >= user.tokenLimit) {
-          throw new BadRequestException('سقف مجاز مصرف توکن به پایان رسیده است');
+          throw new BadRequestException('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است)');
         }
       } else if (this.settings) {
         const globalLimit = await this.settings.getGlobalTokenLimit();
         if (globalLimit > 0 && usedTokens >= globalLimit) {
-          throw new BadRequestException('سقف مجاز مصرف توکن به پایان رسیده است');
+          throw new BadRequestException('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است)');
         }
       }
     } else if (this.settings) {
@@ -241,7 +272,7 @@ export class ChatService {
       if (globalLimit > 0 && typeof this.users?.findById === 'function') {
         const user = await this.users.findById(userId);
         if ((user?.usedTokens || 0) >= globalLimit) {
-          throw new BadRequestException('سقف مجاز مصرف توکن به پایان رسیده است');
+          throw new BadRequestException('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است)');
         }
       }
     }
@@ -310,6 +341,7 @@ export class ChatService {
 
     let effectiveContent = rawContent || (fileIds?.length ? 'لطفاً فایل(های) پیوست‌شده را بررسی و تحلیل کن.' : '');
     const imageAttachments: FileAttachment[] = [];
+    let attachments: FileAttachment[] = [];
 
     if (fileIds && fileIds.length > 0 && this.fileRepo && savedUserMsg) {
       for (const fid of fileIds) {
@@ -319,7 +351,7 @@ export class ChatService {
         );
       }
 
-      let attachments = await this.fileRepo.find({
+      attachments = await this.fileRepo.find({
         where: fileIds.map((fid) => ({ id: fid, userId, isDeleted: false })),
       });
 
@@ -370,7 +402,9 @@ export class ChatService {
           stoppedByUser: false,
         }),
       );
-      const consumedTokens = Math.ceil((content.length + full.length) / 4);
+      // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست
+      const attachmentTokens = calculateAttachmentTokens(attachments);
+      const consumedTokens = Math.ceil((content.length + full.length) / 4) + attachmentTokens;
       if (typeof this.users?.incrementUsedTokens === 'function') {
         await this.users.incrementUsedTokens(userId, consumedTokens);
       }
@@ -464,7 +498,9 @@ export class ChatService {
             stoppedByUser: false,
           }),
         );
-        const consumedTokens = Math.ceil((content.length + full.length) / 4);
+        // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست
+        const attachmentTokens = calculateAttachmentTokens(attachments);
+        const consumedTokens = Math.ceil((content.length + full.length) / 4) + attachmentTokens;
         if (typeof this.users?.incrementUsedTokens === 'function') {
           await this.users.incrementUsedTokens(userId, consumedTokens);
         }

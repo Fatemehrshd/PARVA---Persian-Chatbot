@@ -6,6 +6,11 @@ export class UpdateSettingsDto {
   @Min(0, { message: 'سقف توکن نمی‌تواند منفی باشد' })
   globalTokenLimit?: number;
 
+  /** نرخ دلار به ازای هر ۱۰۰۰ توکن (پیش‌فرض: ۱۰ دلار) */
+  @IsOptional()
+  @Min(0.01, { message: 'نرخ تبدیل توکن به دلار باید مثبت باشد' })
+  tokenRatePer1000?: number;
+
   @IsOptional()
   @IsString({ message: 'پرامپت سیستم باید رشته متنی باشد' })
   @MinLength(1, { message: 'پرامپت سیستم نمی‌تواند خالی باشد' })

@@ -6,6 +6,8 @@ import { UpdateSettingsDto } from './dto';
 
 export const DEFAULT_SYSTEM_PROMPT = 'You are a helpful and knowledgeable AI assistant.';
 export const DEFAULT_GLOBAL_TOKEN_LIMIT = 0; // 0 = unlimited
+/** نرخ پیش‌فرض هر ۱۰۰۰ توکن به دلار */
+export const DEFAULT_TOKEN_RATE_PER_1000 = 10; // $10 per 1000 tokens
 
 @Injectable()
 export class SettingsService {
@@ -42,12 +44,20 @@ export class SettingsService {
     return isNaN(parsed) ? DEFAULT_GLOBAL_TOKEN_LIMIT : parsed;
   }
 
+  /** دریافت نرخ هر ۱۰۰۰ توکن به دلار */
+  async getTokenRatePer1000(): Promise<number> {
+    const val = await this.get('token_rate_per_1000', String(DEFAULT_TOKEN_RATE_PER_1000));
+    const parsed = parseFloat(val);
+    return isNaN(parsed) || parsed <= 0 ? DEFAULT_TOKEN_RATE_PER_1000 : parsed;
+  }
+
   async getSystemPrompt(): Promise<string> {
     return this.get('system_prompt', DEFAULT_SYSTEM_PROMPT);
   }
 
   async getAll(): Promise<{
     globalTokenLimit: number;
+    tokenRatePer1000: number;
     systemPrompt: string;
     fileMaxSizeMb: number;
     fileMaxTotalSizeMb: number;
@@ -57,6 +67,7 @@ export class SettingsService {
   }> {
     const [
       globalTokenLimit,
+      tokenRatePer1000,
       systemPrompt,
       fileMaxSizeMb,
       fileMaxTotalSizeMb,
@@ -65,6 +76,7 @@ export class SettingsService {
       fileProcessingTimeoutSec,
     ] = await Promise.all([
       this.getGlobalTokenLimit(),
+      this.getTokenRatePer1000(),
       this.getSystemPrompt(),
       this.get('file_max_size_mb', '20').then(Number),
       this.get('file_max_total_size_mb', '50').then(Number),
@@ -75,6 +87,7 @@ export class SettingsService {
 
     return {
       globalTokenLimit,
+      tokenRatePer1000,
       systemPrompt,
       fileMaxSizeMb: isNaN(fileMaxSizeMb) ? 20 : fileMaxSizeMb,
       fileMaxTotalSizeMb: isNaN(fileMaxTotalSizeMb) ? 50 : fileMaxTotalSizeMb,
@@ -87,6 +100,9 @@ export class SettingsService {
   async update(dto: UpdateSettingsDto): Promise<any> {
     if (dto.globalTokenLimit !== undefined) {
       await this.set('global_token_limit', String(dto.globalTokenLimit));
+    }
+    if (dto.tokenRatePer1000 !== undefined) {
+      await this.set('token_rate_per_1000', String(dto.tokenRatePer1000));
     }
     if (dto.systemPrompt !== undefined) {
       await this.set('system_prompt', dto.systemPrompt);

@@ -17,6 +17,7 @@ import { FilesService } from '../files/files.service';
 import { QueueManagerService } from '../files/queue-manager.service';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { AdminGuard } from '../../shared/admin.guard';
+import { ApiFeatures } from '../../shared/api-features';
 
 @UseGuards(JwtAuthGuard, AdminGuard)
 @Controller('admin/files')
@@ -69,33 +70,28 @@ export class AdminFilesController {
     @Query('search') search?: string,
     @Query('userId') userId?: string,
   ) {
-    const page = Math.max(1, Number(pageStr) || 1);
-    const limit = Math.max(1, Math.min(100, Number(limitStr) || 50));
-    const skip = (page - 1) * limit;
-
     const query = this.fileRepo
       .createQueryBuilder('file')
       .leftJoinAndSelect('file.user', 'user')
-      .where('file.isDeleted = false')
-      .orderBy('file.createdAt', 'DESC');
+      .where('file.isDeleted = false');
 
-    if (status && status !== 'all') {
-      query.andWhere('file.status = :status', { status });
-    }
+    const apiFeatures = new ApiFeatures(
+      query,
+      {
+        page: pageStr,
+        limit: limitStr,
+        search,
+        status: status && status !== 'all' ? status : undefined,
+        userId,
+      },
+      'file',
+    )
+      .filter(['status', 'userId'])
+      .search(['originalName', 'user.email', 'user.displayName'])
+      .sort('createdAt', 'DESC')
+      .paginate(50);
 
-    if (userId) {
-      query.andWhere('file.userId = :userId', { userId });
-    }
-
-    if (search && search.trim()) {
-      const q = `%${search.trim().toLowerCase()}%`;
-      query.andWhere(
-        '(LOWER(file.originalName) LIKE :q OR LOWER(user.email) LIKE :q OR LOWER(user.displayName) LIKE :q OR file.id::text LIKE :q)',
-        { q },
-      );
-    }
-
-    const [files, total] = await query.skip(skip).take(limit).getManyAndCount();
+    const { items: files, total, page, limit, totalPages } = await apiFeatures.exec();
 
     const items = files.map((f) => ({
       id: f.id,

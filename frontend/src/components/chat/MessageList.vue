@@ -7,6 +7,7 @@ import MessageBubble from './MessageBubble.vue'
 import MarkdownContent from './MarkdownContent.vue'
 import EmptyState from './EmptyState.vue'
 import ThinkingIndicator from './ThinkingIndicator.vue'
+import SourcesBlock from './SourcesBlock.vue'
 
 const chatStore = useChatStore()
 const { activeLogo } = useThemeLogo()
@@ -16,6 +17,11 @@ const contentRef = ref<HTMLElement | null>(null)
 const shouldAutoScroll = ref(true)
 const isUserScrolling = ref(false)
 const streamingDirection = computed(() => getTextDirection(chatStore.currentStreamingText))
+const streamingSources = computed(() => {
+  const id = chatStore.currentConversationId
+  if (!id) return null
+  return chatStore.convStreamStates.get(id)?.streamingSources ?? null
+})
 
 let scrollTimeout: ReturnType<typeof setTimeout> | undefined
 let resizeObserver: ResizeObserver | null = null
@@ -257,10 +263,11 @@ onBeforeUnmount(() => {
                 :dir="streamingDirection"
               >
                 <div v-if="chatStore.currentStreamingText" class="message-text relative">
-                  <MarkdownContent :content="chatStore.currentStreamingText" :streaming="true" />
+                  <MarkdownContent :content="chatStore.currentStreamingText" :streaming="true" :sources="streamingSources" />
                   
                 </div>
                 <ThinkingIndicator v-else />
+                <SourcesBlock v-if="streamingSources && streamingSources.length > 0" :sources="streamingSources" />
               </div>
             </div>
           </div>

@@ -6,6 +6,7 @@ import { useChatStore } from '../../stores/chat'
 import { getTextDirection, getLineDirection } from '../../utils/textDirection'
 import MarkdownContent from './MarkdownContent.vue'
 import FilePreviewCard from './FilePreviewCard.vue'
+import SourcesBlock from './SourcesBlock.vue'
 
 const props = defineProps<{
   message: Message
@@ -147,8 +148,15 @@ function copyContent() {
 
         <!-- Assistant: Rich Markdown -->
         <div v-else class="message-text">
-          <MarkdownContent :content="message.content" />
+          <MarkdownContent :content="message.content" :sources="message.sources ?? null" />
         </div>
+
+        <!-- Web-search sources (stored on the message; survive refresh) -->
+        <SourcesBlock
+          v-if="!isUser && (message.sources?.length || message.searchFailed)"
+          :sources="message.sources ?? null"
+          :failed="!!message.searchFailed"
+        />
       </div>
 
       <!-- Error notice for failed user message -->

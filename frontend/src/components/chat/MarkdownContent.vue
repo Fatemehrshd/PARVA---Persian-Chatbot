@@ -2,10 +2,13 @@
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { Marked } from 'marked'
 import { getTextDirection } from '../../utils/textDirection'
+import { linkCitationsInHtml } from '../../utils/citations'
+import type { WebSource } from '../../types'
 
 const props = defineProps<{
   content: string
   streaming?: boolean
+  sources?: WebSource[] | null
 }>()
 
 const rootRef = ref<HTMLElement | null>(null)
@@ -172,6 +175,9 @@ const parsedHtml = computed(() => {
   }
 })
 
+// Turn [n] citation markers into links when web-search sources are present.
+const finalHtml = computed(() => linkCitationsInHtml(parsedHtml.value, props.sources ?? null))
+
 // Event delegation for code block copy buttons
 function handleContainerClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null
@@ -220,7 +226,7 @@ onBeforeUnmount(() => {
   <div 
     ref="rootRef" 
     class="markdown-content text-[14px] md:text-[15px] leading-7 font-sans transition-colors"
-    v-html="parsedHtml"
+    v-html="finalHtml"
   ></div>
 </template>
 

@@ -9,6 +9,10 @@ import {
   ExternalLink,
   RefreshCw,
   Eye,
+  LayoutDashboard,
+  Network,
+  Boxes,
+  Users,
 } from '@lucide/vue'
 import { useModelsStore } from '../stores/models'
 import { useUiStore } from '../stores/ui'
@@ -34,16 +38,6 @@ import type {
   AdminFileStats,
   AdminFileDetail,
 } from '../types'
-
-// Nav icons — blue for light mode, white for dark mode
-import logoBlue from '../assets/logo-blue.png'
-import logoWhite from '../assets/logo-white.png'
-import providersBlue from '../assets/providers-blue.svg'
-import providersWhite from '../assets/providers-white.svg'
-import modelsBlue from '../assets/moelel-blue.svg'
-import modelsWhite from '../assets/models-white.svg'
-import usersBlue from '../assets/users-blue.svg'
-import usersWhite from '../assets/users-white.svg'
 
 const router = useRouter()
 const modelsStore = useModelsStore()
@@ -196,7 +190,7 @@ const labels = {
   users: 'کاربران و سهمیه',
   prompts: 'پرامپت سیستم',
   chats: 'گفتگوها',
-  back: 'بازگشت به چت',
+  back: 'بازگشت',
   add: 'افزودن',
   save: 'ذخیره تغییرات',
   cancel: 'انصراف',
@@ -228,6 +222,7 @@ const labels = {
   user: 'کاربر',
   role: 'نقش کاربری',
   conversations: 'گفتگوها',
+  conversationsCount: 'گفتگو',
   usedTokens: 'توکن مصرفی',
   tokenLimit: 'سقف توکن اختصاصی',
   globalLimit: 'سقف سراسری توکن',
@@ -241,15 +236,14 @@ const labels = {
 }
 
 const navItems = computed(() => {
-  const isDark = uiStore.theme === 'dark'
   return [
-    { id: 'dashboard', label: labels.dashboard, icon: isDark ? logoWhite : logoBlue, iconType: 'img' },
-    { id: 'providers', label: labels.providers, icon: isDark ? providersWhite : providersBlue, iconType: 'img' },
-    { id: 'models', label: labels.models, icon: isDark ? modelsWhite : modelsBlue, iconType: 'img' },
-    { id: 'users', label: labels.users, icon: isDark ? usersWhite : usersBlue, iconType: 'img' },
-    { id: 'prompts', label: labels.prompts, icon: Sparkles, iconType: 'component' },
-    { id: 'chats', label: labels.chats, icon: MessageSquare, iconType: 'component' },
-    { id: 'files', label: labels.files, icon: FileText, iconType: 'component' },
+    { id: 'dashboard', label: labels.dashboard, icon: LayoutDashboard },
+    { id: 'providers', label: labels.providers, icon: Network },
+    { id: 'models', label: labels.models, icon: Boxes },
+    { id: 'users', label: labels.users, icon: Users },
+    { id: 'prompts', label: labels.prompts, icon: Sparkles },
+    { id: 'chats', label: labels.chats, icon: MessageSquare },
+    { id: 'files', label: labels.files, icon: FileText },
   ]
 })
 
@@ -299,6 +293,11 @@ const providerModels = (provider: Provider) =>
   )
 const activeModelsCount = computed(() => modelsStore.models.filter((model) => model.isActive).length)
 
+// Dashboard "top token consumers" — highest usage first, capped at 5 rows.
+const topTokenConsumers = computed(() =>
+  [...users.value].sort((a, b) => (b.usedTokens || 0) - (a.usedTokens || 0)).slice(0, 5)
+)
+
 // Table column definitions
 const dashboardModelColumns = [
   { key: 'name', label: labels.modelName },
@@ -312,34 +311,40 @@ const fullModelColumns = [
   { key: 'provider', label: labels.provider },
   { key: 'apiIdentifier', label: labels.apiId },
   { key: 'isActive', label: labels.status },
-  { key: 'actions', label: labels.actions, align: 'left' as const },
+  { key: 'edit', label: labels.edit, align: 'left' as const },
+  { key: 'actions', label: labels.remove, align: 'left' as const },
 ]
 
 const userColumns = [
-  { key: 'user', label: labels.user },
+  { key: 'name', label: labels.user },
+  { key: 'email', label: 'ایمیل' },
   { key: 'role', label: labels.role },
   { key: 'conversations', label: labels.conversations },
   { key: 'usedTokens', label: labels.usedTokens },
   { key: 'tokenLimit', label: labels.tokenLimit },
   { key: 'isActive', label: labels.status },
-  { key: 'actions', label: labels.actions, align: 'left' as const },
+  { key: 'edit', label: labels.edit, align: 'left' as const },
 ]
 
 const chatColumns = [
   { key: 'title', label: 'عنوان گفتگو' },
-  { key: 'user', label: 'کاربر' },
+  { key: 'userName', label: 'نام کاربر' },
+  { key: 'userEmail', label: 'ایمیل کاربر' },
   { key: 'messageCount', label: 'تعداد پیام‌ها' },
   { key: 'updatedAt', label: 'تاریخ آخرین فعالیت' },
-  { key: 'actions', label: labels.actions, align: 'left' as const },
+  { key: 'view', label: 'مشاهده پیام‌ها', align: 'left' as const },
+  { key: 'actions', label: labels.remove, align: 'left' as const },
 ]
 
 const fileColumns = [
   { key: 'name', label: 'نام فایل و نوع' },
-  { key: 'user', label: 'کاربر' },
+  { key: 'userName', label: 'نام کاربر' },
+  { key: 'userEmail', label: 'ایمیل کاربر' },
   { key: 'size', label: 'حجم' },
   { key: 'status', label: 'وضعیت پردازش' },
   { key: 'createdAt', label: 'زمان آپلود' },
-  { key: 'actions', label: labels.actions, align: 'left' as const },
+  { key: 'view', label: 'مشاهده جزئیات', align: 'left' as const },
+  { key: 'actions', label: labels.remove, align: 'left' as const },
 ]
 
 function selectSection(section: typeof activeSection.value) {
@@ -885,16 +890,8 @@ onMounted(loadData)
           :class="{ active: activeSection === item.id }"
           @click="selectSection(item.id as typeof activeSection.value)"
         >
-          <img
-            v-if="item.iconType === 'img'"
-            :src="item.icon as string"
-            class="nav-icon-img"
-            :alt="item.label"
-            aria-hidden="true"
-          />
           <component
             :is="item.icon"
-            v-else
             :size="18"
             class="nav-icon-lucide"
             aria-hidden="true"
@@ -906,7 +903,7 @@ onMounted(loadData)
       <div class="admin-sidebar-bottom">
         <button class="admin-back" @click="router.push('/')">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 12H5M12 5l-7 7 7 7" />
+            <path d="M5 12h14M12 5l7 7-7 7" />
           </svg>
           {{ labels.back }}
         </button>
@@ -1092,14 +1089,14 @@ onMounted(loadData)
             </div>
             <div class="usage-list">
               <div
-                v-for="user in users.slice(0, 5)"
+                v-for="user in topTokenConsumers"
                 :key="user.id"
                 class="usage-row"
               >
                 <span class="avatar-chip">{{ (user.displayName || user.email).charAt(0).toUpperCase() }}</span>
                 <div>
                   <strong>{{ user.displayName || user.email }}</strong>
-                  <small>{{ user.conversationsCount }} {{ labels.conversations }}</small>
+                  <small>{{ user.conversationsCount }} {{ labels.conversationsCount }}</small>
                 </div>
                 <b>{{ user.usedTokens.toLocaleString() }} توکن</b>
               </div>
@@ -1264,20 +1261,13 @@ onMounted(loadData)
             </td>
             <td :data-label="labels.actions" class="actions-cell">
               <div class="action-buttons">
-                <BaseButton
-                  variant="ghost"
-                  size="sm"
-                  icon
-                  :title="model.isDefault ? 'مدل پیش‌فرض' : 'تنظیم به عنوان پیش‌فرض'"
-                  @click="setPlatformDefault(model)"
-                >
-                  {{ model.isDefault ? '★' : '☆' }}
-                </BaseButton>
                 <BaseButton variant="ghost" size="sm" @click="openModelEditor(model)">
                   {{ labels.edit }}
                 </BaseButton>
-                <BaseButton variant="danger" size="sm" @click="promptDeleteModel(model)">
-                  {{ labels.remove }}
+                <BaseButton variant="danger" size="sm" icon :title="labels.remove" @click="promptDeleteModel(model)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                  </svg>
                 </BaseButton>
               </div>
             </td>
@@ -1299,12 +1289,10 @@ onMounted(loadData)
             <td :data-label="labels.user">
               <div class="user-cell">
                 <span class="avatar-chip">{{ (user.displayName || user.email).charAt(0).toUpperCase() }}</span>
-                <div>
-                  <strong>{{ user.displayName || '—' }}</strong>
-                  <span class="subtext">{{ user.email }}</span>
-                </div>
+                <strong>{{ user.displayName || '—' }}</strong>
               </div>
             </td>
+            <td data-label="ایمیل" class="subtext">{{ user.email }}</td>
             <td :data-label="labels.role">
               <span class="tag" :class="{ 'tag-admin': user.role === 'admin' }">
                 {{ user.role === 'admin' ? 'مدیر سیستم' : 'کاربر عادی' }}
@@ -1447,22 +1435,16 @@ onMounted(loadData)
             <td data-label="عنوان گفتگو">
               <div class="chat-title-cell">
                 <MessageSquare :size="15" class="chat-row-icon" />
-                <div>
-                  <strong>{{ conv.title || 'بدون عنوان' }}</strong>
-                  <span class="subtext mono">{{ conv.id.slice(0, 8) }}...</span>
-                </div>
+                <strong>{{ conv.title || 'بدون عنوان' }}</strong>
               </div>
             </td>
-            <td data-label="کاربر">
+            <td data-label="نام کاربر">
               <div class="user-cell">
                 <span class="avatar-chip">{{ (conv.user?.displayName || conv.user?.email || 'U').charAt(0).toUpperCase() }}</span>
-                <div>
-                  <strong>{{ conv.user?.displayName || '—' }}</strong>
-                  <span class="subtext">{{ conv.user?.email || 'کاربر ناشناس' }}</span>
-                </div>
+                <strong>{{ conv.user?.displayName || '—' }}</strong>
               </div>
             </td>
-            <td data-label="تعداد پیام‌ها" class="mono">
+            <td data-label="ایمیل کاربر" class="subtext">{{ conv.user?.email || 'کاربر ناشناس' }}</td>            <td data-label="تعداد پیام‌ها" class="mono">
               <span class="message-count-badge">{{ conv.messageCount }} پیام</span>
             </td>
             <td data-label="تاریخ آخرین فعالیت" class="mono subtext">
@@ -1639,26 +1621,21 @@ onMounted(loadData)
         <!-- Files Table -->
         <AdminTable :columns="fileColumns" :items="files">
           <template #row="{ item: file }">
-            <td>
+            <td data-label="نام فایل و نوع">
               <div class="file-name-cell flex items-center gap-2.5">
                 <span :class="['att-badge px-2 py-1 rounded text-[10px] font-bold uppercase', getAttBadgeClass(file.fileType)]">
                   {{ file.fileType }}
                 </span>
-                <div class="overflow-hidden">
-                  <strong class="block truncate max-w-[200px]" :title="file.originalName">{{ file.originalName }}</strong>
-                  <span class="subtext mono text-[11px]">{{ file.id.slice(0, 8) }}...</span>
-                </div>
+                <strong class="block truncate max-w-[200px]" :title="file.originalName">{{ file.originalName }}</strong>
               </div>
             </td>
-            <td>
+            <td data-label="نام کاربر">
               <div class="user-cell">
                 <span class="avatar-chip">{{ (file.user?.displayName || file.user?.email || 'U').charAt(0).toUpperCase() }}</span>
-                <div>
-                  <strong>{{ file.user?.displayName || '—' }}</strong>
-                  <span class="subtext">{{ file.user?.email || 'کاربر ناشناس' }}</span>
-                </div>
+                <strong>{{ file.user?.displayName || '—' }}</strong>
               </div>
             </td>
+            <td data-label="ایمیل کاربر" class="subtext">{{ file.user?.email || 'کاربر ناشناس' }}</td>
             <td class="mono text-xs">
               {{ formatFileSize(file.fileSize) }}
             </td>
@@ -2271,13 +2248,6 @@ onMounted(loadData)
   color: var(--primary);
 }
 
-.nav-icon-img {
-  width: 17px;
-  height: 17px;
-  flex-shrink: 0;
-  object-fit: contain;
-}
-
 .nav-icon-lucide {
   color: inherit;
   flex-shrink: 0;
@@ -2519,6 +2489,17 @@ onMounted(loadData)
   font-weight: 700;
 }
 
+/* Align the "view all" ghost button flush with the panel edge so it lines up
+   with the values column underneath (token counts, model counts). */
+.panel-heading > :last-child {
+  margin-inline-start: auto;
+}
+
+.panel-heading > :last-child:is(button),
+.panel-heading > :last-child > button {
+  margin-inline-end: -10px;
+}
+
 .section-title-wrap {
   display: flex;
   align-items: center;
@@ -2550,12 +2531,26 @@ onMounted(loadData)
   font-size: 13px;
 }
 
+/* Providers status rows: fixed columns so the middle (model count) column
+   lines up vertically across all rows. */
+.status-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) 88px 64px;
+}
+
 .status-row > span:nth-child(3),
 .status-row em {
-  margin-inline-start: auto;
   color: var(--muted-foreground);
   font-size: 11.5px;
   font-style: normal;
+}
+
+.status-row > span:nth-child(3) {
+  text-align: center;
+}
+
+.status-row em {
+  text-align: center;
 }
 
 .status-dot {
@@ -2579,7 +2574,10 @@ onMounted(loadData)
 
 .usage-row b {
   margin-inline-start: auto;
-  font: 12px var(--font-mono);
+  min-width: 104px;
+  text-align: start;
+  font-size: 12px;
+  font-family: var(--font-mono);
   color: var(--primary);
 }
 

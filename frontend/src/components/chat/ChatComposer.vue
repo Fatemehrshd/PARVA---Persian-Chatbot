@@ -533,7 +533,9 @@ onUnmounted(() => {
 <style scoped>
 .composer-outer {
   width: 100%;
-  padding: 0 0 16px;
+  /* Guaranteed visual gap between the transcript (meta-bar / streaming line)
+     and the input box, regardless of scroll position. */
+  padding: 14px 0 16px;
   background: linear-gradient(180deg, transparent 0%, var(--background) 25%);
 }
 

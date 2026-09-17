@@ -152,13 +152,28 @@ function copyContent() {
       </div>
 
       <!-- Error notice for failed user message -->
-      <div v-if="isUser && message.status === 'error'" class="flex items-center gap-1.5 mt-1.5 px-1 text-xs text-destructive font-medium">
-        <svg class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <line x1="12" y1="8" x2="12" y2="12"/>
-          <line x1="12" y1="16" x2="12.01" y2="16"/>
-        </svg>
-        <span>{{ message.errorText || 'خطا در ارسال پیام' }}</span>
+      <div v-if="isUser && message.status === 'error'" class="flex flex-col gap-2 mt-1.5 px-1">
+        <div class="flex items-center gap-1.5 text-xs text-destructive font-medium">
+          <svg class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <span>{{ message.errorText || 'خطا در ارسال پیام' }}</span>
+        </div>
+        <!-- دکمه تلاش مجدد زیر پیام خطا — فقط روی آخرین پیام و خارج از streaming -->
+        <div v-if="props.isLast && !chatStore.isStreaming" class="flex items-center gap-2">
+          <button
+            class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium bg-primary text-primary-foreground shadow-sm hover:opacity-90 transition-all active:scale-95"
+            @click="chatStore.retryLastMessage()"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <polyline points="1 4 1 10 7 10"/>
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+            </svg>
+            <span>تلاش مجدد</span>
+          </button>
+        </div>
       </div>
 
       <!-- Action bar under message (Available for both user and assistant) -->

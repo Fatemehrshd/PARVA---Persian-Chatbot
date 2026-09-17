@@ -44,25 +44,46 @@ export class ChatService {
   list(userId: string, limit: number = 50, page: number = 1) {
     const take = limit > 0 ? limit : 50;
     const skip = page > 0 ? (page - 1) * take : 0;
-    return this.conv.find({
-      where: { userId },
-      order: { updatedAt: 'DESC' },
-      take,
-      skip,
-    });
+    // Soft-deleted conversations must never surface in the user's sidebar —
+    // deleting is soft (isDeleted) for audit, but the list filters them out.
+    // Also exclude empty conversations (0 messages) — they should only appear
+    // in the sidebar once the model has replied to the first message.
+    return this.conv
+      .createQueryBuilder('conv')
+      .where('conv.userId = :userId', { userId })
+      .andWhere('conv.isDeleted = false')
+      .andWhere(
+        (qb) =>
+          'EXISTS ' +
+          qb
+            .subQuery()
+            .select('1')
+            .from(Message, 'm')
+            .where('m.conversationId = conv.id')
+            .andWhere('m.isDeleted = false')
+            .getQuery(),
+      )
+      .orderBy('conv.updatedAt', 'DESC')
+      .take(take)
+      .skip(skip)
+      .getMany();
   }
 
   async create(userId: string, modelId?: string, title?: string) {
-    // If user's latest conversation is empty (has 0 messages), reuse it instead of creating a duplicate
+    // If user's latest conversation is empty (has 0 messages), reuse it instead of creating a duplicate.
+    // Soft-deleted conversations must never be reused — sending to them would 404 (assertOwned
+    // filters isDeleted), which is exactly the "delete a chat then send → 404" bug.
     const latest =
       typeof this.conv.findOne === 'function'
         ? await this.conv.findOne({
-            where: { userId },
+            where: { userId, isDeleted: false },
             order: { createdAt: 'DESC' },
           })
         : null;
     if (latest && typeof this.msg.count === 'function') {
-      const messageCount = await this.msg.count({ where: { conversationId: latest.id } });
+      const messageCount = await this.msg.count({
+        where: { conversationId: latest.id, isDeleted: false },
+      });
       if (messageCount === 0) {
         if (modelId && latest.modelId !== modelId) {
           latest.modelId = modelId;
@@ -408,10 +429,16 @@ export class ChatService {
           signal: session?.abortController.signal,
         })) {
           if (session?.abortController.signal.aborted) break;
-          await paceToken();
-          full += token;
-          this.activeStream?.appendToken(id, token);
-          yield { token };
+          // Providers often deliver large multi-word chunks. Split them into
+          // word/whitespace pieces and pace each piece so the client renders a
+          // smooth, word-by-word flow instead of sudden bulk text.
+          for (const piece of token.split(/(\s+)/)) {
+            if (!piece) continue;
+            if (!/^\s+$/.test(piece)) await paceToken();
+            full += piece;
+            this.activeStream?.appendToken(id, piece);
+            yield { token: piece };
+          }
         }
       } catch (err) {
         if (!full) {
@@ -557,9 +584,13 @@ export class ChatService {
     let failedMidStream = false;
     try {
       for await (const token of this.forwarder.stream(target, messages)) {
-        await paceToken();
-        continuationText += token;
-        yield { token };
+        // Same word-level pacing as generate() for a smooth client rendering.
+        for (const piece of token.split(/(\s+)/)) {
+          if (!piece) continue;
+          if (!/^\s+$/.test(piece)) await paceToken();
+          continuationText += piece;
+          yield { token: piece };
+        }
       }
     } catch (err) {
       failedMidStream = true;

@@ -6,6 +6,7 @@ import { useUiStore } from '../../stores/ui'
 import { getActiveTypingDirection } from '../../utils/textDirection'
 import { useFileUpload } from '../../composables/useFileUpload'
 import FilePreviewCard from './FilePreviewCard.vue'
+import BaseToggle from '../ui/BaseToggle.vue'
 
 const chatStore = useChatStore()
 const modelsStore = useModelsStore()
@@ -74,6 +75,15 @@ function pickDocuments() {
   }
   attachmentMenuOpen.value = false
   docInputRef.value?.click()
+}
+
+// ─── Per-conversation feature flags (web search / thinking) ────────────────
+const activeConvId = computed(() => chatStore.currentConversationId ?? '__new__')
+
+function toggleWebSearch() {
+  const cur = chatStore.getConvFlag(activeConvId.value).web
+  chatStore.setConvFlag(activeConvId.value, { web: !cur })
+  attachmentMenuOpen.value = false
 }
 
 function handleImageChange(e: Event) {
@@ -245,7 +255,7 @@ async function handleSubmit() {
   if (textareaRef.value) {
     textareaRef.value.style.height = 'auto'
   }
-  chatStore.sendMessage(text, files)
+  chatStore.sendMessage(text, files, { useWebSearch: chatStore.getConvFlag(activeConvId.value).web })
 }
 
 const selectableModels = computed(() => {
@@ -453,6 +463,26 @@ onUnmounted(() => {
                     <line x1="16" y1="17" x2="8" y2="17"/>
                   </svg>
                   <span>اسناد (PDF، اکسل، متن)</span>
+                </button>
+                <button
+                  type="button"
+                  class="attachment-menu-item"
+                  data-testid="toggle-web-search"
+                  :class="chatStore.getConvFlag(activeConvId).web ? 'bg-primary/10 text-primary' : ''"
+                  @click="toggleWebSearch"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="2" y1="12" x2="22" y2="12"/>
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                  </svg>
+                  <span>جستجوی وب</span>
+                  <BaseToggle
+                    size="sm"
+                    :modelValue="chatStore.getConvFlag(activeConvId).web"
+                    @click.stop
+                    @update:modelValue="toggleWebSearch"
+                  />
                 </button>
               </div>
             </div>

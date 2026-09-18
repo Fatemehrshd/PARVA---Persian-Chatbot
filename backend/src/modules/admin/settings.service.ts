@@ -13,6 +13,15 @@ export const WEB_SEARCH_USED_KEY = 'web_search_used_credits';
 export const WEB_SEARCH_QUOTA_KEY = 'web_search_quota_total';
 export const DEFAULT_WEB_SEARCH_QUOTA = 2500; // Serper free trial credits
 export const ROLE_TOKEN_LIMITS_KEY = 'role_token_limits';
+export const TASK_MULTIPLIERS_KEY = 'task_multipliers';
+export const ROLE_QUOTAS_KEY = 'role_quotas';
+export const TASK_TYPES = ['image', 'document', 'thinking'] as const;
+export const DEFAULT_RESET_HOURS = 6;
+export type RoleQuota = {
+  tokenLimit: number | null;
+  messageLimit: number | null;
+  resetHours: number | null;
+};
 
 /**
  * سقف مؤثر توکن یک کاربر با همان اولویت اعمال در ChatService:
@@ -134,6 +143,73 @@ export class SettingsService {
     return current;
   }
 
+  async getTaskMultipliers(): Promise<Record<string, number>> {
+    const raw = await this.get(TASK_MULTIPLIERS_KEY, '{}');
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+      const clean: Record<string, number> = {};
+      for (const type of TASK_TYPES) {
+        const value = Number(parsed[type]);
+        if (Number.isFinite(value) && value > 0) clean[type] = value;
+      }
+      return clean;
+    } catch {
+      return {};
+    }
+  }
+
+  async setTaskMultiplier(type: string, value: number | null): Promise<void> {
+    if (!(TASK_TYPES as readonly string[]).includes(type)) return;
+    const current = await this.getTaskMultipliers();
+    const numeric = Number(value);
+    if (value === null || !Number.isFinite(numeric) || numeric <= 0) delete current[type];
+    else current[type] = numeric;
+    await this.set(TASK_MULTIPLIERS_KEY, JSON.stringify(current));
+  }
+
+  async getRoleQuotas(): Promise<Record<string, RoleQuota>> {
+    const raw = await this.get(ROLE_QUOTAS_KEY, '');
+    if (!raw) {
+      const legacy = await this.getRoleTokenLimits();
+      const seeded: Record<string, RoleQuota> = {};
+      for (const [role, tokenLimit] of Object.entries(legacy)) {
+        seeded[role] = { tokenLimit, messageLimit: null, resetHours: null };
+      }
+      if (Object.keys(seeded).length > 0) await this.set(ROLE_QUOTAS_KEY, JSON.stringify(seeded));
+      return seeded;
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+      const normalize = (value: unknown): number | null => {
+        if (value === null || value === undefined || value === '') return null;
+        const numeric = Number(value);
+        return Number.isFinite(numeric) && numeric >= 0 ? Math.floor(numeric) : null;
+      };
+      const clean: Record<string, RoleQuota> = {};
+      for (const [role, quota] of Object.entries(parsed as Record<string, any>)) {
+        if (!quota || typeof quota !== 'object') continue;
+        clean[role] = {
+          tokenLimit: normalize(quota.tokenLimit),
+          messageLimit: normalize(quota.messageLimit),
+          resetHours: normalize(quota.resetHours),
+        };
+      }
+      return clean;
+    } catch {
+      return {};
+    }
+  }
+
+  async setRoleQuota(role: string, quota: RoleQuota | null): Promise<Record<string, RoleQuota>> {
+    const current = await this.getRoleQuotas();
+    if (quota === null) delete current[role];
+    else current[role] = quota;
+    await this.set(ROLE_QUOTAS_KEY, JSON.stringify(current));
+    return current;
+  }
+
   async getAll(): Promise<{
     globalTokenLimit: number;
     tokenRatePer1000: number;
@@ -146,6 +222,8 @@ export class SettingsService {
     webSearchEnabled: boolean;
     webSearchUsage: { used: number; total: number; remaining: number };
     roleTokenLimits: Record<string, number>;
+    taskMultipliers: Record<string, number>;
+    roleQuotas: Record<string, RoleQuota>;
   }> {
     const [
       globalTokenLimit,
@@ -157,6 +235,8 @@ export class SettingsService {
       excelMaxRows,
       fileProcessingTimeoutSec,
       roleTokenLimits,
+      taskMultipliers,
+      roleQuotas,
     ] = await Promise.all([
       this.getGlobalTokenLimit(),
       this.getTokenRatePer1000(),
@@ -167,6 +247,8 @@ export class SettingsService {
       this.get('excel_max_rows', '5000').then(Number),
       this.get('file_processing_timeout_sec', '120').then(Number),
       this.getRoleTokenLimits(),
+      this.getTaskMultipliers(),
+      this.getRoleQuotas(),
     ]);
 
     return {
@@ -181,6 +263,8 @@ export class SettingsService {
       webSearchEnabled: await this.getWebSearchEnabled(),
       webSearchUsage: await this.getWebSearchUsage(),
       roleTokenLimits,
+      taskMultipliers,
+      roleQuotas,
     };
   }
 
@@ -222,6 +306,16 @@ export class SettingsService {
     if (dto.roleTokenLimits !== undefined && dto.roleTokenLimits !== null) {
       for (const [role, limit] of Object.entries(dto.roleTokenLimits)) {
         await this.setRoleTokenLimit(role, limit);
+      }
+    }
+    if (dto.taskMultipliers !== undefined && dto.taskMultipliers !== null) {
+      for (const [type, value] of Object.entries(dto.taskMultipliers)) {
+        await this.setTaskMultiplier(type, value);
+      }
+    }
+    if (dto.roleQuotas !== undefined && dto.roleQuotas !== null) {
+      for (const [role, quota] of Object.entries(dto.roleQuotas)) {
+        await this.setRoleQuota(role, quota);
       }
     }
     return this.getAll();

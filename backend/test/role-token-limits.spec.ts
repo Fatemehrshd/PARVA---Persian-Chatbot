@@ -1,8 +1,47 @@
 import { SettingsService, resolveEffectiveTokenLimit } from '../src/modules/admin/settings.service';
 import { ChatService } from '../src/modules/chat/chat.service';
 import { BadRequestException } from '@nestjs/common';
+import { UsersService } from '../src/modules/users/users.service';
 
 describe('Role-based token limits', () => {
+  describe('UsersService periodic quota', () => {
+    function makeUsersService(userRow: any) {
+      const repo: any = {
+        findOne: async () => userRow,
+        save: async (user: any) => {
+          Object.assign(userRow, user);
+          return userRow;
+        },
+      };
+      return { service: new UsersService(repo), userRow };
+    }
+
+    it('starts and lazily resets a period', async () => {
+      const first = makeUsersService({ id: 'u1', periodUsedTokens: 0, periodUsedMessages: 0 });
+      await first.service.syncPeriod(first.userRow as any, 6);
+      expect(first.userRow.periodStart).toBeTruthy();
+
+      const stale = makeUsersService({
+        id: 'u1',
+        periodStart: new Date(Date.now() - 7 * 3600_000),
+        periodUsedTokens: 500,
+        periodUsedMessages: 9,
+      });
+      await stale.service.syncPeriod(stale.userRow as any, 6);
+      expect(stale.userRow.periodUsedTokens).toBe(0);
+      expect(stale.userRow.periodUsedMessages).toBe(0);
+    });
+
+    it('increments lifetime, period and task-type usage', async () => {
+      const fixture = makeUsersService({ id: 'u1', usedTokens: 100, periodUsedTokens: 0, periodUsedMessages: 0, usageByType: {} });
+      await fixture.service.incrementUsage('u1', 300, 'image', 1);
+      expect(fixture.userRow.usedTokens).toBe(400);
+      expect(fixture.userRow.periodUsedTokens).toBe(300);
+      expect(fixture.userRow.periodUsedMessages).toBe(1);
+      expect(fixture.userRow.usageByType.image).toBe(300);
+    });
+  });
+
   describe('resolveEffectiveTokenLimit (personal > role > global)', () => {
     const roleLimits = { user: 900, vip: 0 };
 
@@ -48,6 +87,33 @@ describe('Role-based token limits', () => {
         },
       };
       settings = new SettingsService(repo);
+    });
+
+    describe('task multipliers and periodic role quotas', () => {
+      it('stores task multipliers and lazily seeds role quotas', async () => {
+        await settings.setTaskMultiplier('image', 2.5);
+        await settings.setRoleTokenLimit('user', 900);
+
+        expect(await settings.getTaskMultipliers()).toEqual({ image: 2.5 });
+        expect(await settings.getRoleQuotas()).toEqual({
+          user: { tokenLimit: 900, messageLimit: null, resetHours: null },
+        });
+        expect(store.get('role_quotas')).toBeTruthy();
+      });
+
+      it('removes invalid multipliers and merges role quota updates', async () => {
+        await settings.setTaskMultiplier('image', 2.5);
+        await settings.setTaskMultiplier('hacked' as any, 5);
+        await settings.setTaskMultiplier('image', -1);
+        await settings.setRoleQuota('user', { tokenLimit: 500, messageLimit: 10, resetHours: 6 });
+        await settings.setRoleQuota('admin', { tokenLimit: 0, messageLimit: null, resetHours: 0 });
+
+        expect(await settings.getTaskMultipliers()).toEqual({});
+        expect(await settings.getRoleQuotas()).toEqual({
+          user: { tokenLimit: 500, messageLimit: 10, resetHours: 6 },
+          admin: { tokenLimit: 0, messageLimit: null, resetHours: 0 },
+        });
+      });
     });
 
     it('stores and reads a role limit', async () => {
@@ -146,6 +212,24 @@ describe('Role-based token limits', () => {
       };
       const gen = buildChatService(user, settings).generate('u1', 'c1', 'Hello');
       await expect(gen.next()).rejects.toThrow('سقف مجاز مصرف توکن به پایان رسیده است');
+    });
+
+    it('reports the display percentage from lifetime usage like the admin users table', async () => {
+      const user = {
+        id: 'u1',
+        role: 'user',
+        usedTokens: 290,
+        periodUsedTokens: 0,
+        periodUsedMessages: 0,
+        periodStart: new Date(),
+      };
+      const settings: any = {
+        getRoleQuotas: async () => ({ user: { tokenLimit: 1000, messageLimit: null, resetHours: 6 } }),
+        getGlobalTokenLimit: async () => 0,
+        getSystemPrompt: async () => 'p',
+      };
+      const state = await buildChatService(user, settings).getQuotaState('u1');
+      expect(state.remainingPercent).toBe(71);
     });
   });
 });

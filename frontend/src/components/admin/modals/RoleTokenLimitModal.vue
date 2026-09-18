@@ -8,16 +8,18 @@ const props = defineProps<{
   role: string
   roleLabel: string
   currentLimit: number | null
+  currentMessageLimit?: number | null
+  currentResetHours?: number | null
   tokenRatePer1000: number
   isSaving?: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
-  save: [data: { role: string; tokenLimit: number | null }]
+  save: [data: { role: string; quota: { tokenLimit: number | null; messageLimit: number | null; resetHours: number | null } }]
 }>()
 
-const form = ref<{ tokenLimit: number | null }>({ tokenLimit: null })
+const form = ref<{ tokenLimit: number | null; messageLimit: number | null; resetHours: number | null }>({ tokenLimit: null, messageLimit: null, resetHours: 6 })
 const creditDollarInput = ref<number | null>(null)
 
 function tokensToDollars(tokens: number): number {
@@ -33,7 +35,7 @@ watch(
   (open) => {
     if (open) {
       const limit = props.currentLimit !== null && props.currentLimit !== undefined ? Number(props.currentLimit) : null
-      form.value = { tokenLimit: limit }
+      form.value = { tokenLimit: limit, messageLimit: props.currentMessageLimit ?? null, resetHours: props.currentResetHours ?? 6 }
       creditDollarInput.value = limit !== null && limit > 0 ? tokensToDollars(limit) : null
     }
   },
@@ -73,7 +75,11 @@ function onTokenLimitInput(val: string | number | null) {
 }
 
 function handleSubmit() {
-  emit('save', { role: props.role, tokenLimit: form.value.tokenLimit })
+  if (props.currentMessageLimit === undefined && props.currentResetHours === undefined) {
+    emit('save', { role: props.role, tokenLimit: form.value.tokenLimit } as any)
+    return
+  }
+  emit('save', { role: props.role, quota: { ...form.value } })
 }
 </script>
 
@@ -125,6 +131,17 @@ function handleSubmit() {
         <small class="text-[11px] text-muted-foreground block leading-relaxed">
           با تغییر هر یک از فیلدهای بالا (دلار یا توکن)، فیلد دیگر به صورت خودکار همگام می‌شود. برای حذف سقف این نقش و اعمال سقف سراسری سامانه، کادر را خالی بگذارید. کاربرانی که سقف اختصاصی داشته باشند، همیشه از سقف اختصاصی خود پیروی می‌کنند.
         </small>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label>
+          <span class="field-label">حداکثر پیام در دوره</span>
+          <input v-model.number="form.messageLimit" type="number" min="0" placeholder="خالی = نامحدود" :disabled="isSaving" />
+        </label>
+        <label>
+          <span class="field-label">ریست دوره (ساعت)</span>
+          <input v-model.number="form.resetHours" type="number" min="0" step="1" :disabled="isSaving" />
+        </label>
       </div>
 
       <div class="modal-actions">

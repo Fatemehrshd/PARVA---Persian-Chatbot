@@ -6,7 +6,7 @@ import { Message } from './message.entity';
 import { FileAttachment } from '../files/file-attachment.entity';
 import { ModelsAdminService } from '../models-admin/models-admin.service';
 import { OpenAiCompatForwarder, ChatMessage } from '../ai/openai-compat.forwarder';
-import { SettingsService } from '../admin/settings.service';
+import { DEFAULT_RESET_HOURS, SettingsService } from '../admin/settings.service';
 import { UsersService } from '../users/users.service';
 import { ActiveStreamService, ActiveStreamStatus } from './active-stream.service';
 import { WebSearchService } from '../web-search/web-search.service';
@@ -20,6 +20,20 @@ export interface ChatChunk {
   searchStatus?: 'searching';
   sources?: { title: string; url: string; snippet?: string }[];
   searchFailed?: boolean;
+}
+
+export class QuotaExceededException extends BadRequestException {
+  constructor(public reason: 'tokens' | 'messages', public resetAt: Date | null) {
+    super({
+      message:
+        reason === 'tokens'
+          ? 'سهمیه توکن شما در این دوره به پایان رسیده است (سقف مجاز مصرف توکن به پایان رسیده است).'
+          : 'سقف تعداد پیام‌های شما در این دوره پر شده است.',
+      error: 'QUOTA_EXCEEDED',
+      reason,
+      resetAt,
+    });
+  }
 }
 
 const SYSTEM_PROMPT = 'You are a helpful and knowledgeable AI assistant.';
@@ -259,6 +273,79 @@ export class ChatService {
     return (boundary > 10 ? trimmed.slice(0, boundary) : trimmed.slice(0, 35)).trim() + '...';
   }
 
+  private async resolveQuota(user: any) {
+    let roleQuota: { tokenLimit?: number | null; messageLimit?: number | null; resetHours?: number | null } = {};
+    if (typeof this.settings?.getRoleQuotas === 'function') {
+      roleQuota = (await this.settings.getRoleQuotas())[user.role] || {};
+    } else if (typeof this.settings?.getRoleTokenLimits === 'function') {
+      const legacyLimit = (await this.settings.getRoleTokenLimits())[user.role];
+      roleQuota = { tokenLimit: legacyLimit ?? null };
+    }
+    let tokenLimit = user.tokenLimit ?? roleQuota.tokenLimit ?? null;
+    if (tokenLimit === null && this.settings) tokenLimit = await this.settings.getGlobalTokenLimit();
+    const resetHours = roleQuota.resetHours ?? DEFAULT_RESET_HOURS;
+    const resetAt = resetHours > 0
+      ? new Date((user.periodStart ? new Date(user.periodStart).getTime() : Date.now()) + resetHours * 3600_000)
+      : null;
+    return {
+      tokenLimit: tokenLimit && tokenLimit > 0 ? tokenLimit : 0,
+      messageLimit: user.messageLimit ?? roleQuota.messageLimit ?? null,
+      resetHours,
+      resetAt,
+    };
+  }
+
+  private async assertQuota(user: any): Promise<void> {
+    const quota = await this.resolveQuota(user);
+    if (typeof this.users?.syncPeriod === 'function') await this.users.syncPeriod(user, quota.resetHours);
+    const usedTokens = user.periodUsedTokens ?? user.usedTokens ?? 0;
+    const usedMessages = user.periodUsedMessages || 0;
+    if (quota.tokenLimit > 0 && usedTokens >= quota.tokenLimit) {
+      throw new QuotaExceededException('tokens', quota.resetAt);
+    }
+    if (quota.messageLimit && quota.messageLimit > 0 && usedMessages >= quota.messageLimit) {
+      throw new QuotaExceededException('messages', quota.resetAt);
+    }
+  }
+
+  async getQuotaState(userId: string) {
+    const user = await this.users?.findById(userId);
+    if (!user) {
+      return { blocked: false, reason: null, remainingTokens: null, remainingMessages: null, remainingPercent: null, resetAt: null };
+    }
+    const quota = await this.resolveQuota(user);
+    if (typeof this.users?.syncPeriod === 'function') await this.users.syncPeriod(user, quota.resetHours);
+    const usedTokens = user.periodUsedTokens ?? user.usedTokens ?? 0;
+    const displayUsedTokens = user.usedTokens ?? usedTokens;
+    const usedMessages = user.periodUsedMessages || 0;
+    const blockedTokens = quota.tokenLimit > 0 && usedTokens >= quota.tokenLimit;
+    const blockedMessages = !!quota.messageLimit && quota.messageLimit > 0 && usedMessages >= quota.messageLimit;
+    return {
+      blocked: blockedTokens || blockedMessages,
+      reason: blockedMessages ? 'messages' : blockedTokens ? 'tokens' : null,
+      remainingTokens: quota.tokenLimit > 0 ? Math.max(0, quota.tokenLimit - usedTokens) : null,
+      remainingMessages: quota.messageLimit && quota.messageLimit > 0 ? Math.max(0, quota.messageLimit - usedMessages) : null,
+      // Keep the profile/sidebar percentage consistent with the admin users table,
+      // which displays lifetime usage while quota blocking remains period-based.
+      remainingPercent: quota.tokenLimit > 0 ? Math.max(0, Math.round(((quota.tokenLimit - displayUsedTokens) / quota.tokenLimit) * 100)) : null,
+      resetAt: quota.resetAt?.toISOString() ?? null,
+    };
+  }
+
+  private detectTaskType(attachments: Array<{ fileType?: string }> = []): 'normal' | 'image' | 'document' {
+    if (attachments.some((attachment) => attachment.fileType === 'image')) return 'image';
+    if (attachments.some((attachment) => ['pdf', 'excel', 'text'].includes(attachment.fileType || ''))) return 'document';
+    return 'normal';
+  }
+
+  private async recordUsage(userId: string, tokens: number, taskType: string): Promise<void> {
+    if (typeof this.users?.incrementUsage === 'function') {
+      await this.users.incrementUsage(userId, tokens, taskType, 0);
+    } else if (typeof this.users?.incrementUsedTokens === 'function') {
+      await this.users.incrementUsedTokens(userId, tokens);
+    }
+  }
+
   /**
    * Resolves the model chain (conversation -> platform default), persists the
    * user turn and streams the assistant reply. The mock echo path is kept
@@ -274,38 +361,13 @@ export class ChatService {
   ): AsyncGenerator<ChatChunk> {
     const conversation = await this.assertOwned(userId, id);
 
-    // Three-tier token quota enforcement: a user-specific limit overrides the
-    // role limit, which in turn overrides the global limit (0/absent = next tier).
+    // Periodic quota enforcement: user limits override role limits, then global.
     if (typeof this.users?.findById === 'function') {
       const user = await this.users.findById(userId);
-      const usedTokens = user?.usedTokens || 0;
-      if (user && user.tokenLimit !== null && user.tokenLimit !== undefined) {
-        if (user.tokenLimit > 0 && usedTokens >= user.tokenLimit) {
-          throw new BadRequestException('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است)');
-        }
-      } else if (this.settings) {
-        // لایه نقش: اگر سقفی برای نقش کاربر ثبت شده باشد، قبل از سقف سراسری اعمال می‌شود.
-        const roleLimit =
-          user && typeof this.settings.getRoleTokenLimits === 'function'
-            ? (await this.settings.getRoleTokenLimits())[user.role]
-            : undefined;
-        if (roleLimit !== undefined && roleLimit !== null) {
-          if (roleLimit > 0 && usedTokens >= roleLimit) {
-            throw new BadRequestException('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است)');
-          }
-        } else {
-          const globalLimit = await this.settings.getGlobalTokenLimit();
-          if (globalLimit > 0 && usedTokens >= globalLimit) {
-            throw new BadRequestException('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است)');
-          }
-        }
-      }
-    } else if (this.settings) {
-      const globalLimit = await this.settings.getGlobalTokenLimit();
-      if (globalLimit > 0 && typeof this.users?.findById === 'function') {
-        const user = await this.users.findById(userId);
-        if ((user?.usedTokens || 0) >= globalLimit) {
-          throw new BadRequestException('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است)');
+      if (user) {
+        await this.assertQuota(user);
+        if (typeof this.users?.incrementPeriodMessages === 'function') {
+          await this.users.incrementPeriodMessages(userId, 1);
         }
       }
     }
@@ -467,9 +529,7 @@ export class ChatService {
       // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست
       const attachmentTokens = calculateAttachmentTokens(attachments);
       const consumedTokens = Math.ceil((content.length + full.length) / 4) + attachmentTokens;
-      if (typeof this.users?.incrementUsedTokens === 'function') {
-        await this.users.incrementUsedTokens(userId, consumedTokens);
-      }
+      await this.recordUsage(userId, consumedTokens, this.detectTaskType(attachments));
 
       if (titlePromise) {
         const genTitle = await titlePromise;
@@ -582,9 +642,7 @@ export class ChatService {
         // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست
         const attachmentTokens = calculateAttachmentTokens(attachments);
         const consumedTokens = Math.ceil((content.length + full.length) / 4) + attachmentTokens;
-        if (typeof this.users?.incrementUsedTokens === 'function') {
-          await this.users.incrementUsedTokens(userId, consumedTokens);
-        }
+        await this.recordUsage(userId, consumedTokens, this.detectTaskType(attachments));
         await this.conv.update(id, {});
         this.activeStream?.completeSession(id, savedAssistant.id);
       }

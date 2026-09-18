@@ -210,6 +210,12 @@ export interface AdminUser extends User {
   effectiveTokenLimit?: number | null
   conversationsCount: number
   filesCount?: number
+  messageLimit?: number | null
+  periodStart?: string | null
+  periodUsedTokens?: number
+  periodUsedMessages?: number
+  usageByType?: Record<string, number>
+  usedCostUsd?: number
 }
 
 export interface UpdateAdminUserRequest {
@@ -218,6 +224,16 @@ export interface UpdateAdminUserRequest {
   email?: string
   usedTokens?: number
   tokenLimit?: number | null
+  messageLimit?: number | null
+}
+
+export interface QuotaState {
+  blocked: boolean
+  reason: 'tokens' | 'messages' | null
+  remainingTokens: number | null
+  remainingMessages: number | null
+  remainingPercent: number | null
+  resetAt: string | null
 }
 
 export interface AdminConversationSummary {

@@ -68,6 +68,8 @@ export const adminService = {
     fileProcessingTimeoutSec?: number
     webSearchUsage?: WebSearchUsage | null
     roleTokenLimits?: Record<string, number>
+    taskMultipliers?: Record<string, number>
+    roleQuotas?: Record<string, { tokenLimit: number | null; messageLimit: number | null; resetHours: number | null }>
     roles?: string[]
   }> {
     return request('/admin/settings')
@@ -85,6 +87,8 @@ export const adminService = {
     webSearchQuotaTotal?: number
     webSearchUsedCredits?: number
     roleTokenLimits?: Record<string, number | null>
+    taskMultipliers?: Record<string, number | null>
+    roleQuotas?: Record<string, { tokenLimit: number | null; messageLimit: number | null; resetHours: number | null } | null>
   }): Promise<any> {
     return request('/admin/settings', {
       method: 'PUT',

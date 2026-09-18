@@ -60,6 +60,52 @@ export class UsersService {
     }
   }
 
+  async syncPeriod(user: User, resetHours: number): Promise<User> {
+    if (!user || resetHours <= 0) return user;
+    const now = new Date();
+    if (!user.periodStart) {
+      user.periodStart = now;
+      await this.repo.save(user);
+      return user;
+    }
+    const elapsed = now.getTime() - new Date(user.periodStart).getTime();
+    if (elapsed >= resetHours * 3600_000) {
+      user.periodStart = now;
+      user.periodUsedTokens = 0;
+      user.periodUsedMessages = 0;
+      await this.repo.save(user);
+    }
+    return user;
+  }
+
+  async incrementUsage(
+    userId: string,
+    tokens: number,
+    taskType = 'normal',
+    messages = 1,
+  ): Promise<void> {
+    const user = await this.findById(userId);
+    if (!user) return;
+    const tokenCount = Math.max(0, Math.floor(tokens));
+    const messageCount = Math.max(0, Math.floor(messages));
+    user.usedTokens = (user.usedTokens || 0) + tokenCount;
+    user.periodUsedTokens = (user.periodUsedTokens || 0) + tokenCount;
+    user.periodUsedMessages = (user.periodUsedMessages || 0) + messageCount;
+    const usageByType = { ...(user.usageByType || {}) };
+    usageByType[taskType] = (usageByType[taskType] || 0) + tokenCount;
+    user.usageByType = usageByType;
+    if (!user.periodStart) user.periodStart = new Date();
+    await this.repo.save(user);
+  }
+
+  async incrementPeriodMessages(userId: string, messages = 1): Promise<void> {
+    const user = await this.findById(userId);
+    if (!user) return;
+    user.periodUsedMessages = (user.periodUsedMessages || 0) + Math.max(0, Math.floor(messages));
+    if (!user.periodStart) user.periodStart = new Date();
+    await this.repo.save(user);
+  }
+
   async listWithStats() {
     try {
       const rows = await this.repo
@@ -75,6 +121,11 @@ export class UsersService {
           'u.avatarUrl AS "avatarUrl"',
           'u.usedTokens AS "usedTokens"',
           'u.tokenLimit AS "tokenLimit"',
+          'u.messageLimit AS "messageLimit"',
+          'u.periodStart AS "periodStart"',
+          'u.periodUsedTokens AS "periodUsedTokens"',
+          'u.periodUsedMessages AS "periodUsedMessages"',
+          'u.usageByType AS "usageByType"',
           'u.createdAt AS "createdAt"',
           'COUNT(c.id) AS "conversationsCount"',
         ])
@@ -92,6 +143,11 @@ export class UsersService {
         avatarUrl: u.avatarUrl ?? null,
         usedTokens: Number(u.usedTokens || 0),
         tokenLimit: u.tokenLimit !== null && u.tokenLimit !== undefined ? Number(u.tokenLimit) : null,
+        messageLimit: u.messageLimit !== null && u.messageLimit !== undefined ? Number(u.messageLimit) : null,
+        periodStart: u.periodStart ?? null,
+        periodUsedTokens: Number(u.periodUsedTokens || 0),
+        periodUsedMessages: Number(u.periodUsedMessages || 0),
+        usageByType: u.usageByType || {},
         createdAt: u.createdAt,
         conversationsCount: Number(u.conversationsCount || 0),
       }));
@@ -107,6 +163,11 @@ export class UsersService {
         avatarUrl: u.avatarUrl ?? null,
         usedTokens: Number(u.usedTokens || 0),
         tokenLimit: u.tokenLimit !== null && u.tokenLimit !== undefined ? Number(u.tokenLimit) : null,
+        messageLimit: u.messageLimit !== null && u.messageLimit !== undefined ? Number(u.messageLimit) : null,
+        periodStart: u.periodStart ?? null,
+        periodUsedTokens: Number(u.periodUsedTokens || 0),
+        periodUsedMessages: Number(u.periodUsedMessages || 0),
+        usageByType: u.usageByType || {},
         createdAt: u.createdAt,
         conversationsCount: u.conversations?.length ?? 0,
       }));
@@ -127,6 +188,7 @@ export class UsersService {
     if (data.email !== undefined) user.email = data.email;
     if (data.usedTokens !== undefined) user.usedTokens = data.usedTokens;
     if (data.tokenLimit !== undefined) user.tokenLimit = data.tokenLimit;
+    if (data.messageLimit !== undefined) user.messageLimit = data.messageLimit;
     return this.repo.save(user);
   }
 

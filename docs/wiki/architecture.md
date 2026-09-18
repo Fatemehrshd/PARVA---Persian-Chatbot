@@ -1,3 +1,7 @@
+# Quota State Flow
+
+Authenticated chat/profile responses expose a base64 JSON `X-User-Quota` snapshot. The frontend request wrapper applies it to the shared auth quota state; the profile menu and chat composer consume the same state. Backend quota checks remain authoritative and lazily reset period counters on quota reads or message generation.
+
 # Architecture Overview
 
 پلتفرم **CODELESS / PARVA** یک سامانه تمام‌عیار هوش مصنوعی چندمدلی (Multi-Model AI Chat Platform) بر پایه معماری Monorepo و سرویس‌های مستقل فرانت‌اند و بک‌اند است.

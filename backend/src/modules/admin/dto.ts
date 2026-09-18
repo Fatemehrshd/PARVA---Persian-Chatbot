@@ -62,6 +62,14 @@ export class UpdateSettingsDto {
   @IsOptional()
   @IsObject({ message: 'سقف نقش‌ها باید یک شیء معتبر باشد' })
   roleTokenLimits?: Record<string, number | null>;
+
+  @IsOptional()
+  @IsObject({ message: 'ضرایب نوع کار باید شیء معتبر باشد' })
+  taskMultipliers?: Record<string, number | null>;
+
+  @IsOptional()
+  @IsObject({ message: 'سهمیه نقش‌ها باید شیء معتبر باشد' })
+  roleQuotas?: Record<string, { tokenLimit: number | null; messageLimit: number | null; resetHours: number | null } | null>;
 }
 
 export class UpdateUserAdminDto {
@@ -87,6 +95,12 @@ export class UpdateUserAdminDto {
   @IsInt({ message: 'سقف توکن کاربر باید عدد صحیح باشد' })
   @Min(0, { message: 'سقف توکن کاربر نمی‌تواند منفی باشد' })
   tokenLimit?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_obj, val) => val !== null && val !== undefined)
+  @IsInt({ message: 'سقف تعداد پیام باید عدد صحیح باشد' })
+  @Min(0, { message: 'سقف تعداد پیام نمی‌تواند منفی باشد' })
+  messageLimit?: number | null;
 }
 
 export class UpdateUserStatusDto {

@@ -7,11 +7,18 @@ import {
   Moon,
   Sun,
 } from '@lucide/vue'
+import { onMounted } from 'vue'
 import { useAuthStore } from '../../stores/auth'
 import { useUiStore } from '../../stores/ui'
 
 const authStore = useAuthStore()
 const uiStore = useUiStore()
+
+function refreshQuota() {
+  void authStore.refreshQuota()
+}
+
+onMounted(refreshQuota)
 
 const emit = defineEmits<{
   close: []
@@ -25,6 +32,18 @@ const emit = defineEmits<{
 <template>
   <Transition name="profile-menu">
     <div class="profile-menu-panel" role="menu" aria-label="منوی کاربری">
+      <div
+        v-if="authStore.quotaLoaded"
+        data-testid="quota-summary"
+        class="quota-summary"
+        role="presentation"
+        aria-readonly="true"
+      >
+        <span :class="authStore.quotaStatusColor">
+          {{ authStore.quota.remainingPercent === null ? '∞' : `${authStore.quota.remainingPercent}٪` }} باقی‌مانده
+        </span>
+      </div>
+
       <!-- Profile -->
       <button class="menu-item" role="menuitem" @click="emit('openProfile')">
         <User :size="15" class="menu-icon" />
@@ -97,6 +116,17 @@ const emit = defineEmits<{
   font-family: var(--font-sans);
   transition: background-color 150ms ease, color 150ms ease;
   text-align: start;
+}
+
+.quota-summary {
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--secondary) 55%, transparent);
+  border: 1px solid var(--border);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .menu-item:hover {

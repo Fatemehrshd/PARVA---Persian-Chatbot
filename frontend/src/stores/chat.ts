@@ -8,6 +8,7 @@ import { checkBackendHealth } from '../services/api'
 import { markDefaultModel } from '../utils/models'
 import { useModelsStore } from './models'
 import { useUiStore } from './ui'
+import { useAuthStore } from './auth'
 
 // ─── Per-conversation streaming state ─────────────────────────────────────────
 interface ConvStreamState {
@@ -58,6 +59,7 @@ interface QueuedMessageJob {
 export const useChatStore = defineStore('chat', () => {
   const modelsStore = useModelsStore()
   const uiStore = useUiStore()
+  const authStore = useAuthStore()
 
   const sampleMessages: Record<string, Message[]> = {
     'c-1': [
@@ -1120,6 +1122,7 @@ export const useChatStore = defineStore('chat', () => {
     s.isSearching = false
     s.searchFailed = false
     convStreamStates.value.set(convId, { ...s })
+    void authStore.refreshQuota()
   }
 
   // ─── Retry last message ────────────────────────────────────────────────────

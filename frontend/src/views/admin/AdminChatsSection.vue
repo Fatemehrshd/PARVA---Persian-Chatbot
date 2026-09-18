@@ -38,7 +38,7 @@ const chatColumns: TableColumn[] = [
   { key: 'user', label: 'کاربر', width: '220px', sortable: true },
   { key: 'messageCount', label: 'تعداد پیام‌ها', width: '130px', sortable: true },
   { key: 'updatedAt', label: 'تاریخ آخرین فعالیت', width: '160px', sortable: true },
-  { key: 'actions', label: 'عملیات', align: 'left', width: '110px', sortable: false },
+  { key: 'actions', label: 'عملیات', align: 'center', width: '110px', sortable: false },
 ]
 
 async function loadConversations() {

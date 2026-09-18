@@ -3,6 +3,7 @@ import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useChatStore } from '../../stores/chat'
 import { useModelsStore } from '../../stores/models'
 import { useUiStore } from '../../stores/ui'
+import { useAuthStore } from '../../stores/auth'
 import { getActiveTypingDirection } from '../../utils/textDirection'
 import { useFileUpload } from '../../composables/useFileUpload'
 import FilePreviewCard from './FilePreviewCard.vue'
@@ -11,6 +12,7 @@ import BaseToggle from '../ui/BaseToggle.vue'
 const chatStore = useChatStore()
 const modelsStore = useModelsStore()
 const uiStore = useUiStore()
+const authStore = useAuthStore()
 
 const inputContent = ref('')
 const inputDirection = ref<'rtl' | 'ltr'>('rtl')
@@ -227,8 +229,13 @@ const canSend = computed(() => {
   // کاربر می‌تواند پیام متنی یا فایل پیوست (بدون متن) ارسال کند
   const hasText = inputContent.value.trim().length > 0
   const hasFiles = attachedFiles.value.length > 0
-  return (hasText || hasFiles) && !chatStore.isStreaming && !chatStore.isTokenLimitExceeded
+  return (hasText || hasFiles) && !chatStore.isStreaming && !chatStore.isTokenLimitExceeded && !authStore.quota.blocked
 })
+
+function formatResetTime(resetAt: string | null): string {
+  if (!resetAt) return 'پایان دوره'
+  return new Intl.DateTimeFormat('fa-IR', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(resetAt))
+}
 
 function adjustHeight() {
   nextTick(() => {
@@ -252,7 +259,7 @@ function handleCursorMove() {
 function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
-    if (chatStore.isTokenLimitExceeded) {
+    if (chatStore.isTokenLimitExceeded || authStore.quota.blocked) {
       uiStore.showToast('سقف مجاز مصرف توکن به پایان رسیده است. لطفاً جهت افزایش اعتبار با مدیر سامانه تماس بگیرید.', 'error')
       return
     }
@@ -262,7 +269,7 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 async function handleSubmit() {
-  if (chatStore.isTokenLimitExceeded) {
+  if (chatStore.isTokenLimitExceeded || authStore.quota.blocked) {
     uiStore.showToast('سقف مجاز مصرف توکن به پایان رسیده است. امکان ارسال پیام وجود ندارد.', 'error')
     return
   }
@@ -331,6 +338,7 @@ async function handleRetry() {
 }
 
 onMounted(() => {
+  void authStore.refreshQuota()
   window.addEventListener('click', handleClickOutside)
   try {
     const saved = sessionStorage.getItem(`chat_draft_${activeConvId.value}`)
@@ -374,6 +382,10 @@ onUnmounted(() => {
             ✕
           </button>
         </div>
+      </div>
+
+      <div v-if="authStore.quota.blocked" class="stream-error-banner stream-error-banner--limit" data-testid="quota-block-banner" role="alert">
+        تا ساعت {{ formatResetTime(authStore.quota.resetAt) }} امکان ارسال پیام ندارید.
       </div>
 
       <!-- Transient Stream Error Alert (clears on refresh, new conversation or retry) -->
@@ -459,7 +471,7 @@ onUnmounted(() => {
           :class="['composer-textarea', inputDirection]"
           :dir="inputDirection"
           :placeholder="chatStore.isTokenLimitExceeded ? 'سقف مجاز مصرف توکن شما به پایان رسیده است' : 'پیام خود را بنویسید... (Enter برای ارسال)'"
-          :disabled="chatStore.isTokenLimitExceeded"
+          :disabled="chatStore.isTokenLimitExceeded || authStore.quota.blocked"
           rows="1"
           @focus="isFocused = true; updateDirection()"
           @blur="isFocused = false"
@@ -480,7 +492,7 @@ onUnmounted(() => {
                 class="attachment-btn"
                 @click="toggleAttachmentMenu"
                 title="پیوست فایل"
-                :disabled="isGenerating || attachedFiles.length >= limits.maxFileCount"
+                :disabled="isGenerating || authStore.quota.blocked || attachedFiles.length >= limits.maxFileCount"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="12" y1="5" x2="12" y2="19"></line>

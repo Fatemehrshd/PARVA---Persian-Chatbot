@@ -14,7 +14,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  save: [data: { displayName?: string; email?: string; role?: 'user' | 'admin'; tokenLimit?: number | null }]
+  save: [data: { displayName?: string; email?: string; role?: 'user' | 'admin'; tokenLimit?: number | null; messageLimit?: number | null }]
 }>()
 
 const form = ref<{
@@ -23,12 +23,14 @@ const form = ref<{
   role: 'user' | 'admin'
   usedTokens: number
   tokenLimit: number | null
+  messageLimit: number | null
 }>({
   displayName: '',
   email: '',
   role: 'user',
   usedTokens: 0,
   tokenLimit: null,
+  messageLimit: null,
 })
 
 const creditDollarInput = ref<number | null>(null)
@@ -52,6 +54,7 @@ watch(
         role: u.role === 'admin' ? 'admin' : 'user',
         usedTokens: Number(u.usedTokens || 0),
         tokenLimit: limit,
+        messageLimit: u.messageLimit ?? null,
       }
       creditDollarInput.value = limit !== null && limit > 0 ? tokensToDollars(limit) : null
     }
@@ -104,6 +107,7 @@ function handleSubmit() {
     email: form.value.email.trim(),
     role: form.value.role,
     tokenLimit: form.value.tokenLimit,
+    messageLimit: form.value.messageLimit,
   })
 }
 </script>
@@ -120,6 +124,10 @@ function handleSubmit() {
         <label>
           <span class="field-label">نام کاربر</span>
           <input v-model="form.displayName" :disabled="isSaving" placeholder="نام و نام خانوادگی کاربر" />
+        </label>
+        <label>
+          <span class="field-label">حداکثر پیام در دوره</span>
+          <input v-model.number="form.messageLimit" type="number" min="0" placeholder="خالی = سهمیه نقش" :disabled="isSaving" />
         </label>
         <label>
           <span class="field-label">ایمیل <span class="req">*</span></span>

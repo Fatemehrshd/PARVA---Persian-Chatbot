@@ -23,13 +23,17 @@ const form = ref({
 // سقف توکن به ازای هر نقش (داینامیک — نقش‌های آینده هم خودکار نمایش داده می‌شوند)
 const roles = ref<string[]>([])
 const roleTokenLimits = ref<Record<string, number>>({})
+const roleQuotas = ref<Record<string, { tokenLimit: number | null; messageLimit: number | null; resetHours: number | null }>>({})
+const taskMultipliers = ref<Record<string, number>>({})
 const isRoleModalOpen = ref(false)
 const isSavingRole = ref(false)
-const editingRole = ref<{ role: string; label: string; limit: number | null } | null>(null)
+const editingRole = ref<{ role: string; label: string; limit: number | null; messageLimit: number | null; resetHours: number | null } | null>(null)
 
 const roleColumns = [
   { key: 'role', label: 'نقش' },
   { key: 'limit', label: 'سقف توکن', align: 'center' as const },
+  { key: 'messageLimit', label: 'حداکثر پیام در دوره', align: 'center' as const },
+  { key: 'resetHours', label: 'دوره ریست', align: 'center' as const },
   { key: 'actions', label: 'عملیات', align: 'center' as const },
 ]
 
@@ -43,13 +47,17 @@ interface RoleRow {
   role: string
   label: string
   limit: number | null
+  messageLimit: number | null
+  resetHours: number | null
 }
 
 const roleRows = computed<RoleRow[]>(() =>
   roles.value.map((role) => ({
     role,
     label: roleLabel(role),
-    limit: roleTokenLimits.value[role] ?? null,
+    limit: roleQuotas.value[role]?.tokenLimit ?? roleTokenLimits.value[role] ?? null,
+    messageLimit: roleQuotas.value[role]?.messageLimit ?? null,
+    resetHours: roleQuotas.value[role]?.resetHours ?? 6,
   }))
 )
 
@@ -58,17 +66,45 @@ function formatRoleLimit(limit: number | null): string {
   return `${Number(limit).toLocaleString('fa-IR')} توکن`
 }
 
+function formatMessageLimit(limit: number | null): string {
+  if (limit === null || limit === undefined || limit <= 0) return 'نامحدود'
+  return Number(limit).toLocaleString('fa-IR')
+}
+
+function formatResetHours(hours: number | null): string {
+  if (hours === null || hours === undefined || hours <= 0) return 'بدون ریست'
+  return `هر ${Number(hours).toLocaleString('fa-IR')} ساعت`
+}
+
+function normalizeMultiplierInput(value: string): number | undefined {
+  const normalized = value
+    .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+    .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+    .replace(',', '.')
+    .trim()
+  if (!normalized) return undefined
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
+
+function updateTaskMultiplier(type: string, event: Event) {
+  const input = event.target as HTMLInputElement
+  const value = normalizeMultiplierInput(input.value)
+  if (value === undefined) delete taskMultipliers.value[type]
+  else taskMultipliers.value[type] = value
+}
+
 function openRoleModal(row: RoleRow) {
   editingRole.value = { ...row }
   isRoleModalOpen.value = true
 }
 
-async function handleSaveRoleLimit(data: { role: string; tokenLimit: number | null }) {
+async function handleSaveRoleLimit(data: { role: string; quota: { tokenLimit: number | null; messageLimit: number | null; resetHours: number | null } }) {
   if (!editingRole.value) return
   isSavingRole.value = true
   try {
     await adminService.updateSettings({
-      roleTokenLimits: { [data.role]: data.tokenLimit },
+      roleQuotas: { [data.role]: data.quota },
     })
     uiStore.showToast(`سقف توکن نقش «${editingRole.value.label}» با موفقیت به‌روزرسانی شد.`, 'success')
     isRoleModalOpen.value = false
@@ -105,6 +141,8 @@ async function loadSettings() {
       }
       roles.value = ((data as any).roles as string[]) || ['user', 'admin']
       roleTokenLimits.value = ((data as any).roleTokenLimits as Record<string, number>) || {}
+      roleQuotas.value = ((data as any).roleQuotas as typeof roleQuotas.value) || {}
+      taskMultipliers.value = ((data as any).taskMultipliers as Record<string, number>) || {}
     }
   } catch (err: any) {
     errorMessage.value = err?.message || 'خطا در بارگذاری تنظیمات سیستم'
@@ -123,6 +161,7 @@ async function handleSave() {
       systemPrompt: form.value.systemPrompt.trim(),
       webSearchQuotaTotal: Number(form.value.webSearchQuotaTotal) || 2500,
       webSearchUsedCredits: Math.max(0, Number(form.value.webSearchUsedCredits) || 0),
+      taskMultipliers: taskMultipliers.value,
     })
     uiStore.showToast('تنظیمات پرامپت، وب‌سرچ و سقف سراسری با موفقیت به‌روزرسانی شد.', 'success')
   } catch (err: any) {
@@ -194,6 +233,26 @@ onMounted(loadSettings)
       <!-- Card: Per-Role Token Limits -->
       <div class="settings-card p-5 rounded-2xl border border-border bg-card shadow-sm space-y-4">
         <div class="flex items-center gap-2.5 pb-3 border-b border-border">
+          <div class="p-2 rounded-lg bg-rose-500/10 text-rose-500">
+            <Coins :size="18" />
+          </div>
+          <div>
+            <h4 class="text-sm font-bold text-foreground">ضریب هزینه بر اساس نوع کار</h4>
+            <span class="text-xs text-muted-foreground">نرخ مؤثر هر نوع کار از نرخ عادی و ضریب آن محاسبه می‌شود.</span>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          <label v-for="item in [{ key: 'image', label: 'کار با تصویر' }, { key: 'document', label: 'کار با سند' }, { key: 'thinking', label: 'تفکر عمیق' }]" :key="item.key" class="space-y-1.5">
+            <span class="font-medium text-foreground block">{{ item.label }}</span>
+            <input :value="taskMultipliers[item.key] ?? ''" type="text" inputmode="decimal" autocomplete="off" placeholder="۱.۰" class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary" :disabled="isSaving" @input="updateTaskMultiplier(item.key, $event)" />
+            <span class="text-[11px] text-muted-foreground block">نرخ مؤثر: ${{ ((Number(form.tokenRatePer1000) || 10) * (Number(taskMultipliers[item.key]) || 1)).toFixed(2) }} / ۱۰۰۰ توکن</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Card: Per-Role Token Limits -->
+      <div class="settings-card p-5 rounded-2xl border border-border bg-card shadow-sm space-y-4">
+        <div class="flex items-center gap-2.5 pb-3 border-b border-border">
           <div class="p-2 rounded-lg bg-sky-500/10 text-sky-500">
             <Users :size="18" />
           </div>
@@ -215,6 +274,16 @@ onMounted(loadSettings)
             <!-- سقف توکن -->
             <td data-label="سقف توکن" class="mono font-semibold text-xs text-foreground text-center">
               {{ formatRoleLimit(item.limit) }}
+            </td>
+
+            <!-- حداکثر پیام در دوره -->
+            <td data-label="حداکثر پیام در دوره" class="mono font-semibold text-xs text-foreground text-center">
+              {{ formatMessageLimit(item.messageLimit) }}
+            </td>
+
+            <!-- دوره ریست -->
+            <td data-label="دوره ریست" class="mono font-semibold text-xs text-foreground text-center">
+              {{ formatResetHours(item.resetHours) }}
             </td>
 
             <!-- عملیات -->
@@ -314,6 +383,8 @@ onMounted(loadSettings)
       :role="editingRole?.role || ''"
       :roleLabel="editingRole?.label || ''"
       :currentLimit="editingRole?.limit ?? null"
+      :currentMessageLimit="editingRole?.messageLimit ?? null"
+      :currentResetHours="editingRole?.resetHours ?? 6"
       :tokenRatePer1000="Number(form.tokenRatePer1000) || 10"
       :isSaving="isSavingRole"
       @close="isRoleModalOpen = false"

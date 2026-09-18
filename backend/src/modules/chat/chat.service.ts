@@ -79,6 +79,22 @@ export function calculateAttachmentTokens(
   return totalAttachmentTokens;
 }
 
+export function assertModelSupportsAttachments(
+  model: { supportsVision?: boolean; supportsDocument?: boolean } | null | undefined,
+  attachments: Array<{ fileType?: string }>,
+): void {
+  if (!model || !attachments || attachments.length === 0) return;
+  const hasImage = attachments.some((a) => a.fileType === 'image');
+  const hasDoc = attachments.some((a) => a.fileType !== 'image');
+
+  if (hasImage && model.supportsVision === false) {
+    throw new BadRequestException('مدل انتخابی از پردازش تصویر پشتیبانی نمی‌کند');
+  }
+  if (hasDoc && model.supportsDocument === false) {
+    throw new BadRequestException('مدل انتخابی از تحلیل اسناد و فایل‌ها پشتیبانی نمی‌کند');
+  }
+}
+
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
@@ -386,6 +402,14 @@ export class ChatService {
       }
     }
 
+    let attachments: FileAttachment[] = [];
+    if (fileIds && fileIds.length > 0 && this.fileRepo) {
+      attachments = await this.fileRepo.find({
+        where: fileIds.map((fid) => ({ id: fid, userId, isDeleted: false })),
+      });
+      assertModelSupportsAttachments(model, attachments);
+    }
+
     // If the last message in DB is already an unanswered user message with the exact same content (e.g. from retry),
     // avoid saving duplicate user messages in DB.
     let lastMsg: Message | null = null;
@@ -409,7 +433,6 @@ export class ChatService {
 
     let effectiveContent = rawContent || (fileIds?.length ? 'لطفاً فایل(های) پیوست‌شده را بررسی و تحلیل کن.' : '');
     const imageAttachments: FileAttachment[] = [];
-    let attachments: FileAttachment[] = [];
 
     if (fileIds && fileIds.length > 0 && this.fileRepo && savedUserMsg) {
       for (const fid of fileIds) {
@@ -418,10 +441,6 @@ export class ChatService {
           { messageId: savedUserMsg.id, conversationId: id },
         );
       }
-
-      attachments = await this.fileRepo.find({
-        where: fileIds.map((fid) => ({ id: fid, userId, isDeleted: false })),
-      });
 
       // If any attachment is still in 'processing' status, wait briefly for background worker to complete
       if (attachments.some((a) => a.status === 'processing') && process.env.NODE_ENV !== 'test') {

@@ -7,6 +7,8 @@ import {
   Boxes,
   Plus,
   ExternalLink,
+  ThumbsUp,
+  ThumbsDown,
 } from '@lucide/vue'
 import AdminTable, { type TableColumn } from '../../components/admin/AdminTable.vue'
 import BaseButton from '../../components/ui/BaseButton.vue'
@@ -97,8 +99,8 @@ onMounted(loadDashboardData)
       {{ errorMessage }}
     </div>
 
-    <!-- 4 KPI Cards -->
-    <div class="kpi-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <!-- 5 KPI Cards -->
+    <div class="kpi-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
       <div class="metric-card p-4 rounded-xl border border-border bg-card shadow-sm flex items-center justify-between">
         <div>
           <span class="text-xs text-muted-foreground block mb-1">کاربران ثبت‌نام‌شده</span>
@@ -137,13 +139,28 @@ onMounted(loadDashboardData)
 
       <div class="metric-card p-4 rounded-xl border border-border bg-card shadow-sm flex items-center justify-between">
         <div>
-          <span class="text-xs text-muted-foreground block mb-1">مدل‌های هوش مصنوعی فعال</span>
+          <span class="text-xs text-muted-foreground block mb-1">مدل‌های فعال</span>
           <strong class="text-2xl font-bold font-mono text-foreground">
             {{ stats?.activeModels !== undefined ? Number(stats.activeModels).toLocaleString('fa-IR') : '—' }}
           </strong>
         </div>
         <div class="metric-icon-box p-2.5 rounded-xl bg-purple-500/10 text-purple-500">
           <Boxes :size="22" />
+        </div>
+      </div>
+
+      <div class="metric-card p-4 rounded-xl border border-border bg-card shadow-sm flex items-center justify-between">
+        <div>
+          <span class="text-xs text-muted-foreground block mb-1">رضایت کاربران (لایک‌ها)</span>
+          <strong class="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
+            {{ stats?.satisfactionRate !== undefined ? `${Number(stats.satisfactionRate).toLocaleString('fa-IR')}٪` : '۱۰۰٪' }}
+          </strong>
+          <span class="text-[11px] text-muted-foreground block mt-0.5">
+            {{ Number(stats?.totalLikes || 0).toLocaleString('fa-IR') }} 👍 / {{ Number(stats?.totalDislikes || 0).toLocaleString('fa-IR') }} 👎
+          </span>
+        </div>
+        <div class="metric-icon-box p-2.5 rounded-xl bg-amber-500/10 text-amber-500">
+          <ThumbsUp :size="22" />
         </div>
       </div>
     </div>
@@ -229,6 +246,41 @@ onMounted(loadDashboardData)
           <div v-if="!topUsers.length" class="empty-top p-6 text-center text-xs text-muted-foreground">
             هیچ داده‌ای برای نمایش موجود نیست.
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- User Experience & Satisfaction Overview -->
+    <div class="feedback-section p-5 rounded-xl border border-border bg-card shadow-sm space-y-4">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h3 class="text-sm font-bold text-foreground flex items-center gap-2">
+            <ThumbsUp :size="16" class="text-primary" />
+            <span>تجربه کاربری و رضایت کلی (User Experience & Satisfaction)</span>
+          </h3>
+          <p class="text-xs text-muted-foreground mt-0.5">
+            آمار کلی بازخوردهای ثبت‌شده و میزان رضایت کاربران از پاسخ‌های هوش مصنوعی
+          </p>
+        </div>
+      </div>
+
+      <!-- Satisfaction summary banner -->
+      <div class="satisfaction-summary p-4 rounded-lg bg-secondary/30 border border-border/60 flex items-center justify-between flex-wrap gap-4">
+        <div class="flex items-center gap-6">
+          <div class="flex items-center gap-2 text-sm font-bold text-emerald-600 dark:text-emerald-400">
+            <ThumbsUp :size="18" />
+            <span>{{ Number(stats?.totalLikes || 0).toLocaleString('fa-IR') }} پاسخ پسندیده‌شده</span>
+          </div>
+          <div class="flex items-center gap-2 text-sm font-bold text-rose-600 dark:text-rose-400">
+            <ThumbsDown :size="18" />
+            <span>{{ Number(stats?.totalDislikes || 0).toLocaleString('fa-IR') }} پاسخ ناپسند</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 text-sm font-bold text-foreground">
+          <span>شاخص کلی رضایت‌مندی:</span>
+          <span class="px-3 py-1 rounded-full text-sm font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-mono">
+            {{ stats?.satisfactionRate !== undefined ? `${Number(stats.satisfactionRate).toLocaleString('fa-IR')}٪` : '۱۰۰٪' }}
+          </span>
         </div>
       </div>
     </div>

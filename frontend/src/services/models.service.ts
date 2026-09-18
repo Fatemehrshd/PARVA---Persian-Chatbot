@@ -61,6 +61,24 @@ export const modelsService = {
   },
 
   /**
+   * Tests connectivity to an AI model by dispatching a lightweight prompt.
+   * POST /admin/models/test
+   */
+  async testModel(payload: {
+    modelId?: string
+    apiIdentifier?: string
+    providerId?: string
+    provider?: string
+    apiKey?: string
+    baseUrl?: string
+  }): Promise<{ success: boolean; latencyMs: number; reply?: string; error?: string }> {
+    return request<{ success: boolean; latencyMs: number; reply?: string; error?: string }>('/admin/models/test', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+  },
+
+  /**
    * Remove an existing AI model from the platform (admin only).
    * DELETE /admin/models/{modelId}
    */

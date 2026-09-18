@@ -34,6 +34,8 @@ export class AdminDashboardController {
       totalMessages,
       tokensSumRow,
       settingsData,
+      likesCount,
+      dislikesCount,
     ] = await Promise.all([
       this.usersRepo.count().catch(() => 0),
       this.modelRepo.count().catch(() => 0),
@@ -58,9 +60,15 @@ export class AdminDashboardController {
               }))
             : Promise.resolve({ sum: 0 })),
       this.settings.getAll(),
+      this.msgRepo.count({ where: { feedback: 'like' } }).catch(() => 0),
+      this.msgRepo.count({ where: { feedback: 'dislike' } }).catch(() => 0),
     ]);
 
     const totalTokensUsed = Number(tokensSumRow?.sum || 0);
+    const totalLikes = Number(likesCount || 0);
+    const totalDislikes = Number(dislikesCount || 0);
+    const totalFeedback = totalLikes + totalDislikes;
+    const satisfactionRate = totalFeedback > 0 ? Math.round((totalLikes / totalFeedback) * 100) : 100;
 
     return {
       totalUsers,
@@ -71,10 +79,34 @@ export class AdminDashboardController {
       totalConversations,
       totalMessages,
       totalTokensUsed,
+      totalLikes,
+      totalDislikes,
+      satisfactionRate,
       globalTokenLimit: settingsData.globalTokenLimit,
       tokenRatePer1000: settingsData.tokenRatePer1000,
       systemPrompt: settingsData.systemPrompt,
       webSearchUsage: settingsData.webSearchUsage,
     };
+  }
+
+  @Get('feedback')
+  async getFeedbackList() {
+    const messages = await this.msgRepo.find({
+      where: [
+        { feedback: 'like' },
+        { feedback: 'dislike' },
+      ],
+      relations: ['conversation'],
+      order: { createdAt: 'DESC' },
+      take: 30,
+    });
+    return messages.map((m) => ({
+      id: m.id,
+      conversationId: m.conversationId,
+      conversationTitle: m.conversation?.title || 'گفتگوی بدون عنوان',
+      contentSnippet: (m.content || '').slice(0, 160),
+      feedback: m.feedback,
+      createdAt: m.createdAt,
+    }));
   }
 }

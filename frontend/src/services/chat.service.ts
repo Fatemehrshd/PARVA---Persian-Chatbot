@@ -139,6 +139,21 @@ export const chatService = {
   },
 
   /**
+   * Set feedback (like / dislike / null) on an assistant message.
+   * PATCH /chat/conversations/{conversationId}/messages/{messageId}/feedback
+   */
+  async setMessageFeedback(
+    conversationId: string,
+    messageId: string,
+    feedback: 'like' | 'dislike' | null
+  ): Promise<Message> {
+    return request<Message>(`/chat/conversations/${conversationId}/messages/${messageId}/feedback`, {
+      method: 'PATCH',
+      body: JSON.stringify({ feedback }),
+    })
+  },
+
+  /**
    * Get the message history of a conversation (ordered oldest first).
    * GET /chat/conversations/{conversationId}/messages
    */

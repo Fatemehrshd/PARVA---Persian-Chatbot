@@ -31,6 +31,7 @@ const {
   removeFile,
   retryFile,
   clearAttachedFiles,
+  restoreFromStorage,
   handleDragOver,
   handleDragLeave,
   handleDrop,
@@ -187,20 +188,38 @@ function updateDirection() {
 watch(inputContent, (newVal) => {
   if (!newVal || !newVal.trim()) {
     inputDirection.value = 'rtl'
+    try {
+      sessionStorage.removeItem(`chat_draft_${activeConvId.value}`)
+    } catch {}
   } else {
     updateDirection()
+    try {
+      sessionStorage.setItem(`chat_draft_${activeConvId.value}`, newVal)
+    } catch {}
   }
 })
 
-// پاک کردن input هنگام سوئیچ conversation
+// بازیابی یا پاک کردن input هنگام سوئیچ conversation
 watch(
   () => chatStore.currentConversationId,
-  () => {
-    inputContent.value = ''
-    inputDirection.value = 'rtl'
-    if (textareaRef.value) {
-      textareaRef.value.style.height = 'auto'
+  (newConvId) => {
+    const key = `chat_draft_${newConvId ?? '__new__'}`
+    let saved = ''
+    try {
+      saved = sessionStorage.getItem(key) || ''
+    } catch {}
+    inputContent.value = saved
+    if (saved) {
+      updateDirection()
+      adjustHeight()
+    } else {
+      inputDirection.value = 'rtl'
+      if (textareaRef.value) {
+        textareaRef.value.style.height = 'auto'
+      }
     }
+    // همچنین بازیابی فایل‌های آپلود شده مخصوص همین گفتگو
+    restoreFromStorage()
   }
 )
 
@@ -262,6 +281,9 @@ async function handleSubmit() {
   const files = [...attachedFiles.value]
   inputContent.value = ''
   inputDirection.value = 'rtl'
+  try {
+    sessionStorage.removeItem(`chat_draft_${activeConvId.value}`)
+  } catch {}
   clearAttachedFiles()
   if (textareaRef.value) {
     textareaRef.value.style.height = 'auto'
@@ -310,6 +332,14 @@ async function handleRetry() {
 
 onMounted(() => {
   window.addEventListener('click', handleClickOutside)
+  try {
+    const saved = sessionStorage.getItem(`chat_draft_${activeConvId.value}`)
+    if (saved) {
+      inputContent.value = saved
+      updateDirection()
+      adjustHeight()
+    }
+  } catch {}
 })
 
 onUnmounted(() => {
@@ -338,7 +368,7 @@ onUnmounted(() => {
           <button
             type="button"
             class="stream-error-dismiss-btn"
-            @click.stop.prevent="chatStore.clearStreamError"
+            @click.stop.prevent="chatStore.dismissStreamError"
             title="بستن"
           >
             ✕
@@ -370,7 +400,7 @@ onUnmounted(() => {
           <button
             type="button"
             class="stream-error-dismiss-btn"
-            @click.stop.prevent="chatStore.clearStreamError"
+            @click.stop.prevent="chatStore.dismissStreamError"
             title="بستن"
           >
             ✕

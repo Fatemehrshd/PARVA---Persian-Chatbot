@@ -16,6 +16,9 @@ export class Message {
   /** Web-search sources attached to this assistant reply (null when unused). */
   @Column({ type: 'jsonb', nullable: true, default: null })
   sources?: { title: string; url: string; snippet?: string }[] | null;
+  /** User feedback on assistant responses: 'like' | 'dislike' | null */
+  @Column({ type: 'varchar', length: 20, nullable: true, default: null })
+  feedback?: 'like' | 'dislike' | null;
   @OneToMany(() => FileAttachment, (f) => f.message)
   attachments: FileAttachment[];
   @CreateDateColumn() createdAt: Date;

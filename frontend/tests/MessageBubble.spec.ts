@@ -187,5 +187,25 @@ describe('MessageBubble.vue', () => {
     expect(lines[2].attributes('dir')).toBe('ltr')
     expect(lines[2].classes()).toContain('ltr')
   })
+
+  it('renders like and dislike feedback buttons on assistant message', () => {
+    const assistantMessage: Message = {
+      id: 'm-ai-feedback-1',
+      conversationId: 'c-1',
+      role: 'assistant',
+      content: 'This is a helpful answer.',
+      createdAt: new Date().toISOString(),
+      feedback: 'like',
+    }
+
+    const wrapper = mount(MessageBubble, {
+      props: { message: assistantMessage }
+    })
+
+    const feedbackBtns = wrapper.findAll('.feedback-btn')
+    expect(feedbackBtns.length).toBe(2)
+    // First button is like, second is dislike
+    expect(feedbackBtns[0].classes()).toContain('text-emerald-500')
+  })
 })
 

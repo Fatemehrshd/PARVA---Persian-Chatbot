@@ -1,6 +1,7 @@
 import { request } from './api'
 import type {
   AdminDashboardStats,
+  FeedbackItem,
   WebSearchUsage,
   AdminUser,
   UpdateAdminUserRequest,
@@ -14,6 +15,10 @@ import type {
 export const adminService = {
   async getDashboardStats(): Promise<AdminDashboardStats> {
     return request<AdminDashboardStats>('/admin/dashboard/stats')
+  },
+
+  async getFeedbackList(): Promise<FeedbackItem[]> {
+    return request<FeedbackItem[]>('/admin/dashboard/feedback')
   },
 
   async listUsers(params?: {

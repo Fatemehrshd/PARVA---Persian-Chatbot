@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.2] - 2026-09-18
+
+### Added
+- **Show-Once Error Messages**: Error banners in the chat interface now display only once per occurrence. Dismissing an error (clicking ✕) registers its unique key in `sessionStorage` so that the error banner never reappears, even after page refresh or reconnect attempts. A new message send automatically clears previous dismissal history for that conversation.
+- **Composer Text Draft Persistence**: User-typed text in the chat input is saved in real-time to `sessionStorage` keyed by conversation ID (`chat_draft_<convId>`). Switching conversations or refreshing the browser restores the draft text seamlessly. Sending a message clears the draft.
+- **Uploaded File Persistence**: Files uploaded and processed to `ready` status are stored with full metadata in `sessionStorage` per conversation (`chat_files_<convId>`). Switching conversations or refreshing the browser preserves the uploaded files in ready state, eliminating duplicate uploads.
+- **Model Connectivity Testing (Admin Panel)**: Added "تست اتصال مدل" (Test Model Connection) in `ModelEditorModal.vue` and backend endpoint `POST /admin/models/test`. Admins can verify model credentials and responsiveness with a lightweight ping before saving, viewing immediate latency (ms) and sample response.
+- **Message Likes & Dislikes (User Feedback)**: Added interactive thumbs-up (👍) and thumbs-down (👎) action buttons under assistant messages in `MessageBubble.vue`. User feedback is immediately reflected in the UI and persisted to the database via `PATCH /chat/conversations/:id/messages/:messageId/feedback`.
+- **User Experience & Satisfaction Dashboard (Admin Panel)**: Integrated a dedicated User Satisfaction KPI card and an aggregate "ارزیابی تجربه کاربری و شاخص کلی رضایت" section in `AdminDashboardSection.vue`, displaying total likes, total dislikes, and satisfaction percentage in aggregate without exposing individual user chats or message records.
+
 ## [1.3.1] - 2026-09-18
 
 ### Added

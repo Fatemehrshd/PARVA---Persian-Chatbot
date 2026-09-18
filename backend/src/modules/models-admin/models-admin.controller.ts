@@ -67,4 +67,9 @@ export class ModelsAdminController {
   setDefault(@Param('modelId') id: string) {
     return this.svc.setDefault(id);
   }
+
+  @Post('test')
+  testModel(@Body() d: any) {
+    return this.svc.testModel(d);
+  }
 }

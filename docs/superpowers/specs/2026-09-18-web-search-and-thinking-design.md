@@ -176,3 +176,42 @@
 9. فرانت: toggle تفکر + کادر استریم زنده + مدت زمان
 10. فرانت: کادر جمع‌شده تفکر در MessageBubble برای پیام‌های ذخیره‌شده
 11. تست سبز + wiki
+
+---
+
+# Thinking — Final Design (2026-09-18, APPROVED)
+
+This section SUPERSEDES the earlier Thinking draft above (reasoning-only deltas,
+static allowlist, unsaved thinking, thinkingText naming). The Search design above
+is unaffected and already implemented.
+
+## 1. Locked decisions
+
+- Providers: OpenAI-compatible only. No Anthropic/native APIs in this phase (explicitly dropped by user).
+- Thinking content is display-only, never generated or faked. Sources of truth: `reasoning_content` / `reasoning` chat-completions deltas.
+- Capabilities per model: thinking / vision / document (+ thinking budget). Registry pattern, DRY.
+- Reasoning persists in `Message.reasoning_content` (+ `thinkingDurationMs`).
+- UI: ThinkingBlock + shadcn-style Collapsible; render only with flag + real reasoning; toggle disabled otherwise.
+- Styling: Tailwind + existing reusable components only, no new CSS. RTL everywhere.
+
+## 2. Backend
+
+- `StreamAdapter` interface (`buildRequest`, `parseStreamChunk`) + `OpenAICompatAdapter`; `OpenAiCompatForwarder` stays a facade with identical signatures (callers/tests untouched); thinking logic lives ONLY in adapters.
+- `AiModel`: `supportsThinking` (default false), `supportsVision` (default true), `supportsDocument` (default true), `thinkingBudgetTokens` (nullable) + migration + admin DTOs.
+- `generate(options.useThinking)`: thinking yields only when toggle AND flag are on; budget caps accumulated thinking text per message (provider-independent, display-safe); echo path unchanged.
+- SSE: `thinking {content}`, `thinking-status {state, durationMs}` (+ `replay:true` reuse for reconnect sync); ActiveStream reasoning buffer; `SendMsgDto.useThinking`.
+- Persistence: `reasoning_content`/`thinkingDurationMs` on Message (+ migration); user-aborted saves null (same honesty rule as search); history returns them automatically.
+- Attachment guards: images require vision, documents require document — 400 Persian errors BEFORE the provider call; legacy/undefined flags stay permissive.
+
+## 3. Frontend
+
+- `ui/collapsible/` wrapper over installed reka-ui primitives (same pattern as `ui/button`).
+- `utils/capabilities.ts` (labels, badge classes, `modelSupports` with legacy-safe defaults) + `CapabilityBadge.vue` (violet thinking / sky vision / amber document).
+- `ThinkingBlock.vue`: live dim text while streaming → auto-collapsed row with duration after; manual toggle.
+- Wiring: MessageList live box + MessageBubble stored box, presence-gated (backend guarantees the invariant, so no model lookup here).
+- Composer: thinking toggle in + menu (disabled with reason when unsupported); picker rows disable non-thinking models while toggle is on; badges per capability in rows; image/document buttons gated with reasons; per-conversation flag memory; `switchConversationModel` rolls back on server failure.
+- Admin model form: modes selector (thinking/vision/document) + budget input, existing form styles.
+
+## 4. Explicitly out of scope
+
+Anthropic signed blocks and native adapters; reasoning token-count auditing (heuristic counting stays); vision enforcement beyond send-guard + backend 400.

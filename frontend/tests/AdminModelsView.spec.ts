@@ -24,7 +24,7 @@ describe('AdminModelsView.vue (Dashboard)', () => {
     // Check dashboard header
     expect(wrapper.text()).toContain('ADMIN')
     expect(wrapper.find('.dashboard-table').exists()).toBe(true)
-    expect(wrapper.findAll('.metric-card').length).toBe(4)
+    expect(wrapper.findAll('.metric-card').length).toBe(5)
   })
 
   it('renders admin navigation and switches to the users view', async () => {

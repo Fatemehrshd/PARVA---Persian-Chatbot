@@ -66,6 +66,18 @@ export class ChatController {
   ) {
     await this.chat.deleteMessage(req.user.sub, id, messageId);
   }
+  @Patch(':id/messages/:messageId/feedback')
+  async setMessageFeedback(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+    @Body('feedback') feedback: 'like' | 'dislike' | null,
+  ) {
+    if (feedback !== undefined && feedback !== null && feedback !== 'like' && feedback !== 'dislike') {
+      throw new BadRequestException('بازخورد باید like یا dislike یا null باشد');
+    }
+    return this.chat.setMessageFeedback(req.user.sub, id, messageId, feedback ?? null);
+  }
   @Get(':id/messages') history(@Req() req: any, @Param('id') id: string) {
     return this.chat.history(req.user.sub, id);
   }

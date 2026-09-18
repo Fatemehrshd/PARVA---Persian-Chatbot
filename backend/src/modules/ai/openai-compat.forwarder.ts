@@ -225,4 +225,58 @@ export class OpenAiCompatForwarder {
       return '';
     }
   }
+
+  /** Tests connectivity and responsiveness of a target endpoint with minimal payload. */
+  async testTarget(
+    target: ResolvedTarget,
+    testPrompt = 'سلام',
+  ): Promise<{ success: boolean; latencyMs: number; reply?: string; error?: string }> {
+    const url = target.baseUrl.endsWith('/chat/completions')
+      ? target.baseUrl
+      : `${target.baseUrl}/chat/completions`;
+    const start = Date.now();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 12000);
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${target.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: target.apiIdentifier,
+          messages: [{ role: 'user', content: testPrompt }],
+          max_tokens: 35,
+          stream: false,
+        }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      const latencyMs = Date.now() - start;
+
+      if (!res.ok) {
+        const raw = await res.text().catch(() => '');
+        let errMsg = `خطای سرور (${res.status})`;
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed.error?.message) errMsg = parsed.error.message;
+        } catch {}
+        return { success: false, latencyMs, error: errMsg };
+      }
+
+      const json = await res.json();
+      const reply = json?.choices?.[0]?.message?.content?.trim() || 'پاسخ دریافت شد';
+      return { success: true, latencyMs, reply };
+    } catch (err: any) {
+      clearTimeout(timer);
+      const latencyMs = Date.now() - start;
+      const error =
+        err?.name === 'AbortError'
+          ? 'زمان انتظار برای پاسخ مدل به پایان رسید (تایم‌اوت ۱۲ ثانیه)'
+          : err?.message || 'خطا در برقراری ارتباط با مدل';
+      return { success: false, latencyMs, error };
+    }
+  }
 }

@@ -5,6 +5,8 @@ import BaseButton from '../../ui/BaseButton.vue'
 import BaseToggle from '../../ui/BaseToggle.vue'
 import type { Model, Provider } from '../../../types'
 
+import { modelsService } from '../../../services/models.service'
+
 const props = defineProps<{
   open: boolean
   model?: Model | null
@@ -26,9 +28,13 @@ const form = ref({
   isActive: true,
 })
 
+const isTesting = ref(false)
+const testResult = ref<{ success: boolean; latencyMs: number; reply?: string; error?: string } | null>(null)
+
 watch(
   () => props.model,
   (m) => {
+    testResult.value = null
     if (m) {
       form.value = {
         name: m.name,
@@ -49,6 +55,36 @@ watch(
   },
   { immediate: true }
 )
+
+async function handleTestModel() {
+  if (!form.value.apiIdentifier.trim()) {
+    testResult.value = {
+      success: false,
+      latencyMs: 0,
+      error: 'لطفاً ابتدا شناسه فنی مدل (API Identifier) را وارد کنید.',
+    }
+    return
+  }
+  isTesting.value = true
+  testResult.value = null
+  try {
+    const res = await modelsService.testModel({
+      modelId: props.model?.id,
+      apiIdentifier: form.value.apiIdentifier.trim(),
+      providerId: form.value.providerId || undefined,
+      provider: form.value.provider || undefined,
+    })
+    testResult.value = res
+  } catch (err: any) {
+    testResult.value = {
+      success: false,
+      latencyMs: 0,
+      error: err?.message || 'خطا در آزمون اتصال به مدل',
+    }
+  } finally {
+    isTesting.value = false
+  }
+}
 
 function handleSubmit() {
   if (!form.value.name.trim() || !form.value.apiIdentifier.trim()) return
@@ -96,6 +132,43 @@ function handleSubmit() {
           <span>مدل در پلتفرم فعال باشد</span>
         </label>
       </div>
+
+      <!-- Test Model Box -->
+      <div class="test-model-box p-3 rounded-lg border border-border/80 bg-secondary/40 flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs text-muted-foreground font-medium">ارزیابی اتصال و عملکرد مدل:</span>
+          <button
+            type="button"
+            class="test-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-background hover:bg-secondary text-foreground border border-border transition-all cursor-pointer disabled:opacity-50"
+            :disabled="isTesting || isSaving || !form.apiIdentifier.trim()"
+            @click="handleTestModel"
+          >
+            <svg v-if="isTesting" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+            </svg>
+            <svg v-else class="w-3.5 h-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            <span>{{ isTesting ? 'در حال ارسال تست...' : 'تست اتصال مدل' }}</span>
+          </button>
+        </div>
+
+        <!-- Minimal Result Display -->
+        <div
+          v-if="testResult"
+          class="test-result-inline text-xs p-2.5 rounded-md flex flex-col gap-1 border"
+          :class="testResult.success ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25' : 'bg-destructive/10 text-destructive border-destructive/25'"
+        >
+          <div class="flex items-center gap-1.5 font-semibold">
+            <span v-if="testResult.success">✓ اتصال و پاسخگویی موفق (تاخیر: {{ testResult.latencyMs }} میلی‌ثانیه)</span>
+            <span v-else>✕ خطا در اتصال: {{ testResult.error }}</span>
+          </div>
+          <p v-if="testResult.reply" class="text-[11px] text-muted-foreground font-mono truncate" :title="testResult.reply">
+            پاسخ مدل: «{{ testResult.reply }}»
+          </p>
+        </div>
+      </div>
+
       <div class="modal-actions">
         <BaseButton variant="ghost" size="md" :disabled="isSaving" type="button" @click="$emit('close')">
           {{ labels?.cancel || 'انصراف' }}

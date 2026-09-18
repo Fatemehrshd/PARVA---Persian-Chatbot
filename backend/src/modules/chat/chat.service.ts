@@ -189,6 +189,21 @@ export class ChatService {
     await this.msg.save(m);
   }
 
+  async setMessageFeedback(
+    userId: string,
+    convId: string,
+    messageId: string,
+    feedback: 'like' | 'dislike' | null,
+  ): Promise<Message> {
+    await this.assertOwned(userId, convId);
+    const m = await this.msg.findOne({
+      where: { id: messageId, conversationId: convId, isDeleted: false },
+    });
+    if (!m) throw new NotFoundException('پیام مورد نظر یافت نشد');
+    m.feedback = feedback;
+    return this.msg.save(m);
+  }
+
   async updateTitle(userId: string, id: string, title: string) {
     const c = await this.assertOwned(userId, id);
     c.title = title;

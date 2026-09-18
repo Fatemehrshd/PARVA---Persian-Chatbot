@@ -130,7 +130,33 @@ export const useChatStore = defineStore('chat', () => {
     return false
   })
   const currentStreamingText = computed(() => getState(currentConversationId.value)?.currentStreamingText ?? '')
-  const streamError = computed(() => getState(currentConversationId.value)?.streamError ?? null)
+
+  function loadDismissedErrors(): Set<string> {
+    try {
+      const raw = sessionStorage.getItem('dismissed_stream_errors')
+      return raw ? new Set(JSON.parse(raw)) : new Set()
+    } catch {
+      return new Set()
+    }
+  }
+  const dismissedErrorKeys = ref<Set<string>>(loadDismissedErrors())
+
+  function saveDismissedErrors() {
+    try {
+      sessionStorage.setItem(
+        'dismissed_stream_errors',
+        JSON.stringify(Array.from(dismissedErrorKeys.value)),
+      )
+    } catch {}
+  }
+
+  const streamError = computed(() => {
+    const convId = currentConversationId.value || '__new__'
+    const err = getState(currentConversationId.value)?.streamError ?? null
+    if (!err) return null
+    if (dismissedErrorKeys.value.has(`${convId}:${err}`)) return null
+    return err
+  })
   const lastUserPrompt = computed(() => getState(currentConversationId.value)?.lastUserPrompt ?? '')
 
   // ─── Public helper: check if any specific conv is streaming (for sidebar) ─
@@ -610,6 +636,13 @@ export const useChatStore = defineStore('chat', () => {
       convStreamStates.value.set(convId, { ...s })
     }
     resetWatchdog(convId, 35000)
+    const activeConvKey = convId || '__new__'
+    for (const key of dismissedErrorKeys.value) {
+      if (key.startsWith(`${activeConvKey}:`)) {
+        dismissedErrorKeys.value.delete(key)
+      }
+    }
+    saveDismissedErrors()
 
     // Explicit opts win (composer passes the toggled value); every other path
     // (queue, files, resume/retry) inherits the stored per-conversation flag.
@@ -1224,16 +1257,37 @@ export const useChatStore = defineStore('chat', () => {
     finishStream(convId, `msg-${Date.now()}`, true, content)
   }
 
-  function clearStreamError() {
-    const convId = currentConversationId.value
-    if (convId) {
-      const s = convStreamStates.value.get(convId)
-      if (s) {
-        s.streamError = null
-        convStreamStates.value.set(convId, { ...s })
-      }
+  function dismissStreamError() {
+    const convId = currentConversationId.value || '__new__'
+    const s = convStreamStates.value.get(convId)
+    if (s?.streamError) {
+      dismissedErrorKeys.value.add(`${convId}:${s.streamError}`)
+      s.streamError = null
+      convStreamStates.value.set(convId, { ...s })
     }
-    isTokenLimitExceeded.value = false
+    if (isTokenLimitExceeded.value) {
+      dismissedErrorKeys.value.add(`${convId}:token_limit`)
+      isTokenLimitExceeded.value = false
+    }
+    saveDismissedErrors()
+  }
+
+  function clearStreamError() {
+    dismissStreamError()
+  }
+
+  async function setMessageFeedback(messageId: string, feedback: 'like' | 'dislike' | null) {
+    const convId = currentConversationId.value
+    if (!convId) return
+    const msg = messages.value.find((m) => m.id === messageId)
+    if (msg) {
+      msg.feedback = feedback
+    }
+    try {
+      await chatService.setMessageFeedback(convId, messageId, feedback)
+    } catch (err: any) {
+      console.error('Failed to submit message feedback', err)
+    }
   }
 
   return {
@@ -1268,6 +1322,7 @@ export const useChatStore = defineStore('chat', () => {
     createNewConversation,
     deleteConversation,
     deleteMessage,
+    setMessageFeedback,
     updateConversationTitle,
     switchConversationModel,
     sendMessage,
@@ -1279,6 +1334,7 @@ export const useChatStore = defineStore('chat', () => {
     stopStreaming,
     finishStream,
     clearStreamError,
+    dismissStreamError,
     pendingMessageQueue
   }
 })

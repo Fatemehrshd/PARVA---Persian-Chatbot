@@ -1,14 +1,16 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AiModel } from './ai-model.entity';
 import { AiProvider } from './ai-provider.entity';
 import { maskSecret } from './mask-secret';
+import { OpenAiCompatForwarder } from '../ai/openai-compat.forwarder';
 @Injectable()
 export class ModelsAdminService {
   constructor(
     @InjectRepository(AiModel) private repo: Repository<AiModel>,
     @InjectRepository(AiProvider) private providers: Repository<AiProvider>,
+    @Optional() private forwarder?: OpenAiCompatForwarder,
   ) {}
 
   private maskApiKey(m: AiModel): AiModel {
@@ -195,5 +197,52 @@ export class ModelsAdminService {
     const provider = await this.resolveProvider(m);
     if (provider && provider.isActive === false) return null;
     return this.maskApiKey(m);
+  }
+
+  /**
+   * Tests connectivity to an AI model by dispatching a lightweight prompt.
+   * Can test an existing model (by modelId) or prospective model credentials.
+   */
+  async testModel(d: {
+    modelId?: string;
+    apiIdentifier?: string;
+    providerId?: string;
+    provider?: string;
+    apiKey?: string;
+    baseUrl?: string;
+  }): Promise<{ success: boolean; latencyMs: number; reply?: string; error?: string }> {
+    let model: AiModel | null = null;
+    if (d.modelId) {
+      model = await this.getRawById(d.modelId);
+    }
+
+    let provider: AiProvider | null = null;
+    const pId = d.providerId || model?.providerId;
+    if (pId) {
+      provider = await this.providers.findOne({ where: { id: pId } }).catch(() => null);
+    } else {
+      const pName = d.provider || model?.provider;
+      if (pName) {
+        provider = await this.providers.findOne({ where: { name: pName } }).catch(() => null);
+      }
+    }
+
+    const tempModel = {
+      apiIdentifier: d.apiIdentifier || model?.apiIdentifier || 'gpt-4o',
+      apiKey: d.apiKey || model?.apiKey,
+      baseUrl: d.baseUrl || model?.baseUrl,
+    } as AiModel;
+
+    const fwd = this.forwarder || new OpenAiCompatForwarder();
+    const target = fwd.resolveTarget(tempModel, provider);
+    if (!target || !target.apiKey) {
+      return {
+        success: false,
+        latencyMs: 0,
+        error: 'کلید API برای مدل یا ارائه‌دهنده تنظیم نشده است',
+      };
+    }
+
+    return fwd.testTarget(target);
   }
 }

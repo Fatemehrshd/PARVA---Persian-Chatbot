@@ -17,7 +17,55 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
     maxTotalSizeBytes: 50 * 1024 * 1024,
   })
 
+  function getStorageKey(): string {
+    const convId = conversationIdProvider() || '__new__'
+    return `chat_files_${convId}`
+  }
+
+  function saveToStorage() {
+    try {
+      const readyFiles = attachedFiles.value
+        .filter((f) => f.status === 'ready' && !f.id.startsWith('temp-'))
+        .map((f) => ({
+          id: f.id,
+          originalName: f.originalName,
+          mimeType: f.mimeType,
+          fileType: f.fileType,
+          fileSize: f.fileSize,
+          status: 'ready' as const,
+          progress: 100,
+          metadata: f.metadata,
+        }))
+      if (readyFiles.length > 0) {
+        sessionStorage.setItem(getStorageKey(), JSON.stringify(readyFiles))
+      } else {
+        sessionStorage.removeItem(getStorageKey())
+      }
+    } catch {}
+  }
+
+  function restoreFromStorage() {
+    try {
+      const raw = sessionStorage.getItem(getStorageKey())
+      if (!raw) {
+        attachedFiles.value = []
+        return
+      }
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        attachedFiles.value = parsed.map((item: any) => ({
+          ...item,
+          status: 'ready',
+          progress: 100,
+        }))
+      }
+    } catch {
+      attachedFiles.value = []
+    }
+  }
+
   onMounted(async () => {
+    restoreFromStorage()
     try {
       limits.value = await filesService.getSettings()
     } catch {
@@ -240,6 +288,7 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
       item.metadata = immediateRes.metadata
 
       if (immediateRes.status === 'ready') {
+        saveToStorage()
         return
       }
       if (immediateRes.status === 'error') {
@@ -273,6 +322,9 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
 
         if (res.status === 'ready' || res.status === 'error') {
           clearInterval(interval)
+          if (res.status === 'ready') {
+            saveToStorage()
+          }
           if (res.status === 'error') {
             uiStore.showToast(
               `خطا در پردازش فایل "${current.originalName}": ${res.errorMessage || 'خطا'}`,
@@ -328,6 +380,7 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
     }
 
     attachedFiles.value = attachedFiles.value.filter((f) => f.id !== item.id)
+    saveToStorage()
   }
 
   async function retryFile(item: FileAttachmentItem) {
@@ -362,6 +415,9 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
   function clearAttachedFiles() {
     // Preserve blob URLs so sent message bubble can still display thumbnails
     attachedFiles.value = []
+    try {
+      sessionStorage.removeItem(getStorageKey())
+    } catch {}
   }
 
   // Drag & drop event handlers
@@ -401,6 +457,8 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
     removeFile,
     retryFile,
     clearAttachedFiles,
+    saveToStorage,
+    restoreFromStorage,
     handleDragOver,
     handleDragLeave,
     handleDrop,

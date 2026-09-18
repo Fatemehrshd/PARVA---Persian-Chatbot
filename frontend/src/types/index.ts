@@ -117,6 +117,7 @@ export interface Message {
   fileIds?: string[]
   sources?: WebSource[] | null
   searchFailed?: boolean
+  feedback?: 'like' | 'dislike' | null
 }
 
 export interface ActiveStreamStatus {
@@ -184,10 +185,22 @@ export interface AdminDashboardStats {
   totalConversations: number
   totalMessages: number
   totalTokensUsed: number
+  totalLikes?: number
+  totalDislikes?: number
+  satisfactionRate?: number
   globalTokenLimit: number
   tokenRatePer1000?: number
   systemPrompt: string
   webSearchUsage?: WebSearchUsage | null
+}
+
+export interface FeedbackItem {
+  id: string
+  conversationId: string
+  conversationTitle: string
+  contentSnippet: string
+  feedback: 'like' | 'dislike'
+  createdAt: string
 }
 
 export interface AdminUser extends User {

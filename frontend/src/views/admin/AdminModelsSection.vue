@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
-import { Plus, Edit, Trash2 } from '@lucide/vue'
+import { Plus, Edit, Trash2, Star } from '@lucide/vue'
 import AdminTable, { type TableColumn } from '../../components/admin/AdminTable.vue'
 import BaseButton from '../../components/ui/BaseButton.vue'
 import BaseToggle from '../../components/ui/BaseToggle.vue'
@@ -8,6 +8,7 @@ import ModelEditorModal from '../../components/admin/modals/ModelEditorModal.vue
 import { modelsService } from '../../services/models.service'
 import { useUiStore } from '../../stores/ui'
 import { useModelsStore } from '../../stores/models'
+import { markDefaultModel } from '../../utils/models'
 import type { Model, Provider } from '../../types'
 
 const props = defineProps<{
@@ -196,6 +197,33 @@ async function toggleModel(model: Model) {
   }
 }
 
+async function setPlatformDefault(model: Model) {
+  const prevId = markDefaultModel(modelsStore.models, model.id)
+  models.value.forEach((m) => {
+    m.isDefault = m.id === model.id
+  })
+  try {
+    await modelsService.setDefaultModel(model.id)
+    await modelsStore.fetchModels(true).catch(() => {})
+    uiStore.showToast(`مدل «${model.name}» به عنوان پیش‌فرض پلتفرم انتخاب شد.`, 'success')
+  } catch (error: any) {
+    if (prevId !== undefined) {
+      markDefaultModel(modelsStore.models, prevId)
+      models.value.forEach((m) => {
+        m.isDefault = m.id === prevId
+      })
+    } else {
+      modelsStore.models.forEach((m) => {
+        m.isDefault = false
+      })
+      models.value.forEach((m) => {
+        m.isDefault = false
+      })
+    }
+    errorMessage.value = error?.message || 'تنظیم مدل پیش‌فرض با خطا مواجه شد'
+  }
+}
+
 onMounted(loadModels)
 </script>
 
@@ -236,7 +264,15 @@ onMounted(loadModels)
     >
       <template #row="{ item: model }">
         <td data-label="نام مدل" class="font-semibold text-foreground">
-          {{ model.name }}
+          <div class="flex items-center gap-2">
+            <span>{{ model.name }}</span>
+            <span
+              v-if="model.isDefault"
+              class="text-[10px] px-1.5 py-0.5 rounded font-mono bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+            >
+              پیش‌فرض
+            </span>
+          </div>
         </td>
         <td data-label="ارائه‌دهنده">
           <span class="provider-pill px-2.5 py-1 rounded text-xs bg-muted text-muted-foreground font-medium">
@@ -255,6 +291,16 @@ onMounted(loadModels)
         </td>
         <td data-label="عملیات" class="text-left">
           <div class="flex items-center justify-end gap-1.5">
+            <BaseButton
+              variant="ghost"
+              size="sm"
+              :title="model.isDefault ? 'مدل پیش‌فرض فعلی' : 'تعیین به‌عنوان مدل پیش‌فرض سراسری'"
+              :disabled="model.isDefault"
+              data-testid="make-default-model"
+              @click="setPlatformDefault(model)"
+            >
+              <Star :size="14" :class="model.isDefault ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground'" />
+            </BaseButton>
             <BaseButton variant="ghost" size="sm" @click="openEditModel(model)" title="ویرایش">
               <Edit :size="14" />
             </BaseButton>

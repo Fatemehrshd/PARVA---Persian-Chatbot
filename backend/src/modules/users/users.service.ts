@@ -8,15 +8,15 @@ export class UsersService {
   constructor(@InjectRepository(User) private repo: Repository<User>) {}
 
   findByEmail(email: string) {
-    return this.repo.findOne({ where: { email: email.trim().toLowerCase() } });
+    return this.repo.findOne({ where: { email: email.trim().toLowerCase(), isDeleted: false } });
   }
 
   findById(id: string) {
-    return this.repo.findOne({ where: { id } }).catch(() => null);
+    return this.repo.findOne({ where: { id, isDeleted: false } }).catch(() => null);
   }
 
   findByUsername(username: string) {
-    return this.repo.findOne({ where: { username } }).catch(() => null);
+    return this.repo.findOne({ where: { username, isDeleted: false } }).catch(() => null);
   }
 
   /** نقش‌های موجود در سیستم (حاضر در جدول کاربران + پیش‌فرض‌ها) برای پنل ادمین. */
@@ -129,6 +129,7 @@ export class UsersService {
           'u.createdAt AS "createdAt"',
           'COUNT(c.id) AS "conversationsCount"',
         ])
+        .where('u.isDeleted = :deleted', { deleted: false })
         .groupBy('u.id')
         .orderBy('u.createdAt', 'ASC')
         .getRawMany();
@@ -152,7 +153,9 @@ export class UsersService {
         conversationsCount: Number(u.conversationsCount || 0),
       }));
     } catch {
-      const all = await this.repo.find({ relations: ['conversations'] }).catch(() => this.repo.find());
+      const all = await this.repo
+        .find({ where: { isDeleted: false }, relations: ['conversations'] })
+        .catch(() => this.repo.find({ where: { isDeleted: false } }));
       return all.map((u) => ({
         id: u.id,
         email: u.email,
@@ -177,7 +180,7 @@ export class UsersService {
   async updateByAdmin(userId: string, data: Partial<User>) {
     let user;
     try {
-      user = await this.repo.findOne({ where: { id: userId } });
+      user = await this.repo.findOne({ where: { id: userId, isDeleted: false } });
     } catch (err: any) {
       if (err?.code === '22P02') throw new NotFoundException('Resource not found');
       throw err;
@@ -195,19 +198,22 @@ export class UsersService {
   async deleteByAdmin(userId: string) {
     let user;
     try {
-      user = await this.repo.findOne({ where: { id: userId } });
+      user = await this.repo.findOne({ where: { id: userId, isDeleted: false } });
     } catch (err: any) {
       if (err?.code === '22P02') throw new NotFoundException('Resource not found');
       throw err;
     }
     if (!user) throw new NotFoundException('Resource not found');
-    await this.repo.remove(user);
+    // Soft delete: keep the row (and its conversations/files) for audit; the
+    // user disappears from listings and can no longer authenticate.
+    user.isDeleted = true;
+    await this.repo.save(user);
   }
 
   async updateStatusByAdmin(userId: string, isActive: boolean) {
     let user;
     try {
-      user = await this.repo.findOne({ where: { id: userId } });
+      user = await this.repo.findOne({ where: { id: userId, isDeleted: false } });
     } catch (err: any) {
       if (err?.code === '22P02') throw new NotFoundException('Resource not found');
       throw err;

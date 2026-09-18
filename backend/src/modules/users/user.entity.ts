@@ -23,6 +23,8 @@ export class User {
   @Column({ type: 'jsonb', default: {} }) usageByType?: Record<string, number>;
   @Column({ default: 'user' }) role: string;
   @Column({ default: true }) isActive: boolean;
+  /** Soft-delete flag; row is kept for audit, hidden from all listings/auth. */
+  @Column({ default: false }) isDeleted: boolean;
   @CreateDateColumn() createdAt: Date;
   @OneToMany(() => Conversation, (c) => c.user) conversations: Conversation[];
 }

@@ -19,7 +19,7 @@ export class ModelsAdminService {
   }
 
   async list() {
-    const models = await this.repo.find({ order: { createdAt: 'ASC' } });
+    const models = await this.repo.find({ where: { isDeleted: false }, order: { createdAt: 'ASC' } });
     return models.map((m) => this.maskApiKey(m));
   }
 
@@ -29,7 +29,7 @@ export class ModelsAdminService {
    */
   async listActive() {
     const models = await this.repo.find({
-      where: { isActive: true },
+      where: { isActive: true, isDeleted: false },
       order: { createdAt: 'ASC' },
     });
     const usable: AiModel[] = [];
@@ -42,13 +42,13 @@ export class ModelsAdminService {
 
   async getRawById(id: string): Promise<AiModel | null> {
     try {
-      const byId = await this.repo.findOne({ where: { id } });
+      const byId = await this.repo.findOne({ where: { id, isDeleted: false } });
       if (byId) return byId;
     } catch (err: any) {
       if (err?.code !== '22P02') throw err;
     }
     try {
-      return await this.repo.findOne({ where: { apiIdentifier: id } });
+      return await this.repo.findOne({ where: { apiIdentifier: id, isDeleted: false } });
     } catch {
       return null;
     }
@@ -59,11 +59,11 @@ export class ModelsAdminService {
     if (!model) return null;
     try {
       if (model.providerId) {
-        const byId = await this.providers.findOne({ where: { id: model.providerId } });
+        const byId = await this.providers.findOne({ where: { id: model.providerId, isDeleted: false } });
         if (byId) return byId;
       }
       if (model.provider) {
-        return await this.providers.findOne({ where: { name: model.provider } });
+        return await this.providers.findOne({ where: { name: model.provider, isDeleted: false } });
       }
     } catch (err: any) {
       if (err?.code !== '22P02') throw err;
@@ -76,7 +76,7 @@ export class ModelsAdminService {
     if (providerId) {
       let p: AiProvider;
       try {
-        p = await this.providers.findOne({ where: { id: providerId } });
+        p = await this.providers.findOne({ where: { id: providerId, isDeleted: false } });
       } catch (err: any) {
         if (err?.code !== '22P02') throw err;
       }
@@ -85,7 +85,7 @@ export class ModelsAdminService {
     } else if (d.provider) {
       // Backward compat: callers (and the existing admin UI) send a free-text
       // provider label — maintain the provider registry implicitly.
-      let p = await this.providers.findOne({ where: { name: d.provider } }).catch(() => null);
+      let p = await this.providers.findOne({ where: { name: d.provider, isDeleted: false } }).catch(() => null);
       if (!p) {
         p = await this.providers.save(this.providers.create({ name: d.provider, isActive: true }));
       } else if (p.isActive === false) {
@@ -100,7 +100,7 @@ export class ModelsAdminService {
   async update(id: string, d: any) {
     let m;
     try {
-      m = await this.repo.findOne({ where: { id } });
+      m = await this.repo.findOne({ where: { id, isDeleted: false } });
     } catch (err: any) {
       if (err?.code === '22P02') throw new NotFoundException('Resource not found');
       throw err;
@@ -111,7 +111,7 @@ export class ModelsAdminService {
       if (d.providerId) {
         let p;
         try {
-          p = await this.providers.findOne({ where: { id: d.providerId } });
+          p = await this.providers.findOne({ where: { id: d.providerId, isDeleted: false } });
         } catch (err: any) {
           if (err?.code === '22P02') throw err;
         }
@@ -138,7 +138,7 @@ export class ModelsAdminService {
   async updateStatus(id: string, isActive: boolean) {
     let m;
     try {
-      m = await this.repo.findOne({ where: { id } });
+      m = await this.repo.findOne({ where: { id, isDeleted: false } });
     } catch (err: any) {
       if (err?.code === '22P02') throw new NotFoundException('Resource not found');
       throw err;
@@ -152,13 +152,15 @@ export class ModelsAdminService {
   async remove(id: string) {
     let m;
     try {
-      m = await this.repo.findOne({ where: { id } });
+      m = await this.repo.findOne({ where: { id, isDeleted: false } });
     } catch (err: any) {
       if (err?.code === '22P02') throw new NotFoundException('Resource not found');
       throw err;
     }
     if (!m) throw new NotFoundException('Resource not found');
-    await this.repo.remove(m);
+    // Soft delete: keep the row for audit/history (conversations reference it).
+    m.isDeleted = true;
+    await this.repo.save(m);
     // A provider's default must never dangle at a deleted model — the admin
     // can then point it at another model via PATCH /admin/providers/:id/default.
     await this.providers.update({ defaultModelId: id }, { defaultModelId: null as any });
@@ -182,7 +184,7 @@ export class ModelsAdminService {
   }
 
   async getDefault(): Promise<AiModel | null> {
-    return this.repo.findOne({ where: { isDefault: true } });
+    return this.repo.findOne({ where: { isDefault: true, isDeleted: false } });
   }
 
   /**
@@ -219,11 +221,11 @@ export class ModelsAdminService {
     let provider: AiProvider | null = null;
     const pId = d.providerId || model?.providerId;
     if (pId) {
-      provider = await this.providers.findOne({ where: { id: pId } }).catch(() => null);
+      provider = await this.providers.findOne({ where: { id: pId, isDeleted: false } }).catch(() => null);
     } else {
       const pName = d.provider || model?.provider;
       if (pName) {
-        provider = await this.providers.findOne({ where: { name: pName } }).catch(() => null);
+        provider = await this.providers.findOne({ where: { name: pName, isDeleted: false } }).catch(() => null);
       }
     }
 

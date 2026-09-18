@@ -15,5 +15,7 @@ export class AiProvider {
   @Column({ default: true }) isActive: boolean;
   /** This provider's default model (admin can always re-point it). */
   @Column({ nullable: true }) defaultModelId?: string;
+  /** Soft-delete flag; row is kept for audit, hidden from listings. */
+  @Column({ default: false }) isDeleted: boolean;
   @CreateDateColumn() createdAt: Date;
 }

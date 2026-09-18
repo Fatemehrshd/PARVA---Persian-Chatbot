@@ -552,9 +552,8 @@ export class ChatService {
         this.activeStream?.appendToken(id, note);
         yield { token: note };
       }
-      // A user-aborted (stopped) answer must not claim sources: the reply was
-      // cut off mid-way, so persisting citations would be dishonest. Provider
-      // mid-stream failures keep theirs (partial answer + streamed sources).
+      // A user-aborted (stopped) answer must not claim sources: only a fully
+      // completed message should show the sources list below it.
       const stoppedByUserAbort =
         session?.abortController?.signal.aborted === true && !failedMidStream;
       if (full && !savedAssistant) {
@@ -563,8 +562,8 @@ export class ChatService {
             conversationId: id,
             role: 'assistant',
             content: full,
-            isInterrupted: failedMidStream,
-            stoppedByUser: false,
+            isInterrupted: failedMidStream || stoppedByUserAbort,
+            stoppedByUser: stoppedByUserAbort,
             sources: stoppedByUserAbort ? null : webSources,
           }),
         );

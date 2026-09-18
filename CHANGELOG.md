@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.3] - 2026-09-18
+
+### Fixed
+- **Sources hidden for user-stopped messages**: When a user stops a streaming answer mid-generation (via the stop button), the `SourcesBlock` is no longer shown for that interrupted message. Backend now correctly sets `isInterrupted=true` and `stoppedByUser=true` on user-aborted messages and stores `sources=null`. Frontend gates `SourcesBlock` rendering on `!isInterrupted && !stoppedByUser`. Existing test `chat-stop-sources.spec.ts` validates this behavior.
+
 ## [1.3.2] - 2026-09-18
 
 ### Added

@@ -1097,8 +1097,9 @@ export const useChatStore = defineStore('chat', () => {
           content: textToSave,
           createdAt: new Date().toISOString(),
           isInterrupted,
-          sources: s.pendingSources,
-          searchFailed: s.searchFailed || undefined
+          // فقط پیام کامل (غیرمتوقف) باید منابع داشته باشد - پیام متوقف‌شده ناقص است
+          sources: isInterrupted ? null : s.pendingSources,
+          searchFailed: isInterrupted ? undefined : (s.searchFailed || undefined)
         })
       }
     }

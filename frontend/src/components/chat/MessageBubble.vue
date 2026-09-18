@@ -151,9 +151,9 @@ async function handleFeedback(type: 'like' | 'dislike') {
           <MarkdownContent :content="displayContent" :sources="message.sources ?? null" />
         </div>
 
-        <!-- Web-search sources (stored on the message; survive refresh) -->
+        <!-- Web-search sources: فقط برای پیام کامل نمایش داده می‌شود -->
         <SourcesBlock
-          v-if="!isUser && (message.sources?.length || message.searchFailed)"
+          v-if="!isUser && !message.isInterrupted && !message.stoppedByUser && (message.sources?.length || message.searchFailed)"
           :sources="message.sources ?? null"
           :failed="!!message.searchFailed"
         />

@@ -123,6 +123,12 @@ export class ChatController {
         if (chunk.searchFailed) {
           res.write(`event: sources-error\ndata: ${JSON.stringify({ message: 'جستجوی وب ناموفق بود؛ پاسخ بدون منابع ادامه می‌یابد' })}\n\n`);
         }
+        if (chunk.thinkingStatus) {
+          res.write(`event: thinking-status\ndata: ${JSON.stringify({ state: chunk.thinkingStatus, durationMs: chunk.thinkingDurationMs })}\n\n`);
+        }
+        if (chunk.thinking) {
+          res.write(`event: thinking\ndata: ${JSON.stringify({ content: chunk.thinking })}\n\n`);
+        }
         if (chunk.token) {
           res.write(`event: token\ndata: ${JSON.stringify({ content: chunk.token })}\n\n`);
         }
@@ -160,6 +166,7 @@ export class ChatController {
   ) {
     const gen = this.chat.generate(req.user.sub, id, d.content, d.fileIds, {
       useWebSearch: d.useWebSearch === true,
+      useThinking: d.useThinking === true,
     });
     const accept = (req.headers['accept'] as string) ?? '';
     if (accept.includes('application/json')) {
@@ -212,6 +219,12 @@ export class ChatController {
     if (!first.done && first.value?.searchFailed && !res.writableEnded) {
       res.write(`event: sources-error\ndata: ${JSON.stringify({ message: 'جستجوی وب ناموفق بود؛ پاسخ بدون منابع ادامه می‌یابد' })}\n\n`);
     }
+    if (!first.done && first.value?.thinkingStatus && !res.writableEnded) {
+      res.write(`event: thinking-status\ndata: ${JSON.stringify({ state: first.value.thinkingStatus, durationMs: first.value.thinkingDurationMs })}\n\n`);
+    }
+    if (!first.done && first.value?.thinking && !res.writableEnded) {
+      res.write(`event: thinking\ndata: ${JSON.stringify({ content: first.value.thinking })}\n\n`);
+    }
     if (!first.done && first.value?.token) writeToken(first.value.token);
     try {
       for await (const chunk of gen) {
@@ -248,6 +261,20 @@ export class ChatController {
         if (chunk.searchFailed && !clientDisconnected && !res.writableEnded) {
           try {
             res.write(`event: sources-error\ndata: ${JSON.stringify({ message: 'جستجوی وب ناموفق بود؛ پاسخ بدون منابع ادامه می‌یابد' })}\n\n`);
+          } catch {
+            clientDisconnected = true;
+          }
+        }
+        if (chunk.thinkingStatus && !clientDisconnected && !res.writableEnded) {
+          try {
+            res.write(`event: thinking-status\ndata: ${JSON.stringify({ state: chunk.thinkingStatus, durationMs: chunk.thinkingDurationMs })}\n\n`);
+          } catch {
+            clientDisconnected = true;
+          }
+        }
+        if (chunk.thinking && !clientDisconnected && !res.writableEnded) {
+          try {
+            res.write(`event: thinking\ndata: ${JSON.stringify({ content: chunk.thinking })}\n\n`);
           } catch {
             clientDisconnected = true;
           }

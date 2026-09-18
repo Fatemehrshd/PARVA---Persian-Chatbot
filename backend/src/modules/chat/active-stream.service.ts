@@ -8,7 +8,9 @@ export type StreamEvent =
   | { type: 'title'; title: string }
   | { type: 'done'; messageId: string }
   | { type: 'error'; message: string }
-  | { type: 'sources'; sources: { title: string; url: string; snippet?: string }[] };
+  | { type: 'sources'; sources: { title: string; url: string; snippet?: string }[] }
+  | { type: 'thinking'; content: string }
+  | { type: 'thinking-status'; state: 'thinking' | 'done'; durationMs?: number };
 
 export interface ActiveStreamSession {
   conversationId: string;
@@ -21,6 +23,9 @@ export interface ActiveStreamSession {
   savedMessageId?: string;
   title?: string;
   sources?: { title: string; url: string; snippet?: string }[];
+  reasoningText?: string;
+  thinkingDurationMs?: number;
+  isThinkingComplete?: boolean;
   abortController: AbortController;
   subscribers: Set<(event: StreamEvent) => void>;
   startedAt: number;
@@ -35,6 +40,9 @@ export interface ActiveStreamStatus {
   title?: string;
   messageId?: string;
   sources?: { title: string; url: string; snippet?: string }[];
+  reasoningText?: string;
+  thinkingDurationMs?: number;
+  isThinkingComplete?: boolean;
 }
 
 /**
@@ -96,6 +104,28 @@ export class ActiveStreamService {
     return session;
   }
 
+  initSession(
+    conversationId: string,
+    userId: string,
+    abortController: AbortController = new AbortController(),
+  ): ActiveStreamSession {
+    const session: ActiveStreamSession = {
+      conversationId,
+      userId,
+      userPrompt: '',
+      accumulatedText: '',
+      chunks: [],
+      status: 'thinking',
+      abortController,
+      subscribers: new Set(),
+      startedAt: Date.now(),
+      reasoningText: '',
+      isThinkingComplete: false,
+    };
+    this.sessions.set(conversationId, session);
+    return session;
+  }
+
   getSession(conversationId: string): ActiveStreamSession | undefined {
     return this.sessions.get(conversationId);
   }
@@ -119,6 +149,40 @@ export class ActiveStreamService {
         sub(event);
       } catch (err) {
         this.logger.warn(`Subscriber error on token emit: ${err}`);
+      }
+    }
+  }
+
+  appendReasoning(conversationId: string, content: string): void {
+    const session = this.sessions.get(conversationId);
+    if (!session || session.status === 'completed' || session.status === 'error') return;
+
+    this.resetThinkingTimer(conversationId);
+    session.reasoningText = (session.reasoningText || '') + content;
+
+    const event: StreamEvent = { type: 'thinking', content };
+    for (const sub of session.subscribers) {
+      try {
+        sub(event);
+      } catch (err) {
+        this.logger.warn(`Subscriber error on thinking emit: ${err}`);
+      }
+    }
+  }
+
+  completeThinking(conversationId: string, durationMs?: number): void {
+    const session = this.sessions.get(conversationId);
+    if (!session) return;
+
+    session.isThinkingComplete = true;
+    session.thinkingDurationMs = durationMs;
+
+    const event: StreamEvent = { type: 'thinking-status', state: 'done', durationMs };
+    for (const sub of session.subscribers) {
+      try {
+        sub(event);
+      } catch (err) {
+        this.logger.warn(`Subscriber error on thinking-status emit: ${err}`);
       }
     }
   }
@@ -290,6 +354,9 @@ export class ActiveStreamService {
       title: session.title,
       messageId: session.savedMessageId,
       sources: session.sources,
+      reasoningText: session.reasoningText,
+      thinkingDurationMs: session.thinkingDurationMs,
+      isThinkingComplete: session.isThinkingComplete,
     };
   }
 

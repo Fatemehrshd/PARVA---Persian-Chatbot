@@ -20,6 +20,24 @@ export interface ChatChunk {
   searchStatus?: 'searching';
   sources?: { title: string; url: string; snippet?: string }[];
   searchFailed?: boolean;
+  thinking?: string;
+  thinkingStatus?: 'thinking' | 'done';
+  thinkingDurationMs?: number;
+}
+
+export function calculateEffectiveTokens(
+  baseTokens: number,
+  opts: {
+    usedSearch: boolean;
+    usedThinking: boolean;
+    searchMult: number;
+    thinkingMult: number;
+  },
+): number {
+  let mult = 1.0;
+  if (opts.usedSearch) mult *= (opts.searchMult || 1.0);
+  if (opts.usedThinking) mult *= (opts.thinkingMult || 1.0);
+  return Math.ceil(baseTokens * mult);
 }
 
 const SYSTEM_PROMPT = 'You are a helpful and knowledgeable AI assistant.';
@@ -270,7 +288,7 @@ export class ChatService {
     id: string,
     content: string,
     fileIds?: string[],
-    options?: { useWebSearch?: boolean },
+    options?: { useWebSearch?: boolean; useThinking?: boolean },
   ): AsyncGenerator<ChatChunk> {
     const conversation = await this.assertOwned(userId, id);
 
@@ -343,6 +361,7 @@ export class ChatService {
     let webSources: { title: string; url: string; snippet?: string }[] | null = null;
     let webSearchFailed = false;
     const wantSearch = options?.useWebSearch === true;
+    const wantThinking = options?.useThinking === true;
     if (wantSearch) {
       const enabled =
         this.settings && typeof (this.settings as any).getWebSearchEnabled === 'function'
@@ -452,9 +471,17 @@ export class ChatService {
           sources: webSources,
         }),
       );
-      // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست
+      // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست و ضرایب وب سرچ و تفکر
       const attachmentTokens = calculateAttachmentTokens(attachments);
-      const consumedTokens = Math.ceil((content.length + full.length) / 4) + attachmentTokens;
+      const baseTokens = Math.ceil((content.length + full.length) / 4) + attachmentTokens;
+      const searchMult = this.settings ? await this.settings.getWebSearchMultiplier() : 1.2;
+      const thinkingMult = this.settings ? await this.settings.getThinkingMultiplier() : 1.3;
+      const consumedTokens = calculateEffectiveTokens(baseTokens, {
+        usedSearch: wantSearch,
+        usedThinking: wantThinking,
+        searchMult,
+        thinkingMult,
+      });
       if (typeof this.users?.incrementUsedTokens === 'function') {
         await this.users.incrementUsedTokens(userId, consumedTokens);
       }
@@ -515,20 +542,61 @@ export class ChatService {
     let failedMidStream = false;
     try {
       try {
-        for await (const token of this.forwarder.stream(target, messages, {
+        let isThinking = false;
+        let thinkingStartTime: number | null = null;
+        let thinkingDurationMs: number | undefined = undefined;
+
+        for await (const chunk of this.forwarder.stream(target, messages, {
           signal: session?.abortController.signal,
         })) {
           if (session?.abortController.signal.aborted) break;
+
+          // Reasoning chunk
+          if (chunk && typeof chunk === 'object' && typeof (chunk as any).reasoning === 'string') {
+            const reasoningDelta = (chunk as any).reasoning;
+            if (!reasoningDelta) continue;
+
+            if (!isThinking) {
+              isThinking = true;
+              thinkingStartTime = Date.now();
+              yield { thinkingStatus: 'thinking' };
+            }
+
+            for (const piece of reasoningDelta.split(/(\s+)/)) {
+              if (!piece) continue;
+              if (!/^\s+$/.test(piece)) await paceToken();
+              this.activeStream?.appendReasoning(id, piece);
+              yield { thinking: piece };
+            }
+            continue;
+          }
+
+          // Content chunk
+          const tokenStr = typeof chunk === 'string' ? chunk : ((chunk as any)?.content || '');
+          if (isThinking) {
+            isThinking = false;
+            thinkingDurationMs = thinkingStartTime ? Math.max(0, Date.now() - thinkingStartTime) : 0;
+            this.activeStream?.completeThinking(id, thinkingDurationMs);
+            yield { thinkingStatus: 'done', thinkingDurationMs };
+          }
+
           // Providers often deliver large multi-word chunks. Split them into
           // word/whitespace pieces and pace each piece so the client renders a
           // smooth, word-by-word flow instead of sudden bulk text.
-          for (const piece of token.split(/(\s+)/)) {
+          for (const piece of tokenStr.split(/(\s+)/)) {
             if (!piece) continue;
             if (!/^\s+$/.test(piece)) await paceToken();
             full += piece;
             this.activeStream?.appendToken(id, piece);
             yield { token: piece };
           }
+        }
+
+        if (isThinking) {
+          isThinking = false;
+          thinkingDurationMs = thinkingStartTime ? Math.max(0, Date.now() - thinkingStartTime) : 0;
+          this.activeStream?.completeThinking(id, thinkingDurationMs);
+          yield { thinkingStatus: 'done', thinkingDurationMs };
         }
       } catch (err) {
         if (!full) {
@@ -568,9 +636,17 @@ export class ChatService {
             sources: stoppedByUserAbort ? null : webSources,
           }),
         );
-        // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست
+        // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست و ضرایب وب سرچ و تفکر
         const attachmentTokens = calculateAttachmentTokens(attachments);
-        const consumedTokens = Math.ceil((content.length + full.length) / 4) + attachmentTokens;
+        const baseTokens = Math.ceil((content.length + full.length) / 4) + attachmentTokens;
+        const searchMult = this.settings ? await this.settings.getWebSearchMultiplier() : 1.2;
+        const thinkingMult = this.settings ? await this.settings.getThinkingMultiplier() : 1.3;
+        const consumedTokens = calculateEffectiveTokens(baseTokens, {
+          usedSearch: wantSearch,
+          usedThinking: wantThinking,
+          searchMult,
+          thinkingMult,
+        });
         if (typeof this.users?.incrementUsedTokens === 'function') {
           await this.users.incrementUsedTokens(userId, consumedTokens);
         }
@@ -746,6 +822,15 @@ export class ChatService {
     if (session.accumulatedText) {
       yield { sync: session.accumulatedText };
     }
+    if (session.reasoningText) {
+      yield { thinking: session.reasoningText };
+    }
+    if (session.isThinkingComplete !== undefined) {
+      yield {
+        thinkingStatus: session.isThinkingComplete ? 'done' : 'thinking',
+        thinkingDurationMs: session.thinkingDurationMs,
+      };
+    }
     if (session.sources) {
       yield { sources: session.sources };
     }
@@ -764,6 +849,10 @@ export class ChatService {
     const unsubscribe = this.activeStream?.subscribe(id, (event: any) => {
       if (event.type === 'token') {
         queue.push({ token: event.content });
+      } else if (event.type === 'thinking') {
+        queue.push({ thinking: event.content });
+      } else if (event.type === 'thinking-status') {
+        queue.push({ thinkingStatus: event.state, thinkingDurationMs: event.durationMs });
       } else if (event.type === 'sources') {
         queue.push({ sources: event.sources });
       } else if (event.type === 'title') {

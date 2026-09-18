@@ -35,4 +35,8 @@ export class SendMsgDto {
   @IsOptional()
   @IsBoolean({ message: 'گزینه جستجوی وب باید boolean باشد' })
   useWebSearch?: boolean;
+
+  @IsOptional()
+  @IsBoolean({ message: 'گزینه تفکر عمیق باید boolean باشد' })
+  useThinking?: boolean;
 }

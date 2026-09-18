@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import NetworkStatusBanner from '../src/components/chat/NetworkStatusBanner.vue'
 import { useUiStore } from '../src/stores/ui'
 import { useChatStore } from '../src/stores/chat'
+import { useFileUpload } from '../src/composables/useFileUpload'
 
 vi.mock('../src/services/chat.service', () => ({
   chatService: {
@@ -153,6 +154,35 @@ describe('Network Resilience and Recovery Actions', () => {
     expect(chatStore.messages[0].content).toBe('تست بازیابی پرامپت در صورت خالی بودن')
     expect(chatStore.messages[1].role).toBe('assistant')
     expect(chatStore.messages[1].content).toBe('chunk1')
+  })
+
+  it('retries a failed upload by re-sending the original file when the server has not yet assigned an ID', async () => {
+    const { filesService } = await import('../src/services/files.service')
+    const uploadSpy = vi.spyOn(filesService, 'uploadFile')
+    uploadSpy.mockImplementation(async () => ({
+      id: 'file-1',
+      originalName: 'note.txt',
+      mimeType: 'text/plain',
+      fileType: 'text',
+      fileSize: 12,
+      status: 'processing',
+      progress: 100,
+    } as any))
+
+    const { attachedFiles, addFiles, retryFile } = useFileUpload(() => 'conv-upload-retry')
+    const file = new File(['hello'], 'note.txt', { type: 'text/plain' })
+
+    await addFiles([file])
+    const item = attachedFiles.value[0]
+    item.status = 'error'
+    item.errorMessage = 'خطا در آپلود فایل'
+    item.id = 'temp-upload-retry'
+    item.rawFile = file
+
+    await retryFile(item)
+
+    expect(uploadSpy).toHaveBeenCalledTimes(2)
+    expect(attachedFiles.value[0].status).toBe('processing')
   })
 })
 

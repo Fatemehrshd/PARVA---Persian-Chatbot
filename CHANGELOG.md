@@ -7,52 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-<<<<<<< HEAD
+## [1.2.4] - 2026-09-18
+
+### Added
+- **Global `ApiFeatures` Backend Class (`backend/src/shared/api-features.ts`)**:
+  - Implemented modular, chainable `ApiFeatures` class handling multi-field text search (`ILIKE %...%`), field-based filtering, dynamic sorting (`sortBy`, `sortOrder`), and database pagination (`skip`, `take`).
+  - Integrated across admin controllers (`/admin/users`, `/admin/files`, `/admin/conversations`).
+- **DataGrid Component Upgrade (`frontend/src/components/admin/AdminTable.vue`)**:
+  - Built-in Inline Column Filter Row (`showColumnFilters`) under table headers enabling per-column search on any field.
+  - Column sorting with toggleable ASC/DESC order indicators.
+  - Configurable page size selector (`10`, `25`, `50`, `100` items per page) with Persian numeral formatting.
+  - Quick filter toolbar with target field selector ("همه فیلدها" or specific field).
+  - Enforced true tabular layout with horizontal scrolling (`overflow-x: auto; min-width: 720px`) on mobile devices.
+- **Explicit Topbar Search Fields (`frontend/src/views/AdminPanelView.vue`)**:
+  - Clear dynamic placeholders and scope badges indicating exact searchable fields for each active tab.
+- **Circular Token Limit Progress Ring (`frontend/src/views/AdminPanelView.vue`)**:
+  - SVG progress ring displaying the percentage of credit/quota filled (`usedPercent`), color-coded (green <70%, yellow 70-90%, red >90%), with exact dollar and token metrics.
+- **Quick Credit Top-Up Buttons (`frontend`)**:
+  - Added one-click recharge buttons (`+10$`, `+25$`, `+50$`, `+100$`) in user editor modal.
+- **Attachment-Only Messaging Support (`frontend` & `backend`)**:
+  - Enabled message submission when files or images are attached without requiring any text input (`hasText || hasFiles`).
+  - Added fallback conversation naming based on the first attached filename.
+  - Permanent retention for message-bound attachments, exempting them from the 48-hour orphaned file cleanup cron.
+- **Immediate Token Exhaustion Feedback (`frontend`)**:
+  - Added persistent warning banner above chat composer when a user has depleted their token balance.
+  - Immediate send-blocking with descriptive error toast preventing stalled requests.
+- **In-Chat Search in Admin Panel (`frontend`)**:
+  - Added in-modal search toolbar in `AdminPanelView.vue` with next/previous navigation, match counter, visual match highlighting, and smooth auto-scrolling (`scrollIntoView`) to target messages.
+- **Multimodal Image Token Calculation (`backend`)**:
+  - Added `calculateAttachmentTokens` in `backend/src/modules/chat/chat.service.ts`:
+    - 512x512 tile formula: 85 base + 170 tokens per tile for dimensional images.
+    - Size-based formula: 85 base + 65 tokens per 128KB when dimensions are missing.
+    - Added automated unit test suite `backend/test/image-tokens.spec.ts` (4/4 passed).
+- **Admin File Management Panel (`مدیریت فایل‌ها`) (`backend` & `frontend`)**:
+  - Implemented `AdminFilesController` with full administrative controls (stats, paginated list, inspection, retry, delete).
+  - Dedicated "مدیریت فایل‌ها" section in `AdminPanelView.vue` with KPI summary strip and status filter chips.
+- **OpenTelemetry & SigNoz APM Integration (`backend` & `frontend`)**:
+  - Integrated native OpenTelemetry OTLP HTTP trace exporter sending trace spans to SigNoz collector on port `4318`.
+  - Added direct quick-launch action button in Admin Panel to open the standalone SigNoz APM dashboard (`http://localhost:3301`).
+- **Standard Iran Timezone & Date (`frontend`)**:
+  - Implemented `formatIranDate`, `formatIranTime`, and `formatIranDateTime` with Persian digits and `Asia/Tehran` timezone in `frontend/src/lib/date.ts`.
+
+### Changed & Fixed
+- **User Consumed Tokens Immutability (`backend` & `frontend`)**:
+  - Made user historical token consumption (`usedTokens`) strictly read-only in the admin panel and omitted it from update payloads to ensure ledger integrity.
+- **Credit Recharge Input Reactivity Bug (`frontend`)**:
+  - Fixed numeric input reactivity in user edit modal, enabling seamless two-way dollar and token calculations.
+- **Mojibake Character Fix (`frontend`)**:
+  - Replaced corrupted character strings in `AdminTable.vue` and `DeleteConfirmModal.vue` with proper Persian text.
+- **Display Name and Email Separation (`frontend`)**:
+  - Separated combined user column into distinct "نام کاربر" and "ایمیل" columns in both Users and Conversations tables.
+- **Removal of Default Model Star Icon (`frontend`)**:
+  - Completely removed star icon (`*` / `★` / `☆`) and default toggles from models and providers tables per client requirement.
+- **Uniform Vazirmatn Typography (`frontend`)**:
+  - Enforced `'Vazirmatn'` as primary font across entire application in `main.css`.
+- **Chat Title ID Cleanup (`frontend`)**:
+  - Removed truncated technical conversation IDs (`conv.id.slice(0, 8)...`) from chat title cell in admin panel.
+- **BullMQ Worker Redis Connection Hanging Bug (`backend`)**:
+  - Resolved issue where BullMQ Worker blocked the shared Redis client connection via `redisClient.duplicate()`.
+
+---
+
 ## [1.2.3] - 2026-09-17
 
 ### Changed
 - **Responsive Admin Console Tables & Modals (`frontend`)**:
-  - Admin tables (`AdminTable.vue`) switch below 768px to a stacked card layout: the header row hides and every cell is labeled from its column label via a new `data-label` contract (table sets labels for default rows; each parent row template in `AdminPanelView.vue` labels its custom cells).
-  - Filled the 768–1080px layout gap: KPI grid collapses to 2 columns; forms and dashboard grids collapse to one column below 1080px while `provider-grid` keeps its intrinsic `auto-fill` behavior.
-  - Modal hardening: `DeleteConfirmModal` action buttons stack full-width on narrow screens; `ModelsModal` card is viewport-bounded (`calc(100svh - 32px)`) with internal scrolling; `AdminModal` keeps its existing responsive behavior.
-  - Mobile layout fix: removed the leftover `margin-inline-start: 260px` content offset below 768px (sidebar is off-canvas) and compacted topbar/content spacing.
-  - No visual change on desktop; previous features untouched. See Task 26 in `docs/wiki/features.md`.
-
----
-
-## [1.2.1] - 2026-09-17
-=======
-## [1.3.0] - 2026-09-17
-
-### Added
-- **Admin File Management Panel (`مدیریت فایل‌ها`) (`backend` & `frontend`)**:
-  - Implemented `AdminFilesController` with full administrative controls:
-    - `GET /admin/files/stats`: Aggregated KPI counters (total files, ready, processing, error counts, total storage size in MB/Bytes).
-    - `GET /admin/files`: Paginated file listing with status filtering (`all`, `processing`, `ready`, `error`), 3-second debounced search query (by file name, user email, display name, ID), and user relations.
-    - `GET /admin/files/:id`: Deep inspection of file records including extracted text for LLM, processing duration, and metadata.
-    - `POST /admin/files/:id/retry`: Re-enqueuing of failed or stuck files into background processing queue.
-    - `DELETE /admin/files/:id`: Administrative file deletion from MinIO storage and database.
-  - Added dedicated "مدیریت فایل‌ها" (Files Management) section in `AdminPanelView.vue` with KPI summary strip, status filter chips, comprehensive table, pagination controls, and file diagnostics inspection modal.
-  - Added attachment badges and download/preview links to Admin Chat Inspection modal (`admin-msg-attachments`).
-- **OpenTelemetry & SigNoz APM Integration (`backend` & `frontend`)**:
-  - Integrated lightweight, native OpenTelemetry OTLP HTTP trace exporter (`backend/src/shared/telemetry.ts`) sending trace spans directly to SigNoz collector on port `4318` (`/v1/traces`).
-  - Added tracing instrumentation to `file-processor.service.ts` tracking `file.process` spans with file size, type, extraction duration, and error status attributes.
-  - Added direct quick-launch action button in Admin Panel to open the standalone SigNoz APM dashboard (`http://localhost:3301`).
-- **Automated Test Suite for Admin Files (`backend`)**:
-  - Added `backend/test/admin-files.spec.ts` validating all endpoints, pagination, status filtering, retry, delete, and 403 Forbidden unauthorized access guard.
-
-### Fixed
-- **BullMQ Worker Redis Connection Hanging Bug (`backend`)**:
-  - Resolved critical issue where BullMQ Worker blocked the shared Redis client connection. Duplicated connection via `redisClient.duplicate()` ensuring queue operations and background workers run independently without hanging.
-- **Asynchronous File Processing & LLM Text Polling (`backend`)**:
-  - Added short polling loop in `ChatService.generate()` when a message contains processing attachments, ensuring extracted text is injected into LLM context without blocking overall chat responsiveness.
-- **Frontend File URL Resolution on Reload / Refresh (`frontend`)**:
-  - Replaced hardcoded relative `/api/v1/...` file URLs in `FilePreviewCard.vue` with `buildUrl()` from `api.ts`, resolving 404 errors during Vite dev server sessions (`:5173`).
-- **User Upload Visibility in Chat Bubbles (`frontend`)**:
-  - Refactored `MessageBubble.vue` to display full metadata cards (name, size, type badge, status, and retry action) for all user attachments.
-
-## [1.2.0] - 2026-09-17
->>>>>>> 38d4df7f1cdd14878ba05fbf484b8e1d7fad7d11
+  - Admin tables (`AdminTable.vue`) switch below 768px to a stacked card layout: the header row hides and every cell is labeled from its column label via a new `data-label` contract.
+  - Filled the 768–1080px layout gap: KPI grid collapses to 2 columns; forms and dashboard grids collapse to one column below 1080px.
+  - Modal hardening: `DeleteConfirmModal` action buttons stack full-width on narrow screens; `ModelsModal` card is viewport-bounded (`calc(100svh - 32px)`) with internal scrolling.
+  - Mobile layout fix: removed leftover offset below 768px and compacted topbar/content spacing.
 
 ### Added
 - **Paced Streaming & Auto-Scroll (`backend` & `frontend`)**:

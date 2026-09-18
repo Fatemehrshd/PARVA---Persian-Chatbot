@@ -604,7 +604,16 @@ export const useChatStore = defineStore('chat', () => {
         s.isStreaming = false
         sessionStorage.removeItem('active_streaming_conv')
 
-        const rawMsg = typeof err === 'string' ? err : err?.message
+        const rawMsg = typeof err === 'string' ? err : err?.message || ''
+        const isLimit =
+          Boolean(rawMsg && (rawMsg.includes('اعتبار') || rawMsg.includes('سقف مجاز مصرف توکن') || rawMsg.includes('سقف مجاز') || rawMsg.includes('توکن'))) ||
+          err?.statusCode === 400
+
+        if (isLimit) {
+          isTokenLimitExceeded.value = true
+          uiStore.showToast('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است). لطفاً جهت افزایش اعتبار با مدیر سامانه تماس بگیرید.', 'error')
+        }
+
         const errorMessage =
           rawMsg &&
           !rawMsg.includes('Failed to fetch') &&
@@ -715,6 +724,11 @@ export const useChatStore = defineStore('chat', () => {
 
   // ─── Send message ──────────────────────────────────────────────────────────
   async function sendMessage(content: string, files?: FileAttachmentItem[]) {
+    if (isTokenLimitExceeded.value) {
+      uiStore.showToast('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است). امکان ارسال پیام جدید وجود ندارد.', 'error')
+      return
+    }
+
     if (!content.trim() && (!files || files.length === 0)) return
 
     const currentActiveState = currentConversationId.value ? convStreamStates.value.get(currentConversationId.value) : null
@@ -726,9 +740,10 @@ export const useChatStore = defineStore('chat', () => {
     if (!currentConversationId.value) {
       const tempId = `c-${Date.now()}`
       const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
+      const fallbackTitle = files && files.length > 0 ? files[0].originalName : 'گفتگوی جدید'
       const newConv: Conversation = {
         id: tempId,
-        title: content.slice(0, 30) || 'گفتگوی جدید',
+        title: content.slice(0, 30) || fallbackTitle.slice(0, 30),
         modelId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -781,7 +796,9 @@ export const useChatStore = defineStore('chat', () => {
     // Update conversation title if it's the first user message
     const conv = conversations.value.find((c) => c.id === convId)
     if (conv && (conv.title === 'گفتگوی جدید' || conv.title === 'New Chat')) {
-      conv.title = content.slice(0, 30) + (content.length > 30 ? '...' : '')
+      const fallbackTitle = fileList && fileList.length > 0 ? fileList[0].originalName : 'گفتگوی جدید'
+      const titleCandidate = content.trim() || fallbackTitle
+      conv.title = titleCandidate.slice(0, 30) + (titleCandidate.length > 30 ? '...' : '')
     }
 
     // If conversation is a local placeholder, persist it to backend
@@ -907,108 +924,6 @@ export const useChatStore = defineStore('chat', () => {
         console.warn('Backend deleteMessage failed:', err)
       }
     }
-    const abortCtrl = new AbortController()
-    {
-      const s = ensureState(convId)
-      s.abortController = abortCtrl
-      convStreamStates.value.set(convId, { ...s })
-    }
-    resetWatchdog(convId, 35000)
-
-    await chatService.sendMessageStream(
-      convId,
-      content,
-      (token: string) => {
-        const s = ensureState(convId)
-        s.isThinking = false
-        streamedAny = true
-        userMessage.status = 'sent'
-        s.streamError = null
-        s.currentStreamingText += token
-        convStreamStates.value.set(convId, { ...s })
-        resetWatchdog(convId, 25000)
-
-        // First token from the assistant means the conversation is real now —
-        // add it to the sidebar so the user can find it again later. Until the
-        // model responds, the chat stays off the list (see createNewConversation).
-        if (!conversations.value.find((c) => c.id === convId)) {
-          const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
-          conversations.value.unshift({
-            id: convId,
-            title: content.slice(0, 30),
-            modelId,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          })
-        }
-      },
-      (messageId: string) => {
-        clearWatchdog(convId)
-        const s = ensureState(convId)
-        s.abortController = null
-        convStreamStates.value.set(convId, { ...s })
-        userMessage.status = 'sent'
-        finishStream(convId, messageId)
-      },
-      async (err: any) => {
-        clearWatchdog(convId)
-        const s = ensureState(convId)
-        s.abortController = null
-        s.isThinking = false
-        s.isStreaming = false
-        sessionStorage.removeItem('active_streaming_conv')
-
-        const rawMsg = typeof err === 'string' ? err : err?.message
-        const isLimit =
-          Boolean(rawMsg && (rawMsg.includes('سقف مجاز مصرف توکن') || rawMsg.includes('سقف مجاز') || rawMsg.includes('توکن'))) ||
-          err?.statusCode === 400
-
-        if (isLimit) {
-          isTokenLimitExceeded.value = true
-          uiStore.showToast('سقف مجاز مصرف توکن به پایان رسیده است.', 'error')
-        }
-
-        const errorMessage =
-          rawMsg &&
-          !rawMsg.includes('Failed to fetch') &&
-          !rawMsg.includes('NetworkError') &&
-          !rawMsg.includes('Load failed')
-            ? rawMsg
-            : 'خطا در برقراری ارتباط'
-
-        if (streamedAny) {
-          userMessage.status = 'sent'
-          convStreamStates.value.set(convId, { ...s })
-          finishStream(convId, `msg-${Date.now()}`, true)
-          const s2 = ensureState(convId)
-          s2.streamError = errorMessage
-          convStreamStates.value.set(convId, { ...s2 })
-        } else {
-          userMessage.status = 'error'
-          userMessage.errorText = errorMessage
-          s.streamError = errorMessage
-          s.currentStreamingText = ''
-          convStreamStates.value.set(convId, { ...s })
-        }
-      },
-      abortCtrl.signal,
-      (newTitle: string) => {
-        const c = conversations.value.find((item) => item.id === convId)
-        if (c) {
-          c.title = newTitle
-        }
-      },
-      (syncText: string) => {
-        const s = ensureState(convId)
-        s.isThinking = false
-        streamedAny = true
-        userMessage.status = 'sent'
-        s.streamError = null
-        s.currentStreamingText = syncText
-        convStreamStates.value.set(convId, { ...s })
-        resetWatchdog(convId, 25000)
-      }
-    )
   }
 
   // ─── Finish stream ─────────────────────────────────────────────────────────
@@ -1044,15 +959,6 @@ export const useChatStore = defineStore('chat', () => {
     s.isStreaming = false
     s.isThinking = false
     convStreamStates.value.set(convId, { ...s })
-  }
-
-  // ─── Clear stream error ────────────────────────────────────────────────────
-  function clearStreamError() {
-    const id = currentConversationId.value
-    if (!id) return
-    const s = ensureState(id)
-    s.streamError = null
-    convStreamStates.value.set(id, { ...s })
   }
 
   // ─── Retry last message ────────────────────────────────────────────────────

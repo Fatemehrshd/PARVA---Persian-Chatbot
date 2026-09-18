@@ -15,6 +15,7 @@ import { useUiStore } from '../stores/ui'
 import { modelsService } from '../services/models.service'
 import { adminService } from '../services/admin.service'
 import { buildUrl } from '../services/api'
+import { formatIranDate, formatIranTime, formatIranDateTime } from '../lib/date'
 import AdminModal from '../components/admin/AdminModal.vue'
 import AdminTable from '../components/admin/AdminTable.vue'
 import DeleteConfirmModal from '../components/admin/DeleteConfirmModal.vue'
@@ -48,7 +49,9 @@ const router = useRouter()
 const modelsStore = useModelsStore()
 const uiStore = useUiStore()
 
-const activeSection = ref<'dashboard' | 'providers' | 'models' | 'users' | 'prompts' | 'chats' | 'files'>('dashboard')
+type AdminSection = 'dashboard' | 'providers' | 'models' | 'users' | 'prompts' | 'chats' | 'files'
+
+const activeSection = ref<AdminSection>('dashboard')
 const sidebarOpen = ref(false)
 
 // 3-Second Search Debounce
@@ -56,6 +59,42 @@ const searchQuery = ref('')
 const debouncedSearchQuery = ref('')
 const isSearchDebouncing = ref(false)
 let searchDebounceTimer: any = null
+
+// مشخص کردن دامنه و فیلدهای تحت جستجو بر اساس بخش فعال
+const currentSearchScope = computed(() => {
+  switch (activeSection.value) {
+    case 'users':
+      return {
+        placeholder: 'جستجو در کاربران بر اساس: نام کاربر، نشانی ایمیل، نام کاربری، نقش...',
+        fields: ['نام کاربر', 'ایمیل', 'نام کاربری', 'نقش'],
+      }
+    case 'models':
+      return {
+        placeholder: 'جستجو در مدل‌ها بر اساس: نام مدل، شناسه API، ارائه‌دهنده...',
+        fields: ['نام مدل', 'شناسه API', 'ارائه‌دهنده'],
+      }
+    case 'providers':
+      return {
+        placeholder: 'جستجو در ارائه‌دهنده‌ها بر اساس: نام سرویس‌دهنده، آدرس Base URL...',
+        fields: ['نام ارائه‌دهنده', 'آدرس Base URL'],
+      }
+    case 'chats':
+      return {
+        placeholder: 'جستجو در چت‌ها بر اساس: عنوان گفتگو، نام کاربر، ایمیل...',
+        fields: ['عنوان گفتگو', 'نام کاربر', 'ایمیل'],
+      }
+    case 'files':
+      return {
+        placeholder: 'جستجو در فایل‌ها بر اساس: نام فایل، نوع، کاربر، شناسه...',
+        fields: ['نام فایل', 'نوع فایل', 'کاربر', 'شناسه'],
+      }
+    default:
+      return {
+        placeholder: 'جستجو در این بخش...',
+        fields: [],
+      }
+  }
+})
 
 watch(searchQuery, (newVal) => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
@@ -86,6 +125,52 @@ const isChatModalOpen = ref(false)
 const inspectingConversation = ref<AdminConversationDetail | null>(null)
 const isLoadingChatDetail = ref(false)
 
+// ========================
+// قابلیت سرچ درون چت کاربر در پنل ادمین با اسکرول خودکار (مورد ۱)
+// ========================
+const chatSearchQuery = ref('')
+const activeChatMatchIndex = ref(0)
+
+const matchingChatMessages = computed(() => {
+  if (!inspectingConversation.value?.messages || !chatSearchQuery.value.trim()) {
+    return []
+  }
+  const q = chatSearchQuery.value.trim().toLowerCase()
+  return inspectingConversation.value.messages.filter((m) =>
+    (m.content || '').toLowerCase().includes(q),
+  )
+})
+
+function scrollToChatMatch(index: number) {
+  if (!matchingChatMessages.value.length) return
+  if (index < 0) index = matchingChatMessages.value.length - 1
+  if (index >= matchingChatMessages.value.length) index = 0
+  activeChatMatchIndex.value = index
+
+  const targetMsg = matchingChatMessages.value[index]
+  if (targetMsg) {
+    setTimeout(() => {
+      const el = document.getElementById(`admin-chat-msg-${targetMsg.id}`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }, 60)
+  }
+}
+
+function nextChatMatch() {
+  scrollToChatMatch(activeChatMatchIndex.value + 1)
+}
+
+function prevChatMatch() {
+  scrollToChatMatch(activeChatMatchIndex.value - 1)
+}
+
+function resetChatSearch() {
+  chatSearchQuery.value = ''
+  activeChatMatchIndex.value = 0
+}
+
 // Files Management State
 const files = ref<AdminFileItem[]>([])
 const fileStats = ref<AdminFileStats | null>(null)
@@ -99,6 +184,24 @@ const inspectingFile = ref<AdminFileDetail | null>(null)
 const isFileDetailModalOpen = ref(false)
 const isLoadingFileDetail = ref(false)
 const isRetryingFile = ref<string | null>(null)
+
+// ========================
+// مشاهده فایل‌های آپلود شده هر کاربر با کلیک روی کاربر (مورد ۱۴)
+// ========================
+const fileUserFilter = ref<AdminUser | null>(null)
+
+function filterFilesByUser(user: AdminUser) {
+  fileUserFilter.value = user
+  activeSection.value = 'files'
+  filePage.value = 1
+  loadFiles()
+}
+
+function clearFileUserFilter() {
+  fileUserFilter.value = null
+  filePage.value = 1
+  loadFiles()
+}
 
 // Modals state
 const modelModalOpen = ref(false)
@@ -177,11 +280,129 @@ const PROMPT_PRESETS = [
 
 const settingsForm = ref({
   globalTokenLimit: 0,
+  tokenRatePer1000: 10,
   systemPrompt: '',
   fileMaxSizeMb: 20,
   fileMaxTotalSizeMb: 50,
   fileMaxCount: 5,
 })
+
+// ========================
+// محاسبات سیستم اعتبار دلاری و سهمیه توکن (موارد ۱۵ و ۱۶)
+// ========================
+const tokenRatePer1000 = computed(() => {
+  return Number(stats.value?.tokenRatePer1000) || 10 // پیش‌فرض: هر ۱۰۰۰ توکن = ۱۰ دلار
+})
+
+/** تبدیل تعداد توکن به مبلغ دلاری */
+function tokensToDollars(tokens: number): number {
+  return Number(((tokens / 1000) * tokenRatePer1000.value).toFixed(2))
+}
+
+/** تبدیل مبلغ دلاری به تعداد توکن معادل */
+function dollarsToTokens(dollars: number): number {
+  return Math.round((dollars / tokenRatePer1000.value) * 1000)
+}
+
+/** فیلد ورودی همگام‌ساز دلار در فرم ویرایش کاربر */
+const userCreditDollarInput = ref<number | null>(null)
+
+function onCreditDollarInput(val: string | number | null) {
+  if (val === null || val === undefined || String(val).trim() === '') {
+    userCreditDollarInput.value = null
+    userForm.value.tokenLimit = null
+    return
+  }
+  const num = Number(val)
+  if (!isNaN(num) && num >= 0) {
+    userCreditDollarInput.value = num
+    userForm.value.tokenLimit = dollarsToTokens(num)
+  }
+}
+
+function onTokenLimitInput(val: string | number | null) {
+  if (val === null || val === undefined || String(val).trim() === '') {
+    userForm.value.tokenLimit = null
+    userCreditDollarInput.value = null
+    return
+  }
+  const num = Number(val)
+  if (!isNaN(num) && num >= 0) {
+    userForm.value.tokenLimit = Math.round(num)
+    userCreditDollarInput.value = tokensToDollars(num)
+  }
+}
+
+/** دکمه‌های شارژ سریع کاربر با مبالغ رایج (مورد ۲: رفع باگ شارژ کاربر) */
+function quickRecharge(addDollars: number) {
+  const currentDollars = userCreditDollarInput.value ?? (userForm.value.tokenLimit ? tokensToDollars(userForm.value.tokenLimit) : 0)
+  const newTotal = Number((currentDollars + addDollars).toFixed(2))
+  userCreditDollarInput.value = newTotal
+  userForm.value.tokenLimit = dollarsToTokens(newTotal)
+}
+
+/** دریافت آمار و درصد پر شدن سقف اعتبار کاربر برای نمایش دایره‌ای و بج وضعیت */
+function getUserCreditStats(user: AdminUser) {
+  const rate = tokenRatePer1000.value
+  const usedTokens = Number(user.usedTokens || 0)
+  const usedDollars = tokensToDollars(usedTokens)
+
+  const hasSpecificLimit = user.tokenLimit !== null && user.tokenLimit !== undefined && user.tokenLimit > 0
+  const globalLimit = Number(stats.value?.globalTokenLimit) || 0
+  const limitTokens = hasSpecificLimit ? Number(user.tokenLimit) : globalLimit
+  const totalCreditDollars = limitTokens > 0 ? Number(((limitTokens / 1000) * rate).toFixed(2)) : 0
+
+  let remainingDollars = limitTokens > 0 ? Math.max(0, Number((totalCreditDollars - usedDollars).toFixed(2))) : null
+  let usedPercent = 0
+  let remainingPercent = 100
+  if (limitTokens > 0) {
+    usedPercent = Math.max(0, Math.min(100, Math.round((usedTokens / limitTokens) * 100)))
+    remainingPercent = Math.max(0, 100 - usedPercent)
+  }
+
+  // انتخاب رنگ برای دایره بر مبنای میزان «پر شدن» سهمیه کاربر
+  let strokeColor = '#10b981' // سبز (مصرف نرمال، کمتر از ۷۰٪)
+  let textColor = 'text-emerald-600 dark:text-emerald-400'
+  let badgeClass = 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+  let dotClass = 'bg-emerald-500'
+  let statusLabel = 'مصرف نرمال'
+
+  if (usedPercent >= 90) {
+    strokeColor = '#ef4444' // قرمز (بالای ۹۰٪ یا اتمام سهمیه)
+    textColor = 'text-rose-600 dark:text-rose-400'
+    badgeClass = 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+    dotClass = 'bg-rose-500'
+    statusLabel = usedPercent >= 100 ? 'اتمام اعتبار' : 'در آستانه اتمام'
+  } else if (usedPercent >= 70) {
+    strokeColor = '#f59e0b' // زرد (بین ۷۰٪ تا ۹۰٪)
+    textColor = 'text-amber-600 dark:text-amber-400'
+    badgeClass = 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+    dotClass = 'bg-amber-500'
+    statusLabel = 'نزدیک به سقف'
+  }
+
+  if (!limitTokens) {
+    statusLabel = 'بدون سقف (سراسری)'
+  }
+
+  return {
+    rate,
+    usedTokens,
+    usedDollars,
+    limitTokens,
+    totalCreditDollars,
+    remainingDollars,
+    remainingPercent,
+    usedPercent,
+    statusLabel,
+    strokeColor,
+    textColor,
+    badgeClass,
+    dotClass,
+    hasLimit: limitTokens > 0,
+    isSpecific: hasSpecificLimit,
+  }
+}
 
 // Persian Labels
 const labels = {
@@ -310,19 +531,23 @@ const fullModelColumns = [
   { key: 'actions', label: labels.actions, align: 'left' as const },
 ]
 
+// ========================
+// تفکیک نام کاربر از ایمیل در تمام جداول (مورد ۴) و نمایش نمودار دایره‌ای اعتبار (مورد ۱۶)
+// ========================
 const userColumns = [
-  { key: 'user', label: labels.user },
+  { key: 'displayName', label: 'نام کاربر' },
+  { key: 'email', label: 'نشانی ایمیل' },
   { key: 'role', label: labels.role },
+  { key: 'creditGauge', label: 'وضعیت سقف و مصرف توکن' },
   { key: 'conversations', label: labels.conversations },
-  { key: 'usedTokens', label: labels.usedTokens },
-  { key: 'tokenLimit', label: labels.tokenLimit },
   { key: 'isActive', label: labels.status },
   { key: 'actions', label: labels.actions, align: 'left' as const },
 ]
 
 const chatColumns = [
   { key: 'title', label: 'عنوان گفتگو' },
-  { key: 'user', label: 'کاربر' },
+  { key: 'userDisplayName', label: 'نام کاربر' },
+  { key: 'userEmail', label: 'ایمیل کاربر' },
   { key: 'messageCount', label: 'تعداد پیام‌ها' },
   { key: 'updatedAt', label: 'تاریخ آخرین فعالیت' },
   { key: 'actions', label: labels.actions, align: 'left' as const },
@@ -330,14 +555,15 @@ const chatColumns = [
 
 const fileColumns = [
   { key: 'name', label: 'نام فایل و نوع' },
-  { key: 'user', label: 'کاربر' },
+  { key: 'userDisplayName', label: 'نام کاربر' },
+  { key: 'userEmail', label: 'ایمیل کاربر' },
   { key: 'size', label: 'حجم' },
   { key: 'status', label: 'وضعیت پردازش' },
   { key: 'createdAt', label: 'زمان آپلود' },
   { key: 'actions', label: labels.actions, align: 'left' as const },
 ]
 
-function selectSection(section: typeof activeSection.value) {
+function selectSection(section: AdminSection) {
   activeSection.value = section
   sidebarOpen.value = false
   searchQuery.value = ''
@@ -417,15 +643,7 @@ async function toggleModel(model: Model) {
   }
 }
 
-async function setPlatformDefault(model: Model) {
-  try {
-    await modelsService.setDefaultModel(model.id)
-    await modelsStore.fetchModels(true)
-    uiStore.showToast(`مدل «${model.name}» به عنوان پیش‌فرض پلتفرم انتخاب شد.`, 'success')
-  } catch (error: any) {
-    errorMessage.value = error?.message || 'تنظیم مدل پیش‌فرض با خطا مواجه شد'
-  }
-}
+// توجه: قابلیت علامت‌گذاری مدل به عنوان پیش‌فرض با ستاره طبق درخواست کارفرما از سیستم حذف شد.
 
 function promptDeleteModel(model: Model) {
   deleteTarget.value = { type: 'model', id: model.id, name: model.name }
@@ -515,6 +733,9 @@ function openUserEditor(user: AdminUser) {
     usedTokens: user.usedTokens,
     tokenLimit: user.tokenLimit ?? null,
   }
+  userCreditDollarInput.value = user.tokenLimit
+    ? Number(((user.tokenLimit / 1000) * tokenRatePer1000.value).toFixed(2))
+    : null
   userModalOpen.value = true
   errorMessage.value = ''
 }
@@ -528,7 +749,7 @@ async function saveUser() {
       displayName: userForm.value.displayName.trim() || undefined,
       email: userForm.value.email.trim(),
       role: userForm.value.role,
-      usedTokens: Number(userForm.value.usedTokens) || 0,
+      // توجه: توکن مصرفی طبق خواسته کارفرما کاملاً ثابت و غیرقابل دستکاری توسط ادمین است و در payload ارسال نمی‌شود
       tokenLimit: userForm.value.tokenLimit !== null && userForm.value.tokenLimit !== undefined && userForm.value.tokenLimit !== ('' as any)
         ? Number(userForm.value.tokenLimit)
         : null,
@@ -562,6 +783,7 @@ async function toggleUser(user: AdminUser) {
 function openSettingsEditor() {
   settingsForm.value = {
     globalTokenLimit: stats.value?.globalTokenLimit ?? 0,
+    tokenRatePer1000: stats.value?.tokenRatePer1000 ?? 10,
     systemPrompt: stats.value?.systemPrompt ?? '',
     fileMaxSizeMb: (stats.value as any)?.fileMaxSizeMb ?? 20,
     fileMaxTotalSizeMb: (stats.value as any)?.fileMaxTotalSizeMb ?? 50,
@@ -577,6 +799,7 @@ async function saveSettings() {
   try {
     const res = await adminService.updateSettings({
       globalTokenLimit: Number(settingsForm.value.globalTokenLimit) || 0,
+      tokenRatePer1000: Number(settingsForm.value.tokenRatePer1000) || 10,
       systemPrompt: settingsForm.value.systemPrompt.trim() || undefined,
       fileMaxSizeMb: Number(settingsForm.value.fileMaxSizeMb) || 20,
       fileMaxTotalSizeMb: Number(settingsForm.value.fileMaxTotalSizeMb) || 50,
@@ -584,10 +807,11 @@ async function saveSettings() {
     })
     if (stats.value) {
       stats.value.globalTokenLimit = res.globalTokenLimit
+      stats.value.tokenRatePer1000 = res.tokenRatePer1000
       stats.value.systemPrompt = res.systemPrompt
     }
     settingsModalOpen.value = false
-    uiStore.showToast('تنظیمات سراسری ذخیره شد.', 'success')
+    uiStore.showToast('تنظیمات با موفقیت ذخیره شد.', 'success')
   } catch (error: any) {
     errorMessage.value = error?.message || 'ذخیره تنظیمات با خطا مواجه شد'
   } finally {
@@ -692,6 +916,7 @@ async function loadFiles() {
       limit: fileLimit.value,
       status: fileStatusFilter.value !== 'all' ? fileStatusFilter.value : undefined,
       search: debouncedSearchQuery.value || undefined,
+      userId: fileUserFilter.value?.id || undefined,
     })
     files.value = res.items || []
     fileTotal.value = res.total || 0
@@ -874,7 +1099,7 @@ onMounted(loadData)
           :key="item.id"
           :data-admin-section="item.id"
           :class="{ active: activeSection === item.id }"
-          @click="selectSection(item.id as typeof activeSection.value)"
+          @click="selectSection(item.id as AdminSection)"
         >
           <img
             v-if="item.iconType === 'img'"
@@ -932,30 +1157,43 @@ onMounted(loadData)
         </div>
 
         <div class="topbar-actions">
-          <!-- Search input hidden on dashboard and prompts sections -->
+          <!-- سرچ بالای هر صفحه با مشخص بودن دقیق فیلدهای مورد جستجو بر اساس بخش فعال -->
           <div
             v-if="activeSection !== 'dashboard' && activeSection !== 'prompts'"
-            class="search-input-wrap"
+            class="topbar-search-container flex flex-col items-start gap-1"
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="search-icon">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              v-model="searchQuery"
-              class="admin-search search-input"
-              :placeholder="activeSection === 'chats' ? 'جستجو در چت‌ها بر اساس عنوان یا ایمیل...' : activeSection === 'files' ? 'جستجو در فایل‌ها بر اساس نام فایل یا کاربر...' : labels.search"
-            />
-            <Loader2 v-if="isSearchDebouncing" :size="14" class="search-debouncing-spinner animate-spin" />
-            <button
-              v-else-if="searchQuery"
-              class="search-clear-btn"
-              type="button"
-              aria-label="پاک کردن جستجو"
-              @click="searchQuery = ''; debouncedSearchQuery = ''"
-            >
-              ×
-            </button>
+            <div class="search-input-wrap">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="search-icon">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                v-model="searchQuery"
+                class="admin-search search-input"
+                :placeholder="currentSearchScope.placeholder"
+              />
+              <Loader2 v-if="isSearchDebouncing" :size="14" class="search-debouncing-spinner animate-spin" />
+              <button
+                v-else-if="searchQuery"
+                class="search-clear-btn"
+                type="button"
+                aria-label="پاک کردن جستجو"
+                @click="searchQuery = ''; debouncedSearchQuery = ''"
+              >
+                ×
+              </button>
+            </div>
+            <!-- نمایش فیلدهای تحت جستجو بر اساس دیتا گرید -->
+            <div v-if="currentSearchScope.fields.length" class="search-fields-chips flex items-center gap-1 text-[10px] text-muted-foreground mr-1">
+              <span>فیلدهای جستجو:</span>
+              <span
+                v-for="f in currentSearchScope.fields"
+                :key="f"
+                class="px-1.5 py-0.2 rounded bg-secondary text-foreground text-[10px] font-medium"
+              >
+                {{ f }}
+              </span>
+            </div>
           </div>
 
           <BaseButton variant="ghost" icon size="md" title="تازه‌سازی اطلاعات" @click="loadData">
@@ -1116,6 +1354,10 @@ onMounted(loadData)
             :columns="dashboardModelColumns"
             :items="filteredModels"
             table-class="dashboard-table"
+            paginated
+            searchable
+            :pageSize="5"
+            :pageSizes="[5, 10, 20]"
           >
             <template #row="{ item: model }">
               <td :data-label="labels.modelName">
@@ -1236,6 +1478,10 @@ onMounted(loadData)
           :columns="fullModelColumns"
           :items="filteredModels"
           table-class="dashboard-table"
+          paginated
+          searchable
+          :pageSize="10"
+          :pageSizes="[10, 25, 50, 100]"
         >
           <template #row="{ item: model }">
             <td :data-label="labels.modelName">
@@ -1255,15 +1501,6 @@ onMounted(loadData)
             </td>
             <td :data-label="labels.actions" class="actions-cell">
               <div class="action-buttons">
-                <BaseButton
-                  variant="ghost"
-                  size="sm"
-                  icon
-                  :title="model.isDefault ? 'مدل پیش‌فرض' : 'تنظیم به عنوان پیش‌فرض'"
-                  @click="setPlatformDefault(model)"
-                >
-                  {{ model.isDefault ? '★' : '☆' }}
-                </BaseButton>
                 <BaseButton variant="ghost" size="sm" @click="openModelEditor(model)">
                   {{ labels.edit }}
                 </BaseButton>
@@ -1285,27 +1522,89 @@ onMounted(loadData)
           </div>
         </div>
 
-        <AdminTable :columns="userColumns" :items="filteredUsers">
+        <AdminTable :columns="userColumns" :items="filteredUsers" paginated searchable :pageSize="10" :pageSizes="[10, 25, 50, 100]">
           <template #row="{ item: user }">
-            <td :data-label="labels.user">
+            <!-- تفکیک ستون نام کاربر (مورد ۴) -->
+            <td data-label="نام کاربر">
               <div class="user-cell">
                 <span class="avatar-chip">{{ (user.displayName || user.email).charAt(0).toUpperCase() }}</span>
-                <div>
-                  <strong>{{ user.displayName || '—' }}</strong>
-                  <span class="subtext">{{ user.email }}</span>
-                </div>
+                <span class="font-medium text-foreground">{{ user.displayName || '—' }}</span>
               </div>
             </td>
+
+            <!-- تفکیک ستون ایمیل کاربر (مورد ۴) -->
+            <td data-label="نشانی ایمیل" class="mono text-muted-foreground text-xs">
+              {{ user.email }}
+            </td>
+
+            <!-- نقش کاربر -->
             <td :data-label="labels.role">
               <span class="tag" :class="{ 'tag-admin': user.role === 'admin' }">
                 {{ user.role === 'admin' ? 'مدیر سیستم' : 'کاربر عادی' }}
               </span>
             </td>
-            <td :data-label="labels.conversations" class="mono">{{ user.conversationsCount }}</td>
-            <td :data-label="labels.usedTokens" class="mono">{{ user.usedTokens.toLocaleString() }}</td>
-            <td :data-label="labels.tokenLimit" class="mono">
-              {{ user.tokenLimit !== null && user.tokenLimit !== undefined ? user.tokenLimit.toLocaleString() : 'سقف سراسری' }}
+
+            <!-- وضعیت سقف و مصرف توکن به صورت دایره با نمایش درصد پر شده -->
+            <td data-label="وضعیت سقف و مصرف توکن">
+              <div class="user-credit-gauge-cell flex items-center gap-3">
+                <!-- حلقه دایره‌ای SVG پیشرفت -->
+                <div class="credit-ring-box shrink-0" :title="`میزان پر شده: ${getUserCreditStats(user).usedPercent}٪`">
+                  <svg width="44" height="44" viewBox="0 0 36 36">
+                    <circle
+                      cx="18"
+                      cy="18"
+                      r="15.915"
+                      fill="none"
+                      class="stroke-muted/30 dark:stroke-muted/20"
+                      stroke-width="3.2"
+                    />
+                    <circle
+                      v-if="getUserCreditStats(user).hasLimit"
+                      cx="18"
+                      cy="18"
+                      r="15.915"
+                      fill="none"
+                      :stroke="getUserCreditStats(user).strokeColor"
+                      stroke-width="3.2"
+                      stroke-linecap="round"
+                      stroke-dasharray="100"
+                      :stroke-dashoffset="100 - getUserCreditStats(user).usedPercent"
+                      class="transition-all duration-500 ease-out"
+                    />
+                    <text
+                      x="18"
+                      y="20.5"
+                      text-anchor="middle"
+                      class="text-[9.5px] font-bold font-mono fill-foreground"
+                    >
+                      {{ getUserCreditStats(user).hasLimit ? `${getUserCreditStats(user).usedPercent}٪` : '∞' }}
+                    </text>
+                  </svg>
+                </div>
+
+                <!-- اطلاعات متنی تکمیلی در کنار دایره -->
+                <div class="credit-info-details flex flex-col gap-0.5">
+                  <div class="flex items-center gap-1 text-xs">
+                    <span class="font-bold text-foreground font-mono">{{ Number(user.usedTokens || 0).toLocaleString('fa-IR') }}</span>
+                    <span class="text-muted-foreground text-[10px]">از {{ user.tokenLimit ? Number(user.tokenLimit).toLocaleString('fa-IR') : 'نامحدود' }}</span>
+                  </div>
+                  <div class="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono">
+                    <span>${{ getUserCreditStats(user).usedDollars }} مصرفی</span>
+                    <span v-if="getUserCreditStats(user).hasLimit">/ ${{ getUserCreditStats(user).totalCreditDollars }} کل</span>
+                  </div>
+                  <div>
+                    <span class="inline-block px-1.5 py-0.2 rounded text-[10px] font-semibold" :class="getUserCreditStats(user).badgeClass">
+                      {{ getUserCreditStats(user).statusLabel }}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </td>
+
+            <!-- تعداد گفتگوها -->
+            <td :data-label="labels.conversations" class="mono">{{ user.conversationsCount }}</td>
+
+            <!-- وضعیت فعالیت -->
             <td :data-label="labels.status">
               <BaseToggle
                 :model-value="user.isActive !== false"
@@ -1313,10 +1612,20 @@ onMounted(loadData)
                 @update:model-value="toggleUser(user)"
               />
             </td>
+
+            <!-- عملیات: ویرایش و مشاهده فایل‌های اختصاصی کاربر (مورد ۱۴) -->
             <td :data-label="labels.actions" class="actions-cell">
-              <div class="action-buttons">
+              <div class="action-buttons flex items-center gap-1.5">
                 <BaseButton variant="ghost" size="sm" @click="openUserEditor(user)">
                   {{ labels.edit }}
+                </BaseButton>
+                <BaseButton
+                  variant="secondary"
+                  size="sm"
+                  title="مشاهده تمام فایل‌های آپلود شده توسط این کاربر"
+                  @click="filterFilesByUser(user)"
+                >
+                  فایل‌ها
                 </BaseButton>
               </div>
             </td>
@@ -1433,31 +1742,36 @@ onMounted(loadData)
           </BaseButton>
         </div>
 
-        <AdminTable :columns="chatColumns" :items="filteredChats">
+        <AdminTable :columns="chatColumns" :items="filteredChats" paginated searchable :pageSize="10" :pageSizes="[10, 25, 50, 100]">
           <template #row="{ item: conv }">
             <td data-label="عنوان گفتگو">
               <div class="chat-title-cell">
                 <MessageSquare :size="15" class="chat-row-icon" />
                 <div>
-                  <strong>{{ conv.title || 'بدون عنوان' }}</strong>
-                  <span class="subtext mono">{{ conv.id.slice(0, 8) }}...</span>
+                  <strong class="text-foreground">{{ conv.title || 'بدون عنوان' }}</strong>
                 </div>
               </div>
             </td>
-            <td data-label="کاربر">
+            <!-- تفکیک ستون نام کاربر (مورد ۴) -->
+            <td data-label="نام کاربر">
               <div class="user-cell">
                 <span class="avatar-chip">{{ (conv.user?.displayName || conv.user?.email || 'U').charAt(0).toUpperCase() }}</span>
-                <div>
-                  <strong>{{ conv.user?.displayName || '—' }}</strong>
-                  <span class="subtext">{{ conv.user?.email || 'کاربر ناشناس' }}</span>
-                </div>
+                <span class="font-medium">{{ conv.user?.displayName || '—' }}</span>
               </div>
             </td>
+
+            <!-- تفکیک ستون ایمیل کاربر (مورد ۴) -->
+            <td data-label="ایمیل کاربر" class="mono text-muted-foreground text-xs">
+              {{ conv.user?.email || 'کاربر ناشناس' }}
+            </td>
+
             <td data-label="تعداد پیام‌ها" class="mono">
               <span class="message-count-badge">{{ conv.messageCount }} پیام</span>
             </td>
-            <td data-label="تاریخ آخرین فعالیت" class="mono subtext">
-              {{ new Date(conv.updatedAt || conv.createdAt).toLocaleDateString('fa-IR') }}
+
+            <!-- تاریخ آخرین فعالیت با منطقه زمانی رسمی ایران (مورد ۸) -->
+            <td data-label="تاریخ آخرین فعالیت" class="mono subtext text-xs">
+              {{ formatIranDate(conv.updatedAt || conv.createdAt) }}
             </td>
             <td :data-label="labels.actions" class="actions-cell">
               <div class="action-buttons">
@@ -1529,6 +1843,51 @@ onMounted(loadData)
               <RefreshCw :size="15" />
             </BaseButton>
           </div>
+        </div>
+
+        <!-- راهنمای شفاف‌سازی وضعیت در حال پردازش و چرخه حیات فایل‌ها (موارد ۵، ۱۱ و ۱۲) -->
+        <div class="file-lifecycle-guide p-3.5 rounded-xl bg-secondary/70 border border-border mb-4 text-xs">
+          <div class="flex items-center gap-2 font-bold text-foreground mb-1.5">
+            <Sparkles :size="16" class="text-primary" />
+            <span>راهنمای چرخه پردازش فایل‌ها و وضعیت «در حال پردازش» در صف سیستم:</span>
+          </div>
+          <p class="text-muted-foreground leading-relaxed mb-2">
+            فایل‌های بارگذاری‌شده کاربران (شامل PDF، تصاویر، اکسل و متون) جهت جلوگیری از کُند شدن چت، مستقیماً وارد مسیر اصلی هوش مصنوعی نمی‌شوند؛ بلکه به صف پردازش پس‌زمینه (BullMQ) ارسال می‌شوند تا متن، جداول و ابعاد آن‌ها استخراج شود.
+          </p>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-[11px]">
+            <div class="p-2 rounded-lg bg-background/80 border border-border">
+              <span class="font-bold text-primary block mb-0.5">۱. در حال پردازش (Processing)</span>
+              <span class="text-muted-foreground">فایل در فضای ذخیره‌سازی قرار گرفته و جاب پردازش متنی/OCR آن در صف Redis/BullMQ در حال اجراست.</span>
+            </div>
+            <div class="p-2 rounded-lg bg-background/80 border border-border">
+              <span class="font-bold text-emerald-600 dark:text-emerald-400 block mb-0.5">۲. آماده (Ready)</span>
+              <span class="text-muted-foreground">استخراج محتوا و تحلیل تصویر با موفقیت پایان یافته و مدل می‌تواند به پیام کاربر پاسخ دهد.</span>
+            </div>
+            <div class="p-2 rounded-lg bg-background/80 border border-border">
+              <span class="font-bold text-rose-600 dark:text-rose-400 block mb-0.5">۳. پاکسازی فایل‌های معلق (۴۸ ساعته)</span>
+              <span class="text-muted-foreground">اگر کاربر فایلی آپلود کند اما پیامی ارسال نکند، پس از ۴۸ ساعت کران‌جاب پاکسازی خودکار آن را حذف امن می‌کند.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- بنر نمایش فیلتر فایل‌های اختصاصی کاربر (مورد ۱۴) -->
+        <div
+          v-if="fileUserFilter"
+          class="user-filter-banner flex items-center justify-between p-3 rounded-xl bg-primary/10 border border-primary/20 mb-4 text-xs"
+        >
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-primary">فیلتر فعال: فایل‌های کاربر</span>
+            <span class="font-semibold text-foreground">{{ fileUserFilter.displayName || fileUserFilter.email }}</span>
+            <span class="mono text-muted-foreground text-[11px]">({{ fileUserFilter.email }})</span>
+          </div>
+          <button
+            type="button"
+            class="text-xs text-destructive hover:underline font-medium flex items-center gap-1"
+            @click="clearFileUserFilter"
+          >
+            <span>✕</span>
+            <span>نمایش همه فایل‌ها</span>
+          </button>
         </div>
 
         <!-- KPI Metrics for Files -->
@@ -1628,7 +1987,7 @@ onMounted(loadData)
         </div>
 
         <!-- Files Table -->
-        <AdminTable :columns="fileColumns" :items="files">
+        <AdminTable :columns="fileColumns" :items="files" paginated searchable :pageSize="10" :pageSizes="[10, 25, 50, 100]">
           <template #row="{ item: file }">
             <td>
               <div class="file-name-cell flex items-center gap-2.5">
@@ -1641,15 +2000,20 @@ onMounted(loadData)
                 </div>
               </div>
             </td>
-            <td>
+
+            <!-- تفکیک ستون نام کاربر در فایل‌ها (مورد ۴) -->
+            <td data-label="نام کاربر">
               <div class="user-cell">
                 <span class="avatar-chip">{{ (file.user?.displayName || file.user?.email || 'U').charAt(0).toUpperCase() }}</span>
-                <div>
-                  <strong>{{ file.user?.displayName || '—' }}</strong>
-                  <span class="subtext">{{ file.user?.email || 'کاربر ناشناس' }}</span>
-                </div>
+                <span class="font-medium text-foreground">{{ file.user?.displayName || '—' }}</span>
               </div>
             </td>
+
+            <!-- تفکیک ستون ایمیل کاربر در فایل‌ها (مورد ۴) -->
+            <td data-label="ایمیل کاربر" class="mono text-muted-foreground text-xs">
+              {{ file.user?.email || 'کاربر ناشناس' }}
+            </td>
+
             <td class="mono text-xs">
               {{ formatFileSize(file.fileSize) }}
             </td>
@@ -1663,8 +2027,10 @@ onMounted(loadData)
                 </span>
               </div>
             </td>
+
+            <!-- زمان آپلود بر مبنای منطقه زمانی رسمی ایران (مورد ۸) -->
             <td class="mono subtext text-xs">
-              {{ new Date(file.createdAt).toLocaleDateString('fa-IR', { hour: '2-digit', minute: '2-digit' }) }}
+              {{ formatIranDateTime(file.createdAt) }}
             </td>
             <td class="actions-cell">
               <div class="action-buttons flex items-center gap-1.5">
@@ -1823,22 +2189,88 @@ onMounted(loadData)
               <option value="admin">مدیر سیستم</option>
             </select>
           </label>
-          <label>
-            <span class="field-label">{{ labels.usedTokens }}</span>
-            <input v-model.number="userForm.usedTokens" type="number" min="0" :disabled="isSaving" />
-          </label>
-          <label class="col-span-full">
-            <span class="field-label">
-              {{ labels.tokenLimit }} (خالی = استفاده از سقف سراسری سیستم)
-            </span>
-            <input
-              v-model.number="userForm.tokenLimit"
-              type="number"
-              min="0"
-              placeholder="مثال: 50000 یا خالی برای پیش‌فرض"
-              :disabled="isSaving"
-            />
-          </label>
+          <!-- توکن مصرف‌شده: کاملاً ثابت و غیرقابل دستکاری توسط ادمین (درخواست کارفرما) -->
+          <div class="user-consumed-box p-3 rounded-lg bg-muted/40 border border-border flex flex-col gap-1">
+            <span class="field-label text-xs font-semibold text-muted-foreground">{{ labels.usedTokens }} (ثابت):</span>
+            <div class="flex items-center justify-between">
+              <span class="font-mono text-sm font-bold text-foreground">
+                {{ Number(userForm.usedTokens || 0).toLocaleString('fa-IR') }} توکن
+              </span>
+              <span class="font-mono text-xs text-muted-foreground">
+                معادل ${{ tokensToDollars(userForm.usedTokens || 0) }} مصرف‌شده
+              </span>
+            </div>
+          </div>
+
+          <!-- فیلد تخصیص اعتبار دلاری و سهمیه معادل با قابلیت شارژ سریع (مورد ۲: رفع باگ شارژ کاربر) -->
+          <div class="col-span-full p-3.5 rounded-xl bg-secondary/70 border border-border space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-foreground">شارژ و سقف اعتبار کاربر:</span>
+              <span class="text-[11px] text-muted-foreground mono font-medium">نرخ فعال: هر ۱۰۰۰ توکن = ${{ tokenRatePer1000 }}</span>
+            </div>
+
+            <!-- دکمه‌های شارژ سریع -->
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-xs text-muted-foreground">شارژ سریع:</span>
+              <button
+                type="button"
+                class="quick-recharge-chip text-xs px-2.5 py-1 rounded-md bg-card hover:bg-muted border border-border transition-colors font-mono cursor-pointer"
+                @click="quickRecharge(10)"
+              >
+                + ۱۰$
+              </button>
+              <button
+                type="button"
+                class="quick-recharge-chip text-xs px-2.5 py-1 rounded-md bg-card hover:bg-muted border border-border transition-colors font-mono cursor-pointer"
+                @click="quickRecharge(25)"
+              >
+                + ۲۵$
+              </button>
+              <button
+                type="button"
+                class="quick-recharge-chip text-xs px-2.5 py-1 rounded-md bg-card hover:bg-muted border border-border transition-colors font-mono cursor-pointer"
+                @click="quickRecharge(50)"
+              >
+                + ۵۰$
+              </button>
+              <button
+                type="button"
+                class="quick-recharge-chip text-xs px-2.5 py-1 rounded-md bg-card hover:bg-muted border border-border transition-colors font-mono cursor-pointer"
+                @click="quickRecharge(100)"
+              >
+                + ۱۰۰$
+              </button>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label>
+                <span class="field-label">شارژ سقف دلاری ($ USD)</span>
+                <input
+                  :value="userCreditDollarInput"
+                  type="number"
+                  step="any"
+                  min="0"
+                  placeholder="مثال: 50"
+                  :disabled="isSaving"
+                  @input="onCreditDollarInput(($event.target as HTMLInputElement).value)"
+                />
+              </label>
+              <label>
+                <span class="field-label">معادل سقف توکن</span>
+                <input
+                  :value="userForm.tokenLimit"
+                  type="number"
+                  min="0"
+                  placeholder="خالی = سقف سراسری سامانه"
+                  :disabled="isSaving"
+                  @input="onTokenLimitInput(($event.target as HTMLInputElement).value)"
+                />
+              </label>
+            </div>
+            <small class="text-[11px] text-muted-foreground block leading-relaxed">
+              با تغییر هر یک از فیلدهای بالا (دلار یا توکن)، فیلد دیگر به صورت خودکار با نرخ برابری روزانه همگام می‌شود. برای حذف سقف اختصاصی، کادر را خالی بگذارید.
+            </small>
+          </div>
         </div>
         <div class="modal-actions">
           <BaseButton variant="ghost" size="md" :disabled="isSaving" @click="userModalOpen = false">
@@ -1855,7 +2287,7 @@ onMounted(loadData)
     <AdminModal
       v-if="settingsModalOpen"
       eyebrow="تنظیمات"
-      title="تنظیمات سقف مصرف و پرامپت سیستم"
+      title="تنظیمات سقف مصرف، نرخ اعتبار و پرامپت سیستم"
       @close="settingsModalOpen = false"
     >
       <form class="admin-form" @submit.prevent="saveSettings">
@@ -1869,6 +2301,21 @@ onMounted(loadData)
               type="number"
               min="0"
               required
+              :disabled="isSaving"
+            />
+          </label>
+          <!-- فیلد تنظیم نرخ دلاری توکن‌ها (مورد ۱۵) -->
+          <label class="col-span-full">
+            <span class="field-label">
+              نرخ هر ۱۰۰۰ توکن به دلار ($ USD) — برای سیستم اعتبار و کسر سهمیه
+            </span>
+            <input
+              v-model.number="settingsForm.tokenRatePer1000"
+              type="number"
+              step="0.1"
+              min="0.1"
+              required
+              placeholder="مثال: 10 (هر ۱۰۰۰ توکن = ۱۰ دلار)"
               :disabled="isSaving"
             />
           </label>
@@ -1983,7 +2430,7 @@ onMounted(loadData)
       v-if="isChatModalOpen"
       eyebrow="بازبینی چت"
       :title="inspectingConversation?.title || 'مشاهده تاریخچه پیام‌ها'"
-      @close="isChatModalOpen = false; inspectingConversation = null"
+      @close="isChatModalOpen = false; inspectingConversation = null; resetChatSearch()"
     >
       <div class="chat-viewer-modal">
         <div v-if="isLoadingChatDetail" class="chat-viewer-loading">
@@ -1992,7 +2439,7 @@ onMounted(loadData)
         </div>
 
         <div v-else-if="inspectingConversation" class="chat-viewer-body">
-          <div class="chat-viewer-meta">
+          <div class="chat-viewer-meta flex items-center justify-between">
             <div class="meta-item">
               <span>کاربر:</span>
               <strong>{{ inspectingConversation.user?.displayName || inspectingConversation.user?.email || 'ناشناس' }}</strong>
@@ -2001,18 +2448,65 @@ onMounted(loadData)
               <span>تعداد کل پیام‌ها:</span>
               <strong>{{ inspectingConversation.messages?.length || 0 }}</strong>
             </div>
-            <div class="meta-item">
-              <span>مدل:</span>
-              <strong class="mono">{{ inspectingConversation.modelId || 'پیش‌فرض' }}</strong>
+          </div>
+
+          <!-- نوار جستجو درون پیام‌های این گفتگو با قابلیت اسکرول خودکار (مورد ۱) -->
+          <div class="chat-search-bar flex items-center gap-2 p-2 bg-secondary/70 border border-border rounded-lg mt-3">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-muted-foreground shrink-0">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              v-model="chatSearchQuery"
+              type="text"
+              class="chat-search-input flex-1 bg-transparent border-none outline-none text-xs text-foreground placeholder:text-muted-foreground"
+              placeholder="جستجو در متن پیام‌های این گفتگو..."
+              @keydown.enter="nextChatMatch"
+            />
+            <div v-if="chatSearchQuery.trim()" class="search-match-nav flex items-center gap-2 text-xs">
+              <span class="match-count text-muted-foreground mono font-medium">
+                {{ matchingChatMessages.length > 0 ? `${(activeChatMatchIndex + 1).toLocaleString('fa-IR')} از ${matchingChatMessages.length.toLocaleString('fa-IR')}` : 'یافت نشد' }}
+              </span>
+              <button
+                type="button"
+                :disabled="!matchingChatMessages.length"
+                class="search-nav-btn px-2 py-0.5 rounded border border-border bg-card hover:bg-secondary disabled:opacity-40"
+                title="پیام قبلی"
+                @click="prevChatMatch"
+              >
+                ▲
+              </button>
+              <button
+                type="button"
+                :disabled="!matchingChatMessages.length"
+                class="search-nav-btn px-2 py-0.5 rounded border border-border bg-card hover:bg-secondary disabled:opacity-40"
+                title="پیام بعدی"
+                @click="nextChatMatch"
+              >
+                ▼
+              </button>
+              <button
+                type="button"
+                class="clear-search-btn text-muted-foreground hover:text-foreground font-bold px-1"
+                title="پاک کردن جستجو"
+                @click="resetChatSearch"
+              >
+                ×
+              </button>
             </div>
           </div>
 
-          <div class="chat-messages-container">
+          <div class="chat-messages-container mt-3">
             <div
               v-for="msg in inspectingConversation.messages"
+              :id="`admin-chat-msg-${msg.id}`"
               :key="msg.id"
-              class="chat-bubble-row"
-              :class="msg.role === 'user' ? 'role-user' : 'role-assistant'"
+              class="chat-bubble-row transition-all duration-300"
+              :class="[
+                msg.role === 'user' ? 'role-user' : 'role-assistant',
+                chatSearchQuery && msg.content?.toLowerCase().includes(chatSearchQuery.toLowerCase()) ? 'search-match-bubble' : '',
+                matchingChatMessages[activeChatMatchIndex]?.id === msg.id ? 'active-search-match-bubble' : ''
+              ]"
             >
               <div class="chat-bubble-avatar">
                 {{ msg.role === 'user' ? 'کاربر' : 'پروا' }}
@@ -2020,8 +2514,9 @@ onMounted(loadData)
               <div class="chat-bubble-content">
                 <div class="chat-bubble-header">
                   <span class="bubble-sender">{{ msg.role === 'user' ? 'کاربر' : 'دستیار هوش مصنوعی' }}</span>
+                  <!-- زمان پیام بر مبنای ساعت رسمی ایران (مورد ۸) -->
                   <span class="bubble-time mono">
-                    {{ new Date(msg.createdAt).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }) }}
+                    {{ formatIranTime(msg.createdAt) }}
                   </span>
                 </div>
                 <!-- Attached files for message in admin chat inspector -->
@@ -2110,7 +2605,7 @@ onMounted(loadData)
             <span class="text-muted-foreground block mb-1">زمان پردازش / تاریخ:</span>
             <strong v-if="inspectingFile.metadata?.processingDurationMs">{{ inspectingFile.metadata.processingDurationMs }} میلی‌ثانیه</strong>
             <strong v-else>—</strong>
-            <span class="block text-muted-foreground text-[11px]">{{ new Date(inspectingFile.createdAt).toLocaleString('fa-IR') }}</span>
+            <span class="block text-muted-foreground text-[11px]">{{ formatIranDateTime(inspectingFile.createdAt) }}</span>
           </div>
         </div>
 
@@ -3846,5 +4341,39 @@ onMounted(loadData)
   border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
+}
+
+/* ────────────── In-Chat Search Highlight (مورد ۱) ────────────── */
+.search-match-bubble {
+  border-right: 3px solid var(--primary) !important;
+  background-color: color-mix(in srgb, var(--primary) 8%, var(--card)) !important;
+}
+
+.active-search-match-bubble {
+  border-right: 4px solid var(--primary) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent) !important;
+  background-color: color-mix(in srgb, var(--primary) 15%, var(--card)) !important;
+}
+
+/* ────────────── Circular Credit Gauge (مورد ۱۶) ────────────── */
+.credit-ring-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+}
+
+.credit-ring-box svg {
+}
+
+/* ────────────── File Lifecycle Guide & Banner (موارد ۵، ۱۱، ۱۴) ────────────── */
+.file-lifecycle-guide {
+  line-height: 1.6;
+}
+
+.user-filter-banner {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 </style>

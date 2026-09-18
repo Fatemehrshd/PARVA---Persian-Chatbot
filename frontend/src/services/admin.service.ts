@@ -33,18 +33,19 @@ export const adminService = {
     })
   },
 
-  async getSettings(): Promise<{ globalTokenLimit: number; systemPrompt: string }> {
+  async getSettings(): Promise<{ globalTokenLimit: number; tokenRatePer1000?: number; systemPrompt: string }> {
     return request('/admin/settings')
   },
 
   async updateSettings(data: {
     globalTokenLimit?: number
+    tokenRatePer1000?: number
     systemPrompt?: string
     fileMaxSizeMb?: number
     fileMaxTotalSizeMb?: number
     fileMaxCount?: number
-  }): Promise<{ globalTokenLimit: number; systemPrompt: string }> {
-    return request<{ globalTokenLimit: number; systemPrompt: string }>('/admin/settings', {
+  }): Promise<{ globalTokenLimit: number; tokenRatePer1000?: number; systemPrompt: string }> {
+    return request<{ globalTokenLimit: number; tokenRatePer1000?: number; systemPrompt: string }>('/admin/settings', {
       method: 'PUT',
       body: JSON.stringify(data),
     })

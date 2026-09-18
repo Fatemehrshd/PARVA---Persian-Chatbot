@@ -195,7 +195,10 @@ watch(
 )
 
 const canSend = computed(() => {
-  return inputContent.value.trim().length > 0 && !chatStore.isStreaming && !chatStore.isTokenLimitExceeded
+  // کاربر می‌تواند پیام متنی یا فایل پیوست (بدون متن) ارسال کند
+  const hasText = inputContent.value.trim().length > 0
+  const hasFiles = attachedFiles.value.length > 0
+  return (hasText || hasFiles) && !chatStore.isStreaming && !chatStore.isTokenLimitExceeded
 })
 
 function adjustHeight() {
@@ -220,12 +223,20 @@ function handleCursorMove() {
 function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
+    if (chatStore.isTokenLimitExceeded) {
+      uiStore.showToast('سقف مجاز مصرف توکن به پایان رسیده است. لطفاً جهت افزایش اعتبار با مدیر سامانه تماس بگیرید.', 'error')
+      return
+    }
     if (isGenerating.value) return
     handleSubmit()
   }
 }
 
 async function handleSubmit() {
+  if (chatStore.isTokenLimitExceeded) {
+    uiStore.showToast('سقف مجاز مصرف توکن به پایان رسیده است. امکان ارسال پیام وجود ندارد.', 'error')
+    return
+  }
   if (!canSend.value || isGenerating.value) return
 
   // If in-flight file byte uploads are active, wait for completion

@@ -161,6 +161,7 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
         progress: 0,
         previewUrl,
         abortController,
+        rawFile: file,
       }
 
       attachedFiles.value.push(item)
@@ -330,7 +331,21 @@ export function useFileUpload(conversationIdProvider: () => string | null) {
   }
 
   async function retryFile(item: FileAttachmentItem) {
-    if (!item.id || item.id.startsWith('temp-')) return
+    if (item.rawFile) {
+      item.status = 'uploading'
+      item.errorMessage = undefined
+      item.progress = 0
+      try {
+        await startUpload(item, item.rawFile)
+      } catch {
+        item.status = 'error'
+      }
+      return
+    }
+
+    if (!item.id || item.id.startsWith('temp-')) {
+      return
+    }
 
     item.status = 'processing'
     item.errorMessage = undefined

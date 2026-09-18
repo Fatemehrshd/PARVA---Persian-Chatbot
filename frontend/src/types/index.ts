@@ -93,6 +93,7 @@ export interface FileAttachmentItem {
   previewUrl?: string
   progress?: number
   abortController?: AbortController
+  rawFile?: File
   metadata?: Record<string, any>
 }
 
@@ -169,6 +170,7 @@ export interface AdminDashboardStats {
   totalMessages: number
   totalTokensUsed: number
   globalTokenLimit: number
+  tokenRatePer1000?: number
   systemPrompt: string
 }
 
@@ -176,6 +178,7 @@ export interface AdminUser extends User {
   usedTokens: number
   tokenLimit?: number | null
   conversationsCount: number
+  filesCount?: number
 }
 
 export interface UpdateAdminUserRequest {

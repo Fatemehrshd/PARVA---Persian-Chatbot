@@ -58,10 +58,10 @@
   --shadow-md: 0 4px 12px rgba(0,0,0,.10);
   --shadow-lg: 0 8px 32px rgba(0,0,0,.16);
 
-  /* Typography */
-  --font-brand: 'Carlito', 'Instrument Sans', sans-serif;
-  --font-sans: 'Instrument Sans', 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  /* Typography - یکدست‌سازی فونت با اولویت وزیرمتن */
+  --font-brand: 'Carlito', 'Vazirmatn', 'Instrument Sans', sans-serif;
+  --font-sans: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Vazirmatn', monospace;
 
   /* Layout constants */
   --header-height: 0px;

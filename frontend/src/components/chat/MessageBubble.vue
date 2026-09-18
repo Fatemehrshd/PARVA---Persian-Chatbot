@@ -16,25 +16,6 @@ const authStore = useAuthStore()
 const chatStore = useChatStore()
 const copied = ref(false)
 
-function handleRetryFiles() {
-  if (props.message.attachments) {
-    for (const f of props.message.attachments) {
-      if (f.status === 'error' || f.status === 'processing') {
-        chatStore.retryFailedMessageFile(props.message.id, f.id)
-      }
-    }
-  }
-}
-
-function handleRemoveFilesAndSend() {
-  if (props.message.attachments) {
-    const errorFiles = props.message.attachments.filter((f) => f.status === 'error')
-    for (const f of errorFiles) {
-      chatStore.removeMessageFileAndSend(props.message.id, f.id)
-    }
-  }
-}
-
 const isUser = computed(() => props.message.role === 'user')
 const textDirection = computed(() => getTextDirection(props.message.content))
 

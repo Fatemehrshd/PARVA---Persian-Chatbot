@@ -634,6 +634,8 @@ export class ChatService {
             isInterrupted: failedMidStream,
             stoppedByUser: false,
             sources: stoppedByUserAbort ? null : webSources,
+            reasoning_content: session?.reasoningText || null,
+            thinkingDurationMs: session?.thinkingDurationMs || null,
           }),
         );
         // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست و ضرایب وب سرچ و تفکر

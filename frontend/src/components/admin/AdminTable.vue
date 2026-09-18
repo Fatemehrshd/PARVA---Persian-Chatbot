@@ -260,6 +260,15 @@ function clearAllFilters() {
 function toPersianDigits(n: number | string): string {
   return String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)])
 }
+
+function formatCellValue(value: unknown): unknown {
+  if (typeof value === 'number') return value.toLocaleString('fa-IR')
+  if (typeof value === 'string' && /^-?\d+(?:[.,]\d+)?$/.test(value.trim())) {
+    const numericValue = Number(value.replace(',', '.'))
+    return Number.isFinite(numericValue) ? numericValue.toLocaleString('fa-IR') : value
+  }
+  return value
+}
 </script>
 
 <template>
@@ -415,7 +424,7 @@ function toPersianDigits(n: number | string): string {
                   :data-label="col.label"
                   :class="col.align === 'left' ? 'text-left' : col.align === 'center' ? 'text-center' : 'text-right'"
                 >
-                  {{ item[col.key] }}
+                  {{ formatCellValue(item[col.key]) }}
                 </td>
               </slot>
             </tr>

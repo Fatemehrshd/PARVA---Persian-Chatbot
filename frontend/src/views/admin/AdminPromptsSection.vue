@@ -6,6 +6,7 @@ import AdminTable from '../../components/admin/AdminTable.vue'
 import RoleTokenLimitModal from '../../components/admin/modals/RoleTokenLimitModal.vue'
 import { adminService } from '../../services/admin.service'
 import { useUiStore } from '../../stores/ui'
+import { normalizeNumericInput, numericInputValue } from '../../utils/numberInput'
 
 const uiStore = useUiStore()
 const isLoading = ref(false)
@@ -76,15 +77,30 @@ function formatResetHours(hours: number | null): string {
   return `هر ${Number(hours).toLocaleString('fa-IR')} ساعت`
 }
 
+function formatPersianNumber(value: number, fractionDigits = 0): string {
+  return value.toLocaleString('fa-IR', {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  })
+}
+
+function effectiveMultiplierRate(type: string): string {
+  const rate = (Number(form.value.tokenRatePer1000) || 10) * (Number(taskMultipliers.value[type]) || 1)
+  return formatPersianNumber(rate, 2)
+}
+
 function normalizeMultiplierInput(value: string): number | undefined {
-  const normalized = value
-    .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
-    .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
-    .replace(',', '.')
-    .trim()
+  const normalized = normalizeNumericInput(value).trim()
   if (!normalized) return undefined
   const parsed = Number(normalized)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
+
+type NumericFormField = 'globalTokenLimit' | 'tokenRatePer1000' | 'webSearchQuotaTotal' | 'webSearchUsedCredits'
+
+function updateNumberField(field: NumericFormField, event: Event) {
+  const value = numericInputValue((event.target as HTMLInputElement).value)
+  form.value[field] = value ?? 0
 }
 
 function updateTaskMultiplier(type: string, event: Event) {
@@ -204,12 +220,14 @@ onMounted(loadSettings)
           <label class="space-y-1.5">
             <span class="font-medium text-foreground block">سقف سراسری توکن برای کاربران عادی (0 = نامحدود)</span>
             <input
-              v-model.number="form.globalTokenLimit"
-              type="number"
+              :value="form.globalTokenLimit"
+              type="text"
+              inputmode="numeric"
               min="0"
               required
               class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary"
               :disabled="isSaving"
+              @input="updateNumberField('globalTokenLimit', $event)"
             />
             <span class="text-[11px] text-muted-foreground block">اگر کاربری سقف اختصاصی نداشته باشد، ابتدا سقف نقش او و در غیر این صورت این سقف سراسری اعمال می‌شود.</span>
           </label>
@@ -217,13 +235,15 @@ onMounted(loadSettings)
           <label class="space-y-1.5">
             <span class="font-medium text-foreground block">نرخ هر ۱۰۰۰ توکن به دلار ($ USD)</span>
             <input
-              v-model.number="form.tokenRatePer1000"
-              type="number"
+              :value="form.tokenRatePer1000"
+              type="text"
+              inputmode="decimal"
               min="0.1"
               step="0.1"
               required
               class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary"
               :disabled="isSaving"
+              @input="updateNumberField('tokenRatePer1000', $event)"
             />
             <span class="text-[11px] text-muted-foreground block">برای همگام‌سازی مبالغ شارژ دلاری و سقف توکن در پنل ادمین.</span>
           </label>
@@ -245,7 +265,7 @@ onMounted(loadSettings)
           <label v-for="item in [{ key: 'image', label: 'کار با تصویر' }, { key: 'document', label: 'کار با سند' }, { key: 'thinking', label: 'تفکر عمیق' }]" :key="item.key" class="space-y-1.5">
             <span class="font-medium text-foreground block">{{ item.label }}</span>
             <input :value="taskMultipliers[item.key] ?? ''" type="text" inputmode="decimal" autocomplete="off" placeholder="۱.۰" class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary" :disabled="isSaving" @input="updateTaskMultiplier(item.key, $event)" />
-            <span class="text-[11px] text-muted-foreground block">نرخ مؤثر: ${{ ((Number(form.tokenRatePer1000) || 10) * (Number(taskMultipliers[item.key]) || 1)).toFixed(2) }} / ۱۰۰۰ توکن</span>
+            <span class="text-[11px] text-muted-foreground block">نرخ مؤثر: ${{ effectiveMultiplierRate(item.key) }} / ۱۰۰۰ توکن</span>
           </label>
         </div>
       </div>
@@ -310,7 +330,7 @@ onMounted(loadSettings)
 
         <div class="space-y-3">
           <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span>باقی‌مانده: {{ webSearchRemaining.toLocaleString() }} از {{ webSearchQuota.toLocaleString() }} کوئری</span>
+            <span>باقی‌مانده: {{ formatPersianNumber(webSearchRemaining) }} از {{ formatPersianNumber(webSearchQuota) }} کوئری</span>
             <span v-if="webSearchLow" class="font-medium text-amber-600 dark:text-amber-400">اعتبار رو به اتمام است</span>
           </div>
           <div class="h-2 overflow-hidden rounded-full bg-muted">
@@ -321,21 +341,25 @@ onMounted(loadSettings)
             <label class="space-y-1.5">
               <span class="font-medium text-foreground block">سقف کل اعتبار وب‌سرچ</span>
               <input
-                v-model.number="form.webSearchQuotaTotal"
-                type="number"
+                :value="form.webSearchQuotaTotal"
+                type="text"
+                inputmode="numeric"
                 min="0"
                 class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary"
                 :disabled="isSaving"
+                @input="updateNumberField('webSearchQuotaTotal', $event)"
               />
             </label>
             <label class="space-y-1.5">
               <span class="font-medium text-foreground block">اعتبار مصرف‌شده</span>
               <input
-                v-model.number="form.webSearchUsedCredits"
-                type="number"
+                :value="form.webSearchUsedCredits"
+                type="text"
+                inputmode="numeric"
                 min="0"
                 class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary"
                 :disabled="isSaving"
+                @input="updateNumberField('webSearchUsedCredits', $event)"
               />
             </label>
           </div>

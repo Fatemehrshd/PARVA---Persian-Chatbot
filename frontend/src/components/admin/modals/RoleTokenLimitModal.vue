@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import AdminModal from '../AdminModal.vue'
 import BaseButton from '../../ui/BaseButton.vue'
+import { numericInputValue } from '../../../utils/numberInput'
 
 const props = defineProps<{
   open: boolean
@@ -48,8 +49,8 @@ function onCreditDollarInput(val: string | number | null) {
     form.value.tokenLimit = null
     return
   }
-  const num = typeof val === 'number' ? val : parseFloat(val)
-  if (isNaN(num) || num < 0) {
+  const num = typeof val === 'number' ? val : numericInputValue(val)
+  if (num === null || num < 0) {
     creditDollarInput.value = null
     form.value.tokenLimit = null
   } else {
@@ -64,14 +65,23 @@ function onTokenLimitInput(val: string | number | null) {
     creditDollarInput.value = null
     return
   }
-  const num = typeof val === 'number' ? val : parseFloat(val)
-  if (isNaN(num) || num < 0) {
+  const num = typeof val === 'number' ? val : numericInputValue(val)
+  if (num === null || num < 0) {
     form.value.tokenLimit = null
     creditDollarInput.value = null
   } else {
     form.value.tokenLimit = Math.round(num)
     creditDollarInput.value = tokensToDollars(Math.round(num))
   }
+}
+
+function onMessageLimitInput(val: string) {
+  form.value.messageLimit = numericInputValue(val)
+}
+
+function onResetHoursInput(val: string) {
+  const value = numericInputValue(val)
+  form.value.resetHours = value === null ? null : Math.round(value)
 }
 
 function handleSubmit() {
@@ -108,7 +118,8 @@ function handleSubmit() {
             <span class="field-label">سقف دلاری ($ USD)</span>
             <input
               :value="creditDollarInput"
-              type="number"
+              type="text"
+              inputmode="decimal"
               step="any"
               min="0"
               placeholder="مثال: 50"
@@ -120,7 +131,8 @@ function handleSubmit() {
             <span class="field-label">معادل سقف توکن</span>
             <input
               :value="form.tokenLimit"
-              type="number"
+              type="text"
+              inputmode="numeric"
               min="0"
               placeholder="خالی = سقف سراسری سامانه"
               :disabled="isSaving"
@@ -136,11 +148,11 @@ function handleSubmit() {
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <label>
           <span class="field-label">حداکثر پیام در دوره</span>
-          <input v-model.number="form.messageLimit" type="number" min="0" placeholder="خالی = نامحدود" :disabled="isSaving" />
+          <input :value="form.messageLimit ?? ''" type="text" inputmode="numeric" min="0" placeholder="خالی = نامحدود" :disabled="isSaving" @input="onMessageLimitInput(($event.target as HTMLInputElement).value)" />
         </label>
         <label>
           <span class="field-label">ریست دوره (ساعت)</span>
-          <input v-model.number="form.resetHours" type="number" min="0" step="1" :disabled="isSaving" />
+          <input :value="form.resetHours ?? ''" type="text" inputmode="numeric" min="0" step="1" :disabled="isSaving" @input="onResetHoursInput(($event.target as HTMLInputElement).value)" />
         </label>
       </div>
 

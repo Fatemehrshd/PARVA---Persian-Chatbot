@@ -28,6 +28,10 @@ const totalItems = ref(0)
 const totalPages = computed(() => Math.max(1, Math.ceil(totalItems.value / pageSize.value)))
 const tableSearchQuery = ref(props.searchQuery || '')
 
+function formatPageNumber(value: number): string {
+  return value.toLocaleString('fa-IR')
+}
+
 const isEditorModalOpen = ref(false)
 const editingProvider = ref<Provider | null>(null)
 
@@ -207,7 +211,7 @@ onMounted(loadProviders)
         >
           قبلی
         </button>
-        <span class="font-mono font-bold">{{ page }} / {{ totalPages }}</span>
+        <span class="font-mono font-bold">{{ formatPageNumber(page) }} / {{ formatPageNumber(totalPages) }}</span>
         <button
           type="button"
           class="px-2.5 py-1 rounded border border-border bg-background disabled:opacity-50 cursor-pointer hover:bg-muted"

@@ -4,6 +4,7 @@ import { HardDrive, Save, RotateCcw, ShieldCheck, Clock } from '@lucide/vue'
 import BaseButton from '../../components/ui/BaseButton.vue'
 import { adminService } from '../../services/admin.service'
 import { useUiStore } from '../../stores/ui'
+import { numericInputValue } from '../../utils/numberInput'
 
 const uiStore = useUiStore()
 const isLoading = ref(false)
@@ -68,6 +69,11 @@ function resetDefaults() {
   }
 }
 
+function updateNumberField(field: keyof typeof form.value, event: Event) {
+  const value = numericInputValue((event.target as HTMLInputElement).value)
+  form.value[field] = (value ?? 0) as never
+}
+
 onMounted(loadSettings)
 </script>
 
@@ -101,13 +107,15 @@ onMounted(loadSettings)
           <label class="space-y-1.5">
             <span class="font-medium text-foreground block">حداکثر حجم هر فایل (مگابایت)</span>
             <input
-              v-model.number="form.fileMaxSizeMb"
-              type="number"
+              :value="form.fileMaxSizeMb"
+              type="text"
+              inputmode="numeric"
               min="1"
               max="200"
               required
               class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary"
               :disabled="isSaving"
+              @input="updateNumberField('fileMaxSizeMb', $event)"
             />
             <span class="text-[11px] text-muted-foreground block">پیش‌فرض: ۲۰ مگابایت</span>
           </label>
@@ -115,13 +123,15 @@ onMounted(loadSettings)
           <label class="space-y-1.5">
             <span class="font-medium text-foreground block">حداکثر مجموع حجم در هر پیام (مگابایت)</span>
             <input
-              v-model.number="form.fileMaxTotalSizeMb"
-              type="number"
+              :value="form.fileMaxTotalSizeMb"
+              type="text"
+              inputmode="numeric"
               min="1"
               max="500"
               required
               class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary"
               :disabled="isSaving"
+              @input="updateNumberField('fileMaxTotalSizeMb', $event)"
             />
             <span class="text-[11px] text-muted-foreground block">پیش‌فرض: ۵۰ مگابایت</span>
           </label>
@@ -129,13 +139,15 @@ onMounted(loadSettings)
           <label class="space-y-1.5">
             <span class="font-medium text-foreground block">حداکثر تعداد فایل در هر ارسال</span>
             <input
-              v-model.number="form.fileMaxCount"
-              type="number"
+              :value="form.fileMaxCount"
+              type="text"
+              inputmode="numeric"
               min="1"
               max="20"
               required
               class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary"
               :disabled="isSaving"
+              @input="updateNumberField('fileMaxCount', $event)"
             />
             <span class="text-[11px] text-muted-foreground block">پیش‌فرض: ۵ فایل هم‌زمان</span>
           </label>
@@ -158,14 +170,16 @@ onMounted(loadSettings)
           <label class="space-y-1.5">
             <span class="font-medium text-foreground block">سقف سطرهای قابل پردازش اکسل (CSV / XLSX)</span>
             <input
-              v-model.number="form.excelMaxRows"
-              type="number"
+              :value="form.excelMaxRows"
+              type="text"
+              inputmode="numeric"
               min="100"
               max="50000"
               step="500"
               required
               class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary"
               :disabled="isSaving"
+              @input="updateNumberField('excelMaxRows', $event)"
             />
             <span class="text-[11px] text-muted-foreground block">سطرهای فراتر از این سقف در متن پیام خلاصه می‌شوند.</span>
           </label>
@@ -173,13 +187,15 @@ onMounted(loadSettings)
           <label class="space-y-1.5">
             <span class="font-medium text-foreground block">مهلت زمانی پردازش فایل (تایم‌اوت به ثانیه)</span>
             <input
-              v-model.number="form.fileProcessingTimeoutSec"
-              type="number"
+              :value="form.fileProcessingTimeoutSec"
+              type="text"
+              inputmode="numeric"
               min="10"
               max="600"
               required
               class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary"
               :disabled="isSaving"
+              @input="updateNumberField('fileProcessingTimeoutSec', $event)"
             />
             <span class="text-[11px] text-muted-foreground block">پس از این مدت در صورت عدم اتمام، وضعیت خطا ثبت می‌شود.</span>
           </label>

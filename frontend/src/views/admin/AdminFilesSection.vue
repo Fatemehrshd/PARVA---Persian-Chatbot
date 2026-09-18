@@ -48,7 +48,7 @@ const fileColumns: TableColumn[] = [
 ]
 
 function formatFileSize(bytes?: number): string {
-  if (!bytes) return '۰ B'
+  if (!bytes) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB']
   let size = bytes
   let unitIndex = 0
@@ -56,7 +56,7 @@ function formatFileSize(bytes?: number): string {
     size /= 1024
     unitIndex++
   }
-  return `${size.toFixed(1)} ${units[unitIndex]}`
+  return `${size.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ${units[unitIndex]}`
 }
 
 function getAttBadgeClass(fileType: string): string {
@@ -355,7 +355,7 @@ onMounted(loadFilesData)
         </td>
 
         <!-- حجم -->
-        <td data-label="حجم فایل" class="mono text-xs text-muted-foreground">
+        <td data-label="حجم فایل" dir="ltr" class="mono text-xs text-muted-foreground text-left">
           {{ formatFileSize(file.fileSize) }}
         </td>
 

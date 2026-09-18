@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **Streaming auto-scroll freeze after scrolling back down**: While a model response was streaming, if the user scrolled up and then back down, the follow mode locked and the page no longer scrolled with the stream (manual scrolling required). Root cause: the `isUserScrolling` flag was cleared by an 80ms debounce timer armed during the *upward* gesture, which could fire *after* the user had already returned to the bottom — canceling follow at exactly the wrong moment.
+- **Streaming auto-scroll resistance on slow upward scrolls**: Scrolling up slowly during a stream used to snap back and fight the user inside the 120px bottom threshold. Follow state is now driven purely by scroll direction observed in the single `scroll` listener: any upward movement is user intent (programmatic scrolls only go down) and disengages follow instantly and smoothly, while landing near the bottom (120px) re-engages it. The `wheel`/`touchstart` listeners and the debounced user-scrolling flag were removed entirely. Regression coverage updated in `frontend/tests/MessageList.spec.ts` (slow upward scroll inside threshold releases follow; returning to the bottom resumes it).
+
 ## [1.4.0] - 2026-09-18
 
 ### Added

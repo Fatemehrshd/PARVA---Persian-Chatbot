@@ -40,7 +40,7 @@ const emit = defineEmits<{
         aria-readonly="true"
       >
         <span :class="authStore.quotaStatusColor">
-          {{ authStore.quota.remainingPercent === null ? '∞' : `${authStore.quota.remainingPercent}٪` }} باقی‌مانده
+          {{ authStore.quota.remainingPercent === null ? '∞' : `${Number(authStore.quota.remainingPercent).toLocaleString('fa-IR')}٪` }} باقی‌مانده
         </span>
       </div>
 

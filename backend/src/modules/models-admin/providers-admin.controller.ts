@@ -8,11 +8,13 @@ import {
   Param,
   HttpCode,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { IsString, IsOptional, IsBoolean } from 'class-validator';
 import { ProvidersAdminService } from './providers-admin.service';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { AdminGuard } from '../../shared/admin.guard';
+import { ApiFeatures } from '../../shared/api-features';
 
 class CreateProviderDto {
   @IsString() name: string;
@@ -38,8 +40,20 @@ class SetProviderDefaultDto {
 export class ProvidersAdminController {
   constructor(private svc: ProvidersAdminService) {}
 
-  @Get() list() {
-    return this.svc.list();
+  @Get()
+  async list(@Query() query: any) {
+    const all = await this.svc.list();
+    if (!query || (!query.search && !query.page && !query.limit && !query.sortBy)) {
+      return all;
+    }
+    const result = ApiFeatures.applyToArray(all, query, {
+      searchableFields: ['name', 'baseUrl'],
+      allowedFilterFields: ['isActive'],
+    });
+    if (query.page || query.limit) {
+      return result;
+    }
+    return result.items;
   }
   @Post() create(@Body() d: CreateProviderDto) {
     return this.svc.create(d);

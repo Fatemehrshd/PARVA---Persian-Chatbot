@@ -1,6 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import ChatView from '../views/ChatView.vue'
 
+import { isTokenExpired } from '../lib/jwt'
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -35,19 +37,68 @@ const router = createRouter({
     },
     {
       path: '/admin',
-      redirect: '/admin/models',
-      meta: { requiresAuth: true, requiresAdmin: true }
-    },
-    {
-      path: '/admin/models',
-      name: 'admin-models',
-      component: () => import('../views/AdminModelsView.vue'),
-      meta: { requiresAuth: true, requiresAdmin: true }
+      component: () => import('../views/AdminPanelView.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+      children: [
+        {
+          path: '',
+          redirect: '/admin/dashboard'
+        },
+        {
+          path: 'dashboard',
+          name: 'admin-dashboard',
+          component: () => import('../views/admin/AdminDashboardSection.vue')
+        },
+        {
+          path: 'providers',
+          name: 'admin-providers',
+          component: () => import('../views/admin/AdminProvidersSection.vue')
+        },
+        {
+          path: 'models',
+          name: 'admin-models',
+          component: () => import('../views/admin/AdminModelsSection.vue')
+        },
+        {
+          path: 'users',
+          name: 'admin-users',
+          component: () => import('../views/admin/AdminUsersSection.vue')
+        },
+        {
+          path: 'prompts',
+          name: 'admin-prompts',
+          component: () => import('../views/admin/AdminPromptsSection.vue')
+        },
+        {
+          path: 'chats',
+          name: 'admin-chats',
+          component: () => import('../views/admin/AdminChatsSection.vue')
+        },
+        {
+          path: 'files',
+          name: 'admin-files',
+          component: () => import('../views/admin/AdminFilesSection.vue')
+        },
+        {
+          path: 'file-settings',
+          name: 'admin-file-settings',
+          component: () => import('../views/admin/AdminFileSettingsSection.vue')
+        }
+      ]
     }
   ]
 })
 
 router.beforeEach((to, _from, next) => {
+  const rawToken = localStorage.getItem('token')
+
+  // Check proactive token expiry
+  if (rawToken && isTokenExpired(rawToken)) {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    localStorage.removeItem('refreshToken')
+  }
+
   const token = localStorage.getItem('token')
   const savedUser = localStorage.getItem('user')
   let role = 'user'

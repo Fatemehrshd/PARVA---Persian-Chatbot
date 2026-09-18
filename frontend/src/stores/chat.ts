@@ -738,16 +738,6 @@ export const useChatStore = defineStore('chat', () => {
       // the assistant responds (see executeMessageStream's first-token hook),
       // so a pending chat never shows up in the list.
       const tempId = `c-${Date.now()}`
-      const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
-      const fallbackTitle = files && files.length > 0 ? files[0].originalName : 'گفتگوی جدید'
-      const newConv: Conversation = {
-        id: tempId,
-        title: content.slice(0, 30) || fallbackTitle.slice(0, 30),
-        modelId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-      conversations.value.unshift(newConv)
       currentConversationId.value = tempId
     }
 

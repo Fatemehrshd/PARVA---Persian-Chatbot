@@ -1,5 +1,33 @@
 # Features
 
+## Task 35: Strict Server-Side DataGrid Queries (Search, Filter, Pagination, Sorting) & Fixed Viewport Admin Sidebar (v1.3.1)
+- **اتصال قطعی و ۱۰۰٪ سمت سرور برای تمامی جداول و صفحات ادمین (`Strict Server-Side DataGrid Queries`)**:
+  - فعال‌سازی پرچم `:serverSide="true"` در تمام بخش‌های ادمین (`AdminUsersSection`, `AdminChatsSection`, `AdminFilesSection`, `AdminModelsSection`, `AdminProvidersSection`).
+  - ممانعت از فیلترینگ یا برش آرایه‌ها در فرانت‌اند؛ هرگونه تایپ در کادر جستجو، فیلتر ستونی، تغییر شماره یا اندازه صفحه و کلیک روی هدرهای مرتب‌سازی بلافاصله به صورت کوئری به بک‌اند ارسال می‌شود (`page`, `limit`, `search`, `sortBy`, `sortOrder`, `role`, `status`, ...).
+  - پیاده‌سازی کلاس `ApiFeatures` با قابلیت هماهنگ‌سازی اتوماتیک نام ستون‌ها (`name -> originalName`, `size -> fileSize`).
+- **سایدبار کاملاً فیکس و مستقل از اسکرول صفحه (`Permanently Fixed Viewport Sidebar`)**:
+  - سایدبار با استایل قطعی `position: fixed; top: 0; bottom: 0; right: 0; width: 250px; height: 100vh; overflow-y: auto;` به لبه صفحه قفل شد.
+  - پوسته کلی `.admin-shell` به صورت `height: 100vh; width: 100vw; overflow: hidden;` قفل گردید و کل اسکرول عمودی به `.admin-main` با `margin-right: 250px; height: 100vh; overflow-y: auto;` منتقل شد.
+  - اسکرول جداول یا محتوای صفحات هیچ اثری روی جایگاه سایدبار نگذاشته و سایدبار همواره در جای خود ثابت می‌ماند.
+  - سازگاری واکنش‌گرا در موبایل با دراور بازشو و لایه بلور پس‌زمینه.
+
+## Task 34: Admin Panel Architecture Modularization, Per-Page Routing, Server-Side ApiFeatures & Session Expiration (v1.3.0)
+- **تفکیک کامل و ماژولار پنل ادمین به صفحات و مدال‌های مجزا (`Modular Admin Architecture`)**:
+  - شکستن فایل ۴٬۳۸۰ خطی مونولیتیک به ۸ صفحه اختصاصی در `frontend/src/views/admin/` و ۵ کامپوننت مدال اختصاصی در `frontend/src/components/admin/modals/`.
+- **روتینگ مستقل زیرمسیرهای ادمین در Vue Router (`Nested Admin Sub-routes`)**:
+  - تعریف مسیرهای مجزا برای هر بخش (`/admin/dashboard`, `/admin/models`, `/admin/users`, `/admin/providers`, `/admin/prompts`, `/admin/chats`, `/admin/files`, `/admin/file-settings`).
+  - بارگذاری تنبل و باندلینگ بهینه کدها (Code Splitting & Lazy Loading).
+- **لود ایزوله داده به ازای هر صفحه (Zero Bulk Fetching on Dashboard)**:
+  - داشبورد صرفاً آمارهای خود را دریافت می‌کند و هیچ داده سنگینی از سایر بخش‌ها لود نمی‌شود.
+- **پردازش سراسری سمت سرور با ApiFeatures**:
+  - اتصال تمام ۵ اندپوینت ادمین به `ApiFeatures` برای فیلتر ستونی، سرچ متنی، مرتب‌سازی و پیجینیشن.
+- **سایدبار چسبنده و فیکس در دسکتاپ و دراور در موبایل (`Sticky Viewport Sidebar`)**:
+  - جلوگیری از اسکرول خوردن سایدبار هنگام مرور جداول طولانی.
+- **اتصال قطعی لاگ‌اوت به سرور و ابطال توکن (`Backend Logout & Token Revocation`)**:
+  - هندلینگ اندپوینت `POST /api/v1/auth/logout` با لیست سیاه توکن‌ها (`AuthService.revoked`) و ممانعت `JwtAuthGuard` از پذیرش توکن‌های باطل‌شده.
+- **پایش ۴ لایه انقضای توکن و خروج خودکار (`Proactive Auto-Logout`)**:
+  - ممانعت خودکار از باقی‌ماندن کاربر در صفحه هنگام انقضای JWT یا عدم وجود توکن.
+
 ## Task 33: DataGrid Upgrade, Backend ApiFeatures, Image Tokens, SigNoz APM & Bugfixes (v1.2.4 Patch)
 - **کلاس سراسری و زنجیره‌ای `ApiFeatures` در بک‌اند (`backend/src/shared/api-features.ts`)**:
   - مدیریت استاندارد و یکپارچه جستجوی متنی روی چندین فیلد (`ILIKE %q%`)، فیلتر ستونی، مرتب‌سازی داینامیک صعودی/نزولی (`sortBy`, `sortOrder`) و صفحه‌بندی هوشمند (`skip`, `take`) برای کوئری‌بیلدرهای TypeORM و آرایه‌های درون‌حافظه.

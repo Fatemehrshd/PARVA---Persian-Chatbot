@@ -15,8 +15,26 @@ export const adminService = {
     return request<AdminDashboardStats>('/admin/dashboard/stats')
   },
 
-  async listUsers(): Promise<AdminUser[]> {
-    return request<AdminUser[]>('/admin/users')
+  async listUsers(params?: {
+    search?: string
+    role?: string
+    isActive?: boolean
+    page?: number
+    limit?: number
+    sortBy?: string
+    sortOrder?: 'ASC' | 'DESC' | 'asc' | 'desc'
+    [key: string]: any
+  }): Promise<AdminUser[] | { items: AdminUser[]; total: number; page: number; limit: number; totalPages: number }> {
+    const searchParams = new URLSearchParams()
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== null && v !== '') {
+          searchParams.set(k, String(v))
+        }
+      }
+    }
+    const qs = searchParams.toString()
+    return request<any>(`/admin/users${qs ? `?${qs}` : ''}`)
   },
 
   async updateUser(userId: string, data: UpdateAdminUserRequest): Promise<AdminUser> {
@@ -33,7 +51,16 @@ export const adminService = {
     })
   },
 
-  async getSettings(): Promise<{ globalTokenLimit: number; tokenRatePer1000?: number; systemPrompt: string }> {
+  async getSettings(): Promise<{
+    globalTokenLimit: number
+    tokenRatePer1000?: number
+    systemPrompt: string
+    fileMaxSizeMb?: number
+    fileMaxTotalSizeMb?: number
+    fileMaxCount?: number
+    excelMaxRows?: number
+    fileProcessingTimeoutSec?: number
+  }> {
     return request('/admin/settings')
   },
 
@@ -44,8 +71,10 @@ export const adminService = {
     fileMaxSizeMb?: number
     fileMaxTotalSizeMb?: number
     fileMaxCount?: number
-  }): Promise<{ globalTokenLimit: number; tokenRatePer1000?: number; systemPrompt: string }> {
-    return request<{ globalTokenLimit: number; tokenRatePer1000?: number; systemPrompt: string }>('/admin/settings', {
+    excelMaxRows?: number
+    fileProcessingTimeoutSec?: number
+  }): Promise<any> {
+    return request('/admin/settings', {
       method: 'PUT',
       body: JSON.stringify(data),
     })
@@ -56,14 +85,20 @@ export const adminService = {
     userId?: string
     page?: number
     limit?: number
-  }): Promise<AdminConversationSummary[]> {
+    sortBy?: string
+    sortOrder?: 'ASC' | 'DESC' | 'asc' | 'desc'
+    [key: string]: any
+  }): Promise<AdminConversationSummary[] | { items: AdminConversationSummary[]; total: number; page: number; limit: number; totalPages: number }> {
     const searchParams = new URLSearchParams()
-    if (params?.search) searchParams.set('search', params.search)
-    if (params?.userId) searchParams.set('userId', params.userId)
-    if (params?.page) searchParams.set('page', String(params.page))
-    if (params?.limit) searchParams.set('limit', String(params.limit))
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== null && v !== '') {
+          searchParams.set(k, String(v))
+        }
+      }
+    }
     const qs = searchParams.toString()
-    return request<AdminConversationSummary[]>(`/admin/conversations${qs ? `?${qs}` : ''}`)
+    return request<any>(`/admin/conversations${qs ? `?${qs}` : ''}`)
   },
 
   async getConversation(id: string): Promise<AdminConversationDetail> {
@@ -85,15 +120,21 @@ export const adminService = {
     page?: number
     limit?: number
     status?: string
+    fileType?: string
     search?: string
     userId?: string
+    sortBy?: string
+    sortOrder?: 'ASC' | 'DESC' | 'asc' | 'desc'
   }): Promise<AdminFileListResponse> {
     const searchParams = new URLSearchParams()
     if (params?.page) searchParams.set('page', String(params.page))
     if (params?.limit) searchParams.set('limit', String(params.limit))
     if (params?.status) searchParams.set('status', params.status)
+    if (params?.fileType) searchParams.set('fileType', params.fileType)
     if (params?.search) searchParams.set('search', params.search)
     if (params?.userId) searchParams.set('userId', params.userId)
+    if (params?.sortBy) searchParams.set('sortBy', params.sortBy)
+    if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder)
     const qs = searchParams.toString()
     return request<AdminFileListResponse>(`/admin/files${qs ? `?${qs}` : ''}`)
   },

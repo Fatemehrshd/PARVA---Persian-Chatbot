@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.3.3] - 2026-09-18
 
+### Added
+- **Per-Role Global Token Limits (Admin Panel)**: Admins can now define a token consumption limit per user role. A new card in the admin "System Policies" section shows a dynamic table of all roles (auto-includes future roles via distinct roles from the users table) with their limit and an edit button. Clicking edit opens a responsive modal (`RoleTokenLimitModal`) with dual dollar/token inputs following the existing `UserEditorModal` pattern. Limits are stored in `system_settings` (`role_token_limits` JSON, merged per-role updates). Enforcement priority in `ChatService.generate`: user-specific limit → role limit → global limit. Role limit `0` or absent falls through to the global limit.
+- **Live Effective Limit on Users Table**: `GET /admin/users` now resolves and returns `effectiveTokenLimit` per user (personal → role → global, via the pure `resolveEffectiveTokenLimit` helper). The admin users table (usage percentage, progress bar, quota-exhausted badge) is computed from this effective limit, tagging inherited limits with «سقف نقش» or «سقف سراسری». Changing a role's limit in the settings section applies to all members of that role on the next users-table load — no per-user edits needed.
+
 ### Fixed
 - **Sources hidden for user-stopped messages**: When a user stops a streaming answer mid-generation (via the stop button), the `SourcesBlock` is no longer shown for that interrupted message. Backend now correctly sets `isInterrupted=true` and `stoppedByUser=true` on user-aborted messages and stores `sources=null`. Frontend gates `SourcesBlock` rendering on `!isInterrupted && !stoppedByUser`. Existing test `chat-stop-sources.spec.ts` validates this behavior.
 

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Sparkles, Save, Coins, Globe } from '@lucide/vue'
+import { Sparkles, Save, Coins, Globe, Users, Edit } from '@lucide/vue'
 import BaseButton from '../../components/ui/BaseButton.vue'
+import AdminTable from '../../components/admin/AdminTable.vue'
+import RoleTokenLimitModal from '../../components/admin/modals/RoleTokenLimitModal.vue'
 import { adminService } from '../../services/admin.service'
 import { useUiStore } from '../../stores/ui'
 
@@ -17,6 +19,66 @@ const form = ref({
   webSearchQuotaTotal: 2500,
   webSearchUsedCredits: 0,
 })
+
+// سقف توکن به ازای هر نقش (داینامیک — نقش‌های آینده هم خودکار نمایش داده می‌شوند)
+const roles = ref<string[]>([])
+const roleTokenLimits = ref<Record<string, number>>({})
+const isRoleModalOpen = ref(false)
+const isSavingRole = ref(false)
+const editingRole = ref<{ role: string; label: string; limit: number | null } | null>(null)
+
+const roleColumns = [
+  { key: 'role', label: 'نقش' },
+  { key: 'limit', label: 'سقف توکن', align: 'center' as const },
+  { key: 'actions', label: 'عملیات', align: 'center' as const },
+]
+
+function roleLabel(role: string): string {
+  if (role === 'admin') return 'مدیر سیستم'
+  if (role === 'user') return 'کاربر عادی'
+  return role
+}
+
+interface RoleRow {
+  role: string
+  label: string
+  limit: number | null
+}
+
+const roleRows = computed<RoleRow[]>(() =>
+  roles.value.map((role) => ({
+    role,
+    label: roleLabel(role),
+    limit: roleTokenLimits.value[role] ?? null,
+  }))
+)
+
+function formatRoleLimit(limit: number | null): string {
+  if (limit === null || limit === undefined || limit <= 0) return 'سقف سراسری'
+  return `${Number(limit).toLocaleString('fa-IR')} توکن`
+}
+
+function openRoleModal(row: RoleRow) {
+  editingRole.value = { ...row }
+  isRoleModalOpen.value = true
+}
+
+async function handleSaveRoleLimit(data: { role: string; tokenLimit: number | null }) {
+  if (!editingRole.value) return
+  isSavingRole.value = true
+  try {
+    await adminService.updateSettings({
+      roleTokenLimits: { [data.role]: data.tokenLimit },
+    })
+    uiStore.showToast(`سقف توکن نقش «${editingRole.value.label}» با موفقیت به‌روزرسانی شد.`, 'success')
+    isRoleModalOpen.value = false
+    await loadSettings()
+  } catch (err: any) {
+    uiStore.showToast(err?.message || 'خطا در ذخیره سقف نقش', 'error')
+  } finally {
+    isSavingRole.value = false
+  }
+}
 
 const webSearchQuota = computed(() => Number(form.value.webSearchQuotaTotal) || 2500)
 const webSearchUsed = computed(() => Math.max(0, Number(form.value.webSearchUsedCredits) || 0))
@@ -41,6 +103,8 @@ async function loadSettings() {
         webSearchQuotaTotal: (data as any).webSearchUsage?.total ?? 2500,
         webSearchUsedCredits: (data as any).webSearchUsage?.used ?? 0,
       }
+      roles.value = ((data as any).roles as string[]) || ['user', 'admin']
+      roleTokenLimits.value = ((data as any).roleTokenLimits as Record<string, number>) || {}
     }
   } catch (err: any) {
     errorMessage.value = err?.message || 'خطا در بارگذاری تنظیمات سیستم'
@@ -108,7 +172,7 @@ onMounted(loadSettings)
               class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary"
               :disabled="isSaving"
             />
-            <span class="text-[11px] text-muted-foreground block">اگر کاربری سقف اختصاصی نداشته باشد، این سقف اعمال می‌شود.</span>
+            <span class="text-[11px] text-muted-foreground block">اگر کاربری سقف اختصاصی نداشته باشد، ابتدا سقف نقش او و در غیر این صورت این سقف سراسری اعمال می‌شود.</span>
           </label>
 
           <label class="space-y-1.5">
@@ -125,6 +189,42 @@ onMounted(loadSettings)
             <span class="text-[11px] text-muted-foreground block">برای همگام‌سازی مبالغ شارژ دلاری و سقف توکن در پنل ادمین.</span>
           </label>
         </div>
+      </div>
+
+      <!-- Card: Per-Role Token Limits -->
+      <div class="settings-card p-5 rounded-2xl border border-border bg-card shadow-sm space-y-4">
+        <div class="flex items-center gap-2.5 pb-3 border-b border-border">
+          <div class="p-2 rounded-lg bg-sky-500/10 text-sky-500">
+            <Users :size="18" />
+          </div>
+          <div>
+            <h4 class="text-sm font-bold text-foreground">سقف توکن به ازای نقش کاربر</h4>
+            <span class="text-xs text-muted-foreground">تعیین سقف مصرف سراسری برای همه‌ی کاربران هر نقش — کاربر با سقف اختصاصی همیشه از سقف خودش پیروی می‌کند</span>
+          </div>
+        </div>
+
+        <AdminTable :columns="roleColumns" :items="roleRows" emptyText="نقشی برای نمایش یافت نشد.">
+          <template #row="{ item }">
+            <!-- نقش -->
+            <td data-label="نقش">
+              <span class="tag text-xs px-2.5 py-1 rounded-md font-medium bg-muted text-muted-foreground border border-border">
+                {{ item.label }}
+              </span>
+            </td>
+
+            <!-- سقف توکن -->
+            <td data-label="سقف توکن" class="mono font-semibold text-xs text-foreground text-center">
+              {{ formatRoleLimit(item.limit) }}
+            </td>
+
+            <!-- عملیات -->
+            <td data-label="عملیات" class="text-center">
+              <BaseButton variant="ghost" size="sm" @click="openRoleModal(item)" title="ویرایش سقف توکن">
+                <Edit :size="14" />
+              </BaseButton>
+            </td>
+          </template>
+        </AdminTable>
       </div>
 
       <!-- Card: Serper Web Search Quota -->
@@ -207,6 +307,18 @@ onMounted(loadSettings)
         </BaseButton>
       </div>
     </form>
+
+    <!-- Role Token Limit Edit Modal -->
+    <RoleTokenLimitModal
+      :open="isRoleModalOpen"
+      :role="editingRole?.role || ''"
+      :roleLabel="editingRole?.label || ''"
+      :currentLimit="editingRole?.limit ?? null"
+      :tokenRatePer1000="Number(form.tokenRatePer1000) || 10"
+      :isSaving="isSavingRole"
+      @close="isRoleModalOpen = false"
+      @save="handleSaveRoleLimit"
+    />
   </div>
 </template>
 

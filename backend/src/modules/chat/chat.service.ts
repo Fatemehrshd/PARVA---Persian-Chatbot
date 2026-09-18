@@ -274,7 +274,8 @@ export class ChatService {
   ): AsyncGenerator<ChatChunk> {
     const conversation = await this.assertOwned(userId, id);
 
-    // Two-tier token quota enforcement (User-specific limit overrides global limit)
+    // Three-tier token quota enforcement: a user-specific limit overrides the
+    // role limit, which in turn overrides the global limit (0/absent = next tier).
     if (typeof this.users?.findById === 'function') {
       const user = await this.users.findById(userId);
       const usedTokens = user?.usedTokens || 0;
@@ -283,9 +284,20 @@ export class ChatService {
           throw new BadRequestException('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است)');
         }
       } else if (this.settings) {
-        const globalLimit = await this.settings.getGlobalTokenLimit();
-        if (globalLimit > 0 && usedTokens >= globalLimit) {
-          throw new BadRequestException('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است)');
+        // لایه نقش: اگر سقفی برای نقش کاربر ثبت شده باشد، قبل از سقف سراسری اعمال می‌شود.
+        const roleLimit =
+          user && typeof this.settings.getRoleTokenLimits === 'function'
+            ? (await this.settings.getRoleTokenLimits())[user.role]
+            : undefined;
+        if (roleLimit !== undefined && roleLimit !== null) {
+          if (roleLimit > 0 && usedTokens >= roleLimit) {
+            throw new BadRequestException('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است)');
+          }
+        } else {
+          const globalLimit = await this.settings.getGlobalTokenLimit();
+          if (globalLimit > 0 && usedTokens >= globalLimit) {
+            throw new BadRequestException('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است)');
+          }
         }
       }
     } else if (this.settings) {

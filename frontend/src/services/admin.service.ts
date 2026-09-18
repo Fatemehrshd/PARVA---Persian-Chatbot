@@ -67,6 +67,8 @@ export const adminService = {
     excelMaxRows?: number
     fileProcessingTimeoutSec?: number
     webSearchUsage?: WebSearchUsage | null
+    roleTokenLimits?: Record<string, number>
+    roles?: string[]
   }> {
     return request('/admin/settings')
   },
@@ -82,6 +84,7 @@ export const adminService = {
     fileProcessingTimeoutSec?: number
     webSearchQuotaTotal?: number
     webSearchUsedCredits?: number
+    roleTokenLimits?: Record<string, number | null>
   }): Promise<any> {
     return request('/admin/settings', {
       method: 'PUT',

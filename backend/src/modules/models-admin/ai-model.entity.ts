@@ -24,5 +24,12 @@ export class AiModel {
   providerRef?: AiProvider;
   @Column({ default: true }) isActive: boolean;
   @Column({ default: false }) isDefault: boolean;
+  /** Per-model capability flags (default: thinking off, vision & document on) */
+  @Column({ default: false }) supportsThinking: boolean = false;
+  @Column({ default: true }) supportsVision: boolean = true;
+  @Column({ default: true }) supportsDocument: boolean = true;
+  /** Optional maximum reasoning/thinking token budget cap (null = unlimited/model default) */
+  @Column({ type: 'int', nullable: true, default: null })
+  thinkingBudgetTokens?: number | null;
   @CreateDateColumn() createdAt: Date;
 }

@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsUUID, IsInt, Min } from 'class-validator';
 import { FA } from '../../shared/messages.fa';
 
 export class CreateModelDto {
@@ -26,6 +26,23 @@ export class CreateModelDto {
   @IsOptional()
   @IsBoolean({ message: FA.boolean('isActive') })
   isActive?: boolean;
+
+  @IsOptional()
+  @IsBoolean({ message: FA.boolean('supportsThinking') })
+  supportsThinking?: boolean;
+
+  @IsOptional()
+  @IsBoolean({ message: FA.boolean('supportsVision') })
+  supportsVision?: boolean;
+
+  @IsOptional()
+  @IsBoolean({ message: FA.boolean('supportsDocument') })
+  supportsDocument?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  thinkingBudgetTokens?: number | null;
 }
 
 export class UpdateModelStatusDto {
@@ -61,5 +78,22 @@ export class UpdateModelDto {
   @IsOptional()
   @IsBoolean({ message: FA.boolean('isActive') })
   isActive?: boolean;
+
+  @IsOptional()
+  @IsBoolean({ message: FA.boolean('supportsThinking') })
+  supportsThinking?: boolean;
+
+  @IsOptional()
+  @IsBoolean({ message: FA.boolean('supportsVision') })
+  supportsVision?: boolean;
+
+  @IsOptional()
+  @IsBoolean({ message: FA.boolean('supportsDocument') })
+  supportsDocument?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  thinkingBudgetTokens?: number | null;
 }
 

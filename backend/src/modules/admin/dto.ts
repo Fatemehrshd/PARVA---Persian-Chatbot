@@ -1,4 +1,4 @@
-import { IsOptional, IsInt, Min, IsString, MinLength, IsIn, IsEmail, IsBoolean, ValidateIf } from 'class-validator';
+import { IsOptional, IsInt, Min, IsString, MinLength, IsIn, IsEmail, IsBoolean, ValidateIf, IsNumber } from 'class-validator';
 
 export class UpdateSettingsDto {
   @IsOptional()
@@ -54,6 +54,16 @@ export class UpdateSettingsDto {
   @IsInt({ message: 'مصرف اعتبار جستجو باید عدد صحیح باشد' })
   @Min(0, { message: 'مصرف اعتبار جستجو نمی‌تواند منفی باشد' })
   webSearchUsedCredits?: number;
+
+  @IsOptional()
+  @IsNumber({}, { message: 'ضریب توکن جستجوی وب باید عدد باشد' })
+  @Min(1, { message: 'ضریب توکن جستجوی وب باید حداقل ۱ باشد' })
+  webSearchMultiplier?: number;
+
+  @IsOptional()
+  @IsNumber({}, { message: 'ضریب توکن تفکر عمیق باید عدد باشد' })
+  @Min(1, { message: 'ضریب توکن تفکر عمیق باید حداقل ۱ باشد' })
+  thinkingMultiplier?: number;
 }
 
 export class UpdateUserAdminDto {

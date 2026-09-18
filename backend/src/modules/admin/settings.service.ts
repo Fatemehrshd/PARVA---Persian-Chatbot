@@ -12,6 +12,10 @@ export const WEB_SEARCH_ENABLED_KEY = 'web_search_enabled';
 export const WEB_SEARCH_USED_KEY = 'web_search_used_credits';
 export const WEB_SEARCH_QUOTA_KEY = 'web_search_quota_total';
 export const DEFAULT_WEB_SEARCH_QUOTA = 2500; // Serper free trial credits
+export const WEB_SEARCH_TOKEN_MULTIPLIER_KEY = 'web_search_multiplier';
+export const THINKING_TOKEN_MULTIPLIER_KEY = 'thinking_multiplier';
+export const DEFAULT_WEB_SEARCH_MULTIPLIER = 1.2;
+export const DEFAULT_THINKING_MULTIPLIER = 1.3;
 
 @Injectable()
 export class SettingsService {
@@ -74,6 +78,18 @@ export class SettingsService {
     return { used, total, remaining: Math.max(0, total - used) };
   }
 
+  async getWebSearchMultiplier(): Promise<number> {
+    const val = await this.get(WEB_SEARCH_TOKEN_MULTIPLIER_KEY, String(DEFAULT_WEB_SEARCH_MULTIPLIER));
+    const parsed = parseFloat(val);
+    return isNaN(parsed) || parsed <= 0 ? DEFAULT_WEB_SEARCH_MULTIPLIER : parsed;
+  }
+
+  async getThinkingMultiplier(): Promise<number> {
+    const val = await this.get(THINKING_TOKEN_MULTIPLIER_KEY, String(DEFAULT_THINKING_MULTIPLIER));
+    const parsed = parseFloat(val);
+    return isNaN(parsed) || parsed <= 0 ? DEFAULT_THINKING_MULTIPLIER : parsed;
+  }
+
   async getAll(): Promise<{
     globalTokenLimit: number;
     tokenRatePer1000: number;
@@ -85,6 +101,8 @@ export class SettingsService {
     fileProcessingTimeoutSec: number;
     webSearchEnabled: boolean;
     webSearchUsage: { used: number; total: number; remaining: number };
+    webSearchMultiplier: number;
+    thinkingMultiplier: number;
   }> {
     const [
       globalTokenLimit,
@@ -117,6 +135,8 @@ export class SettingsService {
       fileProcessingTimeoutSec: isNaN(fileProcessingTimeoutSec) ? 120 : fileProcessingTimeoutSec,
       webSearchEnabled: await this.getWebSearchEnabled(),
       webSearchUsage: await this.getWebSearchUsage(),
+      webSearchMultiplier: await this.getWebSearchMultiplier(),
+      thinkingMultiplier: await this.getThinkingMultiplier(),
     };
   }
 
@@ -153,6 +173,12 @@ export class SettingsService {
     }
     if (dto.webSearchUsedCredits !== undefined) {
       await this.set(WEB_SEARCH_USED_KEY, String(dto.webSearchUsedCredits));
+    }
+    if (dto.webSearchMultiplier !== undefined) {
+      await this.set(WEB_SEARCH_TOKEN_MULTIPLIER_KEY, String(dto.webSearchMultiplier));
+    }
+    if (dto.thinkingMultiplier !== undefined) {
+      await this.set(THINKING_TOKEN_MULTIPLIER_KEY, String(dto.thinkingMultiplier));
     }
     return this.getAll();
   }

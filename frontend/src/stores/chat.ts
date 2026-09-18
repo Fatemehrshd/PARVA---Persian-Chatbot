@@ -20,9 +20,9 @@ interface ConvStreamState {
   releaseTimer: ReturnType<typeof setTimeout> | null
 }
 
-// Delay between rendered characters during streaming — slows the visual
-// reveal so the response feels more like a human is typing.
-const STREAM_CHAR_DELAY_MS = 22
+// Delay between rendered characters during streaming — small enough to feel
+// real-time but visible enough to give a smooth typing effect.
+const STREAM_CHAR_DELAY_MS = 8
 
 function makeDefaultState(): ConvStreamState {
   return {
@@ -121,7 +121,7 @@ export const useChatStore = defineStore('chat', () => {
         }
         s.isStreaming = false
         s.isThinking = false
-        s.streamError = 'زمان انتظار برای دریافت پاسخ به پایان رسید (تایم‌اوت)'
+        s.streamError = 'زمان انتظار برای دریافت پاسخ به پایان رسید'
         // Force reactivity — replace the map entry
         convStreamStates.value.set(convId, { ...s })
       }
@@ -162,19 +162,15 @@ export const useChatStore = defineStore('chat', () => {
             idToSelect = targetId
           } else if (!targetId && currentConversationId.value && data.some((c) => c.id === currentConversationId.value)) {
             idToSelect = currentConversationId.value
-          } else if (targetId) {
-            idToSelect = targetId
           }
+          // اگر targetId در لیست نبود (مثلاً conversation خالی که backend فیلتر کرده)،
+          // به اولین conversation موجود برو
           await selectConversation(idToSelect)
         } else {
           conversations.value = []
-          if (targetId) {
-            await selectConversation(targetId)
-          } else {
-            currentConversationId.value = null
-            messages.value = []
-            isLoadingMessages.value = false
-          }
+          currentConversationId.value = null
+          messages.value = []
+          isLoadingMessages.value = false
         }
         return
       }
@@ -317,7 +313,7 @@ export const useChatStore = defineStore('chat', () => {
               s.isThinking = false
               sessionStorage.removeItem('active_streaming_conv')
               s.streamError = streamStatus?.status === 'error'
-                ? 'زمان انتظار برای دریافت پاسخ به پایان رسید (تایم‌اوت)'
+                ? 'زمان انتظار برای دریافت پاسخ به پایان رسید'
                 : 'خطا در برقراری ارتباط با مدل هوش مصنوعی'
             } else {
               s.isStreaming = false
@@ -332,7 +328,7 @@ export const useChatStore = defineStore('chat', () => {
             const s = ensureState(id)
             s.isStreaming = false
             s.isThinking = false
-            s.streamError = 'خطا در برقراری ارتباط با مدل هوش مصنوعی'
+            s.streamError = 'خطا در برقراری ارتباط'
             convStreamStates.value.set(id, { ...s })
             sessionStorage.removeItem('active_streaming_conv')
           }
@@ -738,6 +734,9 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     if (!currentConversationId.value) {
+      // Local placeholder id only — the conversation joins the sidebar when
+      // the assistant responds (see executeMessageStream's first-token hook),
+      // so a pending chat never shows up in the list.
       const tempId = `c-${Date.now()}`
       const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
       const fallbackTitle = files && files.length > 0 ? files[0].originalName : 'گفتگوی جدید'
@@ -826,6 +825,20 @@ export const useChatStore = defineStore('chat', () => {
       } catch (err) {
         console.warn('Could not persist conversation to backend before streaming:', err)
       }
+    }
+
+    // The conversation could not be persisted — it only exists as a local
+    // placeholder. Sending to it would 404 on the backend, so fail fast with
+    // visible feedback instead of a doomed stream request.
+    if (convId.startsWith('c-')) {
+      userMessage.status = 'error'
+      const s = ensureState(convId)
+      s.isStreaming = false
+      s.isThinking = false
+      s.streamError = 'خطا در ایجاد گفتگو روی سرور — دوباره تلاش کنید'
+      convStreamStates.value.set(convId, { ...s })
+      uiStore.showToast('خطا در ایجاد گفتگو روی سرور — دوباره تلاش کنید', 'error')
+      return
     }
 
     // 1. Check if attached files are still processing

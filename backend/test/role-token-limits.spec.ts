@@ -2,6 +2,8 @@ import { SettingsService, resolveEffectiveTokenLimit } from '../src/modules/admi
 import { ChatService } from '../src/modules/chat/chat.service';
 import { BadRequestException } from '@nestjs/common';
 import { UsersService } from '../src/modules/users/users.service';
+import { plainToInstance } from 'class-transformer';
+import { UpdateSettingsDto } from '../src/modules/admin/dto';
 
 describe('Role-based token limits', () => {
   describe('UsersService periodic quota', () => {
@@ -131,6 +133,26 @@ describe('Role-based token limits', () => {
       await settings.setRoleTokenLimit('user', 5000);
       await settings.setRoleTokenLimit('user', null);
       expect(await settings.getRoleTokenLimits()).toEqual({});
+    });
+
+    it('normalizes Persian digits in admin settings payloads before validation and storage', async () => {
+      const dto = plainToInstance(UpdateSettingsDto, {
+        globalTokenLimit: '۱۲۳۴',
+        tokenRatePer1000: '۲٫۵',
+        roleQuotas: {
+          user: { tokenLimit: '۵۰۰۰', messageLimit: '۱۰', resetHours: '۶' },
+        },
+      });
+
+      expect(dto.globalTokenLimit).toBe(1234);
+      expect(dto.tokenRatePer1000).toBe(2.5);
+
+      await settings.update(dto);
+      expect(await settings.getGlobalTokenLimit()).toBe(1234);
+      expect(await settings.getTokenRatePer1000()).toBe(2.5);
+      expect(await settings.getRoleQuotas()).toEqual({
+        user: { tokenLimit: 5000, messageLimit: 10, resetHours: 6 },
+      });
     });
 
     it('drops invalid role entries instead of failing', async () => {

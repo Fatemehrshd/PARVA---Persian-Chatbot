@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SystemSetting } from './system-setting.entity';
 import { UpdateSettingsDto } from './dto';
+import { normalizeNumericValue } from '../../shared/number-input';
 
 export const DEFAULT_SYSTEM_PROMPT = 'You are a helpful and knowledgeable AI assistant.';
 export const DEFAULT_GLOBAL_TOKEN_LIMIT = 0; // 0 = unlimited
@@ -74,14 +75,14 @@ export class SettingsService {
 
   async getGlobalTokenLimit(): Promise<number> {
     const val = await this.get('global_token_limit', String(DEFAULT_GLOBAL_TOKEN_LIMIT));
-    const parsed = parseInt(val, 10);
+    const parsed = Number(normalizeNumericValue(val));
     return isNaN(parsed) ? DEFAULT_GLOBAL_TOKEN_LIMIT : parsed;
   }
 
   /** دریافت نرخ هر ۱۰۰۰ توکن به دلار */
   async getTokenRatePer1000(): Promise<number> {
     const val = await this.get('token_rate_per_1000', String(DEFAULT_TOKEN_RATE_PER_1000));
-    const parsed = parseFloat(val);
+    const parsed = Number(normalizeNumericValue(val));
     return isNaN(parsed) || parsed <= 0 ? DEFAULT_TOKEN_RATE_PER_1000 : parsed;
   }
 
@@ -97,8 +98,8 @@ export class SettingsService {
   async getWebSearchUsage(): Promise<{ used: number; total: number; remaining: number }> {
     const usedRaw = await this.get(WEB_SEARCH_USED_KEY, '0');
     const totalRaw = await this.get(WEB_SEARCH_QUOTA_KEY, String(DEFAULT_WEB_SEARCH_QUOTA));
-    const usedParsed = parseInt(usedRaw, 10);
-    const totalParsed = parseInt(totalRaw, 10);
+    const usedParsed = Number(normalizeNumericValue(usedRaw));
+    const totalParsed = Number(normalizeNumericValue(totalRaw));
     const used = isNaN(usedParsed) || usedParsed < 0 ? 0 : usedParsed;
     const total = isNaN(totalParsed) || totalParsed < 0 ? DEFAULT_WEB_SEARCH_QUOTA : totalParsed;
     return { used, total, remaining: Math.max(0, total - used) };
@@ -117,7 +118,7 @@ export class SettingsService {
       const clean: Record<string, number> = {};
       for (const [role, val] of Object.entries(parsed)) {
         if (typeof role !== 'string' || !/^[a-z0-9_-]{1,32}$/i.test(role)) continue;
-        const num = typeof val === 'number' ? val : parseInt(String(val), 10);
+        const num = typeof val === 'number' ? val : Number(normalizeNumericValue(val));
         if (Number.isFinite(num) && num >= 0) clean[role] = Math.floor(num);
       }
       return clean;
@@ -162,7 +163,7 @@ export class SettingsService {
   async setTaskMultiplier(type: string, value: number | null): Promise<void> {
     if (!(TASK_TYPES as readonly string[]).includes(type)) return;
     const current = await this.getTaskMultipliers();
-    const numeric = Number(value);
+    const numeric = Number(normalizeNumericValue(value));
     if (value === null || !Number.isFinite(numeric) || numeric <= 0) delete current[type];
     else current[type] = numeric;
     await this.set(TASK_MULTIPLIERS_KEY, JSON.stringify(current));
@@ -184,7 +185,7 @@ export class SettingsService {
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
       const normalize = (value: unknown): number | null => {
         if (value === null || value === undefined || value === '') return null;
-        const numeric = Number(value);
+        const numeric = Number(normalizeNumericValue(value));
         return Number.isFinite(numeric) && numeric >= 0 ? Math.floor(numeric) : null;
       };
       const clean: Record<string, RoleQuota> = {};
@@ -241,11 +242,11 @@ export class SettingsService {
       this.getGlobalTokenLimit(),
       this.getTokenRatePer1000(),
       this.getSystemPrompt(),
-      this.get('file_max_size_mb', '20').then(Number),
-      this.get('file_max_total_size_mb', '50').then(Number),
-      this.get('file_max_count', '5').then(Number),
-      this.get('excel_max_rows', '5000').then(Number),
-      this.get('file_processing_timeout_sec', '120').then(Number),
+      this.get('file_max_size_mb', '20').then((value) => Number(normalizeNumericValue(value))),
+      this.get('file_max_total_size_mb', '50').then((value) => Number(normalizeNumericValue(value))),
+      this.get('file_max_count', '5').then((value) => Number(normalizeNumericValue(value))),
+      this.get('excel_max_rows', '5000').then((value) => Number(normalizeNumericValue(value))),
+      this.get('file_processing_timeout_sec', '120').then((value) => Number(normalizeNumericValue(value))),
       this.getRoleTokenLimits(),
       this.getTaskMultipliers(),
       this.getRoleQuotas(),
@@ -305,17 +306,32 @@ export class SettingsService {
     // سقف نقش‌ها به صورت merge اعمال می‌شود تا ویرایش یک نقش بقیه را پاک نکند.
     if (dto.roleTokenLimits !== undefined && dto.roleTokenLimits !== null) {
       for (const [role, limit] of Object.entries(dto.roleTokenLimits)) {
-        await this.setRoleTokenLimit(role, limit);
+        const normalized = limit === null ? null : Number(normalizeNumericValue(limit));
+        await this.setRoleTokenLimit(role, Number.isFinite(normalized) ? normalized : null);
       }
     }
     if (dto.taskMultipliers !== undefined && dto.taskMultipliers !== null) {
       for (const [type, value] of Object.entries(dto.taskMultipliers)) {
-        await this.setTaskMultiplier(type, value);
+        const normalized = value === null ? null : Number(normalizeNumericValue(value));
+        await this.setTaskMultiplier(type, Number.isFinite(normalized) ? normalized : null);
       }
     }
     if (dto.roleQuotas !== undefined && dto.roleQuotas !== null) {
       for (const [role, quota] of Object.entries(dto.roleQuotas)) {
-        await this.setRoleQuota(role, quota);
+        if (quota === null) {
+          await this.setRoleQuota(role, null);
+          continue;
+        }
+        const normalizeQuotaValue = (value: number | null): number | null => {
+          if (value === null || value === undefined) return null;
+          const normalized = Number(normalizeNumericValue(value));
+          return Number.isFinite(normalized) ? Math.floor(normalized) : null;
+        };
+        await this.setRoleQuota(role, {
+          tokenLimit: normalizeQuotaValue(quota.tokenLimit),
+          messageLimit: normalizeQuotaValue(quota.messageLimit),
+          resetHours: normalizeQuotaValue(quota.resetHours),
+        });
       }
     }
     return this.getAll();

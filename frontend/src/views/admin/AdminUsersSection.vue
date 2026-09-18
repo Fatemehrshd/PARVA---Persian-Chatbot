@@ -1,3 +1,4 @@
+              ${{ Number(user.usedCostUsd ?? tokensToDollars(Number(user.usedTokens || 0))).toLocaleString('fa-IR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} مصرفی
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { Edit, FileText } from '@lucide/vue'
@@ -291,7 +292,7 @@ onMounted(loadUsers)
               </span>
             </div>
             <div class="text-[11px] text-muted-foreground font-mono">
-              ${{ Number(user.usedCostUsd ?? tokensToDollars(Number(user.usedTokens || 0))).toFixed(2) }} مصرفی
+              ${{ Number(user.usedCostUsd ?? tokensToDollars(Number(user.usedTokens || 0))).toLocaleString('fa-IR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} مصرفی
             </div>
           </div>
         </td>
@@ -300,7 +301,7 @@ onMounted(loadUsers)
         <td data-label="باقی‌مانده" class="text-center">
           <span class="font-mono text-xs font-bold" :class="getUserStats(user).statusColor">
             <template v-if="getUserStats(user).hasLimit">
-              {{ getUserStats(user).remainingPercent }}٪
+              {{ Number(getUserStats(user).remainingPercent).toLocaleString('fa-IR') }}٪
             </template>
             <template v-else>∞</template>
           </span>

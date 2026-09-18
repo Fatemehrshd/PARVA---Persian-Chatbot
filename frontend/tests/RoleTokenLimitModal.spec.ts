@@ -13,8 +13,8 @@ const baseProps = {
 describe('RoleTokenLimitModal', () => {
   it('prefills the token and dollar fields from the current limit', () => {
     const w = mount(RoleTokenLimitModal, { props: baseProps })
-    const tokenInput = w.findAll('input[type="number"]')[1]
-    const dollarInput = w.findAll('input[type="number"]')[0]
+    const tokenInput = w.findAll('input[inputmode="numeric"]')[0]
+    const dollarInput = w.find('input[inputmode="decimal"]')
     expect((tokenInput.element as HTMLInputElement).value).toBe('5000')
     expect((dollarInput.element as HTMLInputElement).value).toBe('50')
     expect(w.text()).toContain('کاربر عادی')
@@ -22,15 +22,15 @@ describe('RoleTokenLimitModal', () => {
 
   it('keeps token and dollar fields in sync via the rate', async () => {
     const w = mount(RoleTokenLimitModal, { props: baseProps })
-    const tokenInput = w.findAll('input[type="number"]')[1]
+    const tokenInput = w.find('input[inputmode="numeric"]')
     await tokenInput.setValue('10000')
-    const dollarInput = w.findAll('input[type="number"]')[0]
+    const dollarInput = w.find('input[inputmode="decimal"]')
     expect((dollarInput.element as HTMLInputElement).value).toBe('100')
   })
 
   it('emits save with null when the fields are cleared (fall back to global)', async () => {
     const w = mount(RoleTokenLimitModal, { props: baseProps })
-    const tokenInput = w.findAll('input[type="number"]')[1]
+    const tokenInput = w.find('input[inputmode="numeric"]')
     await tokenInput.setValue('')
     await w.find('form').trigger('submit')
     const saveEvent = w.emitted('save')
@@ -40,7 +40,7 @@ describe('RoleTokenLimitModal', () => {
 
   it('emits save with the entered token limit', async () => {
     const w = mount(RoleTokenLimitModal, { props: baseProps })
-    const tokenInput = w.findAll('input[type="number"]')[1]
+    const tokenInput = w.find('input[inputmode="numeric"]')
     await tokenInput.setValue('20000')
     await w.find('form').trigger('submit')
     const saveEvent = w.emitted('save')

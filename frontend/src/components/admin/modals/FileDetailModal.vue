@@ -22,7 +22,7 @@ function getFileDownloadUrl(fileId: string): string {
 }
 
 function formatFileSize(bytes?: number): string {
-  if (!bytes) return '۰ B'
+  if (!bytes) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB']
   let size = bytes
   let unitIndex = 0
@@ -30,7 +30,7 @@ function formatFileSize(bytes?: number): string {
     size /= 1024
     unitIndex++
   }
-  return `${size.toFixed(1)} ${units[unitIndex]}`
+  return `${size.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ${units[unitIndex]}`
 }
 
 function getAttBadgeClass(fileType: string): string {
@@ -106,7 +106,7 @@ function getStatusClass(status: string): string {
         </div>
         <div class="meta-item p-2.5 rounded-lg bg-card/60 border border-border">
           <span class="text-muted-foreground block mb-1">زمان پردازش / تاریخ:</span>
-          <strong v-if="file.metadata?.processingDurationMs">{{ file.metadata.processingDurationMs }} میلی‌ثانیه</strong>
+          <strong v-if="file.metadata?.processingDurationMs">{{ Number(file.metadata.processingDurationMs).toLocaleString('fa-IR') }} میلی‌ثانیه</strong>
           <strong v-else>—</strong>
           <span class="block text-muted-foreground text-[11px]">{{ formatIranDateTime(file.createdAt) }}</span>
         </div>

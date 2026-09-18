@@ -1,13 +1,19 @@
 import { IsOptional, IsInt, Min, IsString, MinLength, IsIn, IsEmail, IsBoolean, ValidateIf, IsObject } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { normalizeNumericValue } from '../../shared/number-input';
+
+const normalizeNumber = () => Transform(({ value }) => normalizeNumericValue(value));
 
 export class UpdateSettingsDto {
   @IsOptional()
+  @normalizeNumber()
   @IsInt({ message: 'سقف توکن باید عدد صحیح باشد' })
   @Min(0, { message: 'سقف توکن نمی‌تواند منفی باشد' })
   globalTokenLimit?: number;
 
   /** نرخ دلار به ازای هر ۱۰۰۰ توکن (پیش‌فرض: ۱۰ دلار) */
   @IsOptional()
+  @normalizeNumber()
   @Min(0.01, { message: 'نرخ تبدیل توکن به دلار باید مثبت باشد' })
   tokenRatePer1000?: number;
 
@@ -17,26 +23,31 @@ export class UpdateSettingsDto {
   systemPrompt?: string;
 
   @IsOptional()
+  @normalizeNumber()
   @IsInt({ message: 'حداکثر حجم هر فایل باید عدد صحیح باشد' })
   @Min(1)
   fileMaxSizeMb?: number;
 
   @IsOptional()
+  @normalizeNumber()
   @IsInt({ message: 'حداکثر مجموع حجم فایل‌ها باید عدد صحیح باشد' })
   @Min(1)
   fileMaxTotalSizeMb?: number;
 
   @IsOptional()
+  @normalizeNumber()
   @IsInt({ message: 'حداکثر تعداد فایل باید عدد صحیح باشد' })
   @Min(1)
   fileMaxCount?: number;
 
   @IsOptional()
+  @normalizeNumber()
   @IsInt({ message: 'حداکثر سطرهای اکسل باید عدد صحیح باشد' })
   @Min(10)
   excelMaxRows?: number;
 
   @IsOptional()
+  @normalizeNumber()
   @IsInt({ message: 'تایم‌اوت پردازش باید عدد صحیح باشد' })
   @Min(10)
   fileProcessingTimeoutSec?: number;
@@ -46,11 +57,13 @@ export class UpdateSettingsDto {
   webSearchEnabled?: boolean;
 
   @IsOptional()
+  @normalizeNumber()
   @IsInt({ message: 'سقف اعتبار جستجو باید عدد صحیح باشد' })
   @Min(1, { message: 'سقف اعتبار جستجو باید حداقل ۱ باشد' })
   webSearchQuotaTotal?: number;
 
   @IsOptional()
+  @normalizeNumber()
   @IsInt({ message: 'مصرف اعتبار جستجو باید عدد صحیح باشد' })
   @Min(0, { message: 'مصرف اعتبار جستجو نمی‌تواند منفی باشد' })
   webSearchUsedCredits?: number;
@@ -86,18 +99,21 @@ export class UpdateUserAdminDto {
   email?: string;
 
   @IsOptional()
+  @normalizeNumber()
   @IsInt({ message: 'میزان توکن مصرفی باید عدد صحیح باشد' })
   @Min(0, { message: 'میزان توکن مصرفی نمی‌تواند منفی باشد' })
   usedTokens?: number;
 
   @IsOptional()
   @ValidateIf((_obj, val) => val !== null && val !== undefined)
+  @normalizeNumber()
   @IsInt({ message: 'سقف توکن کاربر باید عدد صحیح باشد' })
   @Min(0, { message: 'سقف توکن کاربر نمی‌تواند منفی باشد' })
   tokenLimit?: number | null;
 
   @IsOptional()
   @ValidateIf((_obj, val) => val !== null && val !== undefined)
+  @normalizeNumber()
   @IsInt({ message: 'سقف تعداد پیام باید عدد صحیح باشد' })
   @Min(0, { message: 'سقف تعداد پیام نمی‌تواند منفی باشد' })
   messageLimit?: number | null;

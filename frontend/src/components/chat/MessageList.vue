@@ -14,7 +14,6 @@ const { activeLogo } = useThemeLogo()
 const containerRef = ref<HTMLElement | null>(null)
 const contentRef = ref<HTMLElement | null>(null)
 const shouldAutoScroll = ref(true)
-const isUserScrolling = ref(false)
 const streamingDirection = computed(() => getTextDirection(chatStore.currentStreamingText))
 const isSearching = computed(() => {
   const id = chatStore.currentConversationId
@@ -24,6 +23,10 @@ const isSearching = computed(() => {
 
 let scrollTimeout: ReturnType<typeof setTimeout> | undefined
 let resizeObserver: ResizeObserver | null = null
+// Last observed scrollTop — used to detect the scroll direction. Upward
+// movement can only come from the user (programmatic scrolls only go down),
+// so it disengages follow instantly; landing near the bottom re-engages it.
+let lastScrollTop = 0
 
 const showScrollToBottom = computed(() => {
   return !shouldAutoScroll.value && (chatStore.messages.length > 0 || chatStore.isStreaming)
@@ -34,27 +37,29 @@ function isNearBottom(container: HTMLElement, threshold = 120): boolean {
   return distanceFromBottom <= threshold
 }
 
-function handleUserInteraction() {
-  // User initiated manual scroll (wheel / touch)
-  isUserScrolling.value = true
-}
-
 function handleScroll() {
   const container = containerRef.value
   if (!container) return
 
-  // Synchronously evaluate if user is near bottom
+  // Any upward movement is user intent: drop follow immediately so even a
+  // slow scroll inside the bottom threshold never fights the stream.
+  const scrolledUp = container.scrollTop < lastScrollTop
+  lastScrollTop = container.scrollTop
+
   const nearBottom = isNearBottom(container, 120)
-  shouldAutoScroll.value = nearBottom
+  if (scrolledUp) {
+    shouldAutoScroll.value = false
+  } else if (nearBottom) {
+    shouldAutoScroll.value = true
+  }
 
   if (scrollTimeout) {
     clearTimeout(scrollTimeout)
   }
-  
+
   scrollTimeout = setTimeout(() => {
-    isUserScrolling.value = false
-    if (container) {
-      shouldAutoScroll.value = isNearBottom(container, 120)
+    if (container && isNearBottom(container, 120)) {
+      shouldAutoScroll.value = true
     }
   }, 80)
 }
@@ -62,13 +67,13 @@ function handleScroll() {
 function scrollToBottom(force = false) {
   if (force) {
     shouldAutoScroll.value = true
-    isUserScrolling.value = false
   }
 
   const performScroll = () => {
     const container = containerRef.value
     if (!container) return
     container.scrollTop = container.scrollHeight
+    lastScrollTop = container.scrollTop
   }
 
   // Pass 1: Next microtask (Vue DOM update)
@@ -97,7 +102,6 @@ function scrollToBottom(force = false) {
 
 function handleScrollToBottomClick() {
   shouldAutoScroll.value = true
-  isUserScrolling.value = false
   const container = containerRef.value
   if (!container) return
   container.scrollTo({
@@ -144,24 +148,23 @@ watch(
     const wasStreaming = previousState?.[2] === true
     if (isCurrentlyStreaming && !wasStreaming) {
       shouldAutoScroll.value = true
-      isUserScrolling.value = false
     }
 
-    // 3. During streaming / thinking
+    // 3. During streaming / thinking — follow unless the user scrolled away
     if (isCurrentlyStreaming && (streamingTextChanged || isThinking)) {
-      // اگر کاربر دستی اسکرول نکرده، همیشه follow کن
-      if (!isUserScrolling.value) {
-        if (!shouldAutoScroll.value) {
-          // بررسی کن آیا واقعاً کاربر پایین است یا فقط flag اشتباه است
-          const container = containerRef.value
-          if (container && isNearBottom(container, 120)) {
-            shouldAutoScroll.value = true
-          }
-        }
-        if (shouldAutoScroll.value) {
-          scrollToBottom(false)
-        }
+      if (shouldAutoScroll.value) {
+        scrollToBottom(false)
       }
+    }
+  },
+  { flush: 'post' }
+)
+
+watch(
+  () => chatStore.isLoadingMessages,
+  (isLoading, wasLoading) => {
+    if (wasLoading && !isLoading && chatStore.messages.length > 0) {
+      scrollToBottom(true)
     }
   },
   { flush: 'post' }
@@ -170,8 +173,6 @@ watch(
 onMounted(() => {
   const container = containerRef.value
   if (container) {
-    container.addEventListener('wheel', handleUserInteraction, { passive: true })
-    container.addEventListener('touchstart', handleUserInteraction, { passive: true })
     container.addEventListener('scroll', handleScroll, { passive: true })
     scrollToBottom(true)
   }
@@ -179,7 +180,7 @@ onMounted(() => {
   // Observe content wrapper resize to handle dynamic markdown and image loading
   if (typeof ResizeObserver !== 'undefined' && contentRef.value) {
     resizeObserver = new ResizeObserver(() => {
-      if (shouldAutoScroll.value && !isUserScrolling.value) {
+      if (shouldAutoScroll.value) {
         const c = containerRef.value
         if (c) {
           c.scrollTop = c.scrollHeight
@@ -200,8 +201,6 @@ onBeforeUnmount(() => {
   }
   const container = containerRef.value
   if (container) {
-    container.removeEventListener('wheel', handleUserInteraction)
-    container.removeEventListener('touchstart', handleUserInteraction)
     container.removeEventListener('scroll', handleScroll)
   }
 })

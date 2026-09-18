@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.1] - 2026-09-18
+
+### Added
+- **Strict Server-Side DataGrid Queries Across All Admin Tables**: Enabled `:serverSide="true"` for all admin sections (`AdminUsersSection`, `AdminChatsSection`, `AdminFilesSection`, `AdminModelsSection`, `AdminProvidersSection`). All search typing, inline column filtering, page changes, page-size adjustments, and column sorting send direct API query requests to `ApiFeatures` on the backend.
+- **Debounced Search & Instant Clear Emits in AdminTable**: Added 250ms debounce for text input and column filters to optimize backend query load, while ensuring instant event dispatch on clear actions.
+- **Permanently Fixed Admin Sidebar**: Updated `.admin-shell` to `height: 100vh; width: 100vw; overflow: hidden;` and `.admin-sidebar` to `position: fixed; top: 0; bottom: 0; right: 0; width: 250px; height: 100vh; overflow-y: auto;`. All scrolling is isolated to `.admin-main` (`margin-right: 250px; height: 100vh; overflow-y: auto;`), ensuring the sidebar remains 100% fixed and never scrolls away.
+- **New Chat Gating During Model Response**: Completely disabled the "New Chat" button (in both expanded and collapsed sidebar modes) whenever a model is thinking or streaming a response. Added defensive checks in `useChatStore.createNewConversation` and contextual Persian tooltip explaining that a new chat cannot be initiated while receiving a reply.
+
+## [1.3.0] - 2026-09-18
+
+### Added
+- **Full Modular Admin Refactoring**: Split monolithic 4,387-line admin panel into 8 standalone section pages under `frontend/src/views/admin/` and 5 dedicated modal components under `frontend/src/components/admin/modals/`.
+- **Dedicated Vue Sub-routes per Admin Section**: Added `/admin/dashboard`, `/admin/providers`, `/admin/models`, `/admin/users`, `/admin/prompts`, `/admin/chats`, `/admin/files`, `/admin/file-settings` in `router/index.ts` with code splitting and lazy loading.
+- **Lazy Per-Page Data Fetching**: Dashboard loads only KPI metrics and recent models without bulk-fetching all system entities.
+- **Server-Side Pagination & Sorting**: Connected all 5 admin controllers (`models`, `providers`, `users`, `conversations`, `files`) to `ApiFeatures`.
+- **Sticky Viewport Admin Sidebar**: Sidebar remains fixed (`position: sticky; top: 0; height: 100vh; overflow-y: auto;`) while tables scroll smoothly.
+- **Server-Side Logout & Token Revocation**: Added token blacklist set in `AuthService` and revocation check in `JwtAuthGuard` on `POST /auth/logout`.
+- **Proactive Auto-Logout & Session Expiration**: Added JWT expiration validation (`isTokenExpired`), 401 interception, and window focus monitors ensuring users are immediately logged out if their token expires or is missing.
+- **Dedicated Documentation Artifacts**: Added `docs/admin-dashboard-frontend.md`, `docs/admin-dashboard-backend.md`, and `docs/auth-architecture.md`.
+
 ## [1.2.4] - 2026-09-18
 
 ### Added

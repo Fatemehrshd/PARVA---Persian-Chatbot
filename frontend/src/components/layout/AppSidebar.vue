@@ -47,18 +47,29 @@ const profileMenuOpen = ref(false)
 const SidebarCollapseIcon = PanelRightClose
 const SidebarExpandIcon = PanelRightOpen
 
-// Disable "New Chat" when the user has no conversation selected at all, or is
-// already sitting on an empty (fresh) conversation — both would create a
-// duplicate empty chat.
+// Check whether any conversation or the active chat is actively answering / streaming
+const isChatResponding = computed(() => chatStore.isAnyStreaming)
+
+// Disable "New Chat" when:
+// 1. The user has no conversation selected at all, or is already sitting on an empty (fresh) conversation
+// 2. The chat is actively answering / streaming a response
 const isOnEmptyChat = computed(() =>
   chatStore.currentConversationId === null ||
-  (chatStore.messages.length === 0 && !chatStore.isStreaming)
+  (chatStore.messages.length === 0 && !isChatResponding.value)
+)
+
+const isNewChatDisabled = computed(() =>
+  isOnEmptyChat.value || isChatResponding.value
 )
 
 // ──────────────────────────────────────────
 // Navigation actions
 // ──────────────────────────────────────────
 async function handleNewChat() {
+  if (isChatResponding.value) {
+    uiStore.showToast('امکان شروع گفتگوی جدید در هنگام دریافت پاسخ وجود ندارد.', 'info')
+    return
+  }
   if (isOnEmptyChat.value) return
   const newId = await chatStore.createNewConversation()
   if (newId) router.push(`/chat/${newId}`)
@@ -212,10 +223,10 @@ const userInitial = computed(() => {
 
         <button
           class="sb-action-row sb-action-row--primary new-chat-btn"
-          :class="{ 'sb-action-row--disabled': isOnEmptyChat }"
-          :disabled="isOnEmptyChat"
+          :class="{ 'sb-action-row--disabled': isNewChatDisabled }"
+          :disabled="isNewChatDisabled"
           @click="handleNewChat"
-          title="گفتگوی جدید"
+          :title="isChatResponding ? 'امکان شروع گفتگوی جدید در هنگام دریافت پاسخ وجود ندارد' : 'گفتگوی جدید'"
         >
           <SquarePen :size="16" class="sb-action-icon" />
           <span class="sb-action-label">گفتگوی جدید</span>
@@ -361,10 +372,10 @@ const userInitial = computed(() => {
       <!-- New Chat -->
       <button
         class="sb-icon-btn sb-icon-btn--lg sb-icon-btn--primary"
-        :class="{ 'sb-icon-btn--disabled': isOnEmptyChat }"
-        :disabled="isOnEmptyChat"
+        :class="{ 'sb-icon-btn--disabled': isNewChatDisabled }"
+        :disabled="isNewChatDisabled"
         @click="handleNewChat"
-        title="گفتگوی جدید"
+        :title="isChatResponding ? 'امکان شروع گفتگوی جدید در هنگام دریافت پاسخ وجود ندارد' : 'گفتگوی جدید'"
       >
         <SquarePen :size="17" />
       </button>

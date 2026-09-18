@@ -29,12 +29,17 @@ export const modelsService = {
     }
   },
 
-  /**
-   * List all configured AI models (admin only).
-   * GET /admin/models
-   */
-  async listModels(): Promise<Model[]> {
-    return request<Model[]>('/admin/models')
+  async listModels(params?: { search?: string; provider?: string; page?: number; limit?: number; [key: string]: any }): Promise<Model[] | { items: Model[]; total: number }> {
+    const searchParams = new URLSearchParams()
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== null && v !== '') {
+          searchParams.set(k, String(v))
+        }
+      }
+    }
+    const qs = searchParams.toString()
+    return request<any>(`/admin/models${qs ? `?${qs}` : ''}`)
   },
 
   /**
@@ -94,8 +99,17 @@ export const modelsService = {
    * List configured AI providers (admin only).
    * GET /admin/providers
    */
-  async listProviders(): Promise<Provider[]> {
-    return request<Provider[]>('/admin/providers')
+  async listProviders(params?: { search?: string; page?: number; limit?: number; [key: string]: any }): Promise<Provider[] | { items: Provider[]; total: number }> {
+    const searchParams = new URLSearchParams()
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== null && v !== '') {
+          searchParams.set(k, String(v))
+        }
+      }
+    }
+    const qs = searchParams.toString()
+    return request<any>(`/admin/providers${qs ? `?${qs}` : ''}`)
   },
 
   /**

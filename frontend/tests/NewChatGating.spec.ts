@@ -129,4 +129,55 @@ describe('New Chat gating & sidebar visibility', () => {
     expect(chatStore.conversations.length).toBe(1)
     expect(chatStore.conversations[0].id).toBe(chatStore.currentConversationId)
   })
+
+  it('disables New Chat and prevents clicks while the model is responding / streaming', async () => {
+    const { useUiStore } = await import('../src/stores/ui')
+    useUiStore().sidebarOpen = true
+
+    const wrapper = mount(AppSidebar, { global: { plugins: [router] } })
+    await flushPromises()
+
+    const chatStore = useChatStore()
+    chatStore.conversations = [
+      {
+        id: 'conv-stream',
+        title: 'گفتگو جاری',
+        modelId: 'm1',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ]
+    chatStore.currentConversationId = 'conv-stream'
+    chatStore.messages = [
+      { id: 'm1', conversationId: 'conv-stream', role: 'user', content: 'سوال', createdAt: new Date().toISOString() },
+    ]
+    await wrapper.vm.$nextTick()
+
+    // Without streaming, New Chat is enabled
+    expect(wrapper.get('.new-chat-btn').attributes('disabled')).toBeUndefined()
+
+    // Now simulate streaming is active for this conversation
+    chatStore.convStreamStates.set('conv-stream', {
+      isStreaming: true,
+      isThinking: true,
+      currentStreamingText: 'در حال تولید پاسخ...',
+      streamError: null,
+      lastUserPrompt: 'سوال',
+      abortController: null,
+      watchdogTimer: null,
+    })
+    await wrapper.vm.$nextTick()
+
+    // New Chat must now be strictly disabled
+    const newChatBtn = wrapper.get('.new-chat-btn')
+    expect(newChatBtn.attributes('disabled')).toBeDefined()
+    expect(newChatBtn.classes()).toContain('sb-action-row--disabled')
+    expect(newChatBtn.attributes('title')).toContain('امکان شروع گفتگوی جدید در هنگام دریافت پاسخ وجود ندارد')
+
+    // Also verify store createNewConversation guards against streaming
+    const res = await chatStore.createNewConversation()
+    expect(res).toBe('')
+
+    wrapper.unmount()
+  })
 })

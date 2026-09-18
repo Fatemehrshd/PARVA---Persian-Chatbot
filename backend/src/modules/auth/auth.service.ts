@@ -43,10 +43,19 @@ export class AuthService {
       throw new UnauthorizedException('حساب کاربری غیرفعال است');
     return { user: this.toUserJson(u), ...this.tokens(u) };
   }
-  async logout() {
-    /* no-op placeholder for future refresh-token rotation */
+  private static revoked = new Set<string>();
+
+  async logout(token?: string) {
+    if (token) {
+      AuthService.revoked.add(token);
+    }
   }
+
   isRevoked(t: string) {
-    return this.revoked.has(t);
+    return AuthService.revoked.has(t);
+  }
+
+  static isTokenRevoked(t: string): boolean {
+    return AuthService.revoked.has(t);
   }
 }

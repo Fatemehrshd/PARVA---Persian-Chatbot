@@ -10,11 +10,13 @@ import {
   UseGuards,
   UsePipes,
   ValidationPipe,
+  Query,
 } from '@nestjs/common';
 import { ModelsAdminService } from './models-admin.service';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { AdminGuard } from '../../shared/admin.guard';
 import { CreateModelDto, UpdateModelStatusDto, UpdateModelDto } from './dto';
+import { ApiFeatures } from '../../shared/api-features';
 
 @UseGuards(JwtAuthGuard, AdminGuard)
 @Controller('admin/models')
@@ -22,8 +24,19 @@ export class ModelsAdminController {
   constructor(private svc: ModelsAdminService) {}
 
   @Get()
-  list() {
-    return this.svc.list();
+  async list(@Query() query: any) {
+    const all = await this.svc.list();
+    if (!query || (!query.search && !query.provider && !query.page && !query.limit && !query.sortBy)) {
+      return all;
+    }
+    const result = ApiFeatures.applyToArray(all, query, {
+      searchableFields: ['name', 'provider', 'apiIdentifier'],
+      allowedFilterFields: ['provider', 'isActive'],
+    });
+    if (query.page || query.limit) {
+      return result;
+    }
+    return result.items;
   }
 
   @Post()

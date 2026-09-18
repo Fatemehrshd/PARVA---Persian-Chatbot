@@ -3,8 +3,16 @@ import { ref, computed } from 'vue'
 import type { User } from '../types'
 import { authService } from '../services/auth.service'
 import { profileService } from '../services/profile.service'
+import { isTokenExpired } from '../lib/jwt'
 
 export const useAuthStore = defineStore('auth', () => {
+  const rawToken = localStorage.getItem('token')
+  if (rawToken && isTokenExpired(rawToken)) {
+    localStorage.removeItem('user')
+    localStorage.removeItem('token')
+    localStorage.removeItem('refreshToken')
+  }
+
   const savedUser = localStorage.getItem('user')
   const user = ref<User | null>(savedUser ? JSON.parse(savedUser) : null)
   const token = ref<string | null>(localStorage.getItem('token'))
@@ -98,8 +106,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function logout() {
     try {
-      if (refreshToken.value) {
-        await authService.logout(refreshToken.value).catch(() => {})
+      if (token.value) {
+        await authService.logout(refreshToken.value || undefined).catch(() => {})
       }
     } finally {
       user.value = null
@@ -109,6 +117,19 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.removeItem('token')
       localStorage.removeItem('refreshToken')
     }
+  }
+
+  // Proactive token expiration monitor
+  if (typeof window !== 'undefined') {
+    const checkExpiry = () => {
+      if (token.value && isTokenExpired(token.value)) {
+        void logout()
+        if (window.location.pathname !== '/login' && (!import.meta.env || import.meta.env.MODE !== 'test')) {
+          window.location.href = '/login'
+        }
+      }
+    }
+    window.addEventListener('focus', checkExpiry)
   }
 
   // Existing session (page refresh / direct URL): sync the profile — avatar

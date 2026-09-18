@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Strict Server-Side DataGrid Queries Across All Admin Tables**: Enabled `:serverSide="true"` for all admin sections (`AdminUsersSection`, `AdminChatsSection`, `AdminFilesSection`, `AdminModelsSection`, `AdminProvidersSection`). All search typing, inline column filtering, page changes, page-size adjustments, and column sorting send direct API query requests to `ApiFeatures` on the backend.
 - **Debounced Search & Instant Clear Emits in AdminTable**: Added 250ms debounce for text input and column filters to optimize backend query load, while ensuring instant event dispatch on clear actions.
 - **Permanently Fixed Admin Sidebar**: Updated `.admin-shell` to `height: 100vh; width: 100vw; overflow: hidden;` and `.admin-sidebar` to `position: fixed; top: 0; bottom: 0; right: 0; width: 250px; height: 100vh; overflow-y: auto;`. All scrolling is isolated to `.admin-main` (`margin-right: 250px; height: 100vh; overflow-y: auto;`), ensuring the sidebar remains 100% fixed and never scrolls away.
+- **New Chat Gating During Model Response**: Completely disabled the "New Chat" button (in both expanded and collapsed sidebar modes) whenever a model is thinking or streaming a response. Added defensive checks in `useChatStore.createNewConversation` and contextual Persian tooltip explaining that a new chat cannot be initiated while receiving a reply.
 
 ## [1.3.0] - 2026-09-18
 

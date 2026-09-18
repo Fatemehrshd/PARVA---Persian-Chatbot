@@ -76,14 +76,14 @@ const isSearchDebouncing = ref(false)
 let searchDebounceTimer: any = null
 
 const labels = {
-  dashboard: 'داشبورد مدیریت',
-  providers: 'ارائه‌دهنده‌ها',
-  models: 'مدل‌های هوش مصنوعی',
+  dashboard: 'داشبورد',
+  providers: 'ارائه‌دهندگان',
+  models: 'مدل‌ها',
   users: 'مدیریت کاربران',
-  prompts: 'پرامپت و سقف توکن',
-  chats: 'تاریخچه چت‌ها',
+  prompts: 'پرامپت‌ها و محدودیت توکن',
+  chats: 'تاریخچه گفتگوها',
   files: 'مدیریت فایل‌ها',
-  fileSettings: 'تنظیمات آپلود فایل',
+  fileSettings: 'تنظیمات فایل و آپلود',
   back: 'بازگشت به چت',
 }
 

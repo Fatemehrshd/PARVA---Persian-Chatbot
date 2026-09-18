@@ -19,6 +19,21 @@ export class UsersService {
     return this.repo.findOne({ where: { username } }).catch(() => null);
   }
 
+  /** نقش‌های موجود در سیستم (حاضر در جدول کاربران + پیش‌فرض‌ها) برای پنل ادمین. */
+  async listDistinctRoles(): Promise<string[]> {
+    const defaults = ['user', 'admin'];
+    try {
+      const rows = await this.repo
+        .createQueryBuilder('u')
+        .select('DISTINCT u.role', 'role')
+        .getRawMany();
+      const found = rows.map((r) => r?.role).filter((r): r is string => typeof r === 'string' && r.length > 0);
+      return Array.from(new Set([...defaults, ...found]));
+    } catch {
+      return defaults;
+    }
+  }
+
   create(data: Partial<User>) {
     return this.repo.save(this.repo.create(data));
   }

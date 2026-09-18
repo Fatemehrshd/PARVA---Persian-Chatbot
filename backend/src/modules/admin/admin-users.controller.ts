@@ -13,6 +13,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
+import { SettingsService, resolveEffectiveTokenLimit } from './settings.service';
 import { UpdateUserAdminDto, UpdateUserStatusDto } from './dto';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { AdminGuard } from '../../shared/admin.guard';
@@ -22,15 +23,28 @@ import { ApiFeatures } from '../../shared/api-features';
 @UseGuards(JwtAuthGuard, AdminGuard)
 @Controller('admin/users')
 export class AdminUsersController {
-  constructor(private users: UsersService) {}
+  constructor(
+    private users: UsersService,
+    private settings: SettingsService,
+  ) {}
 
   @Get()
   async listUsers(@Query() query: Record<string, any>) {
-    const all = await this.users.listWithStats();
+    const [all, roleLimits, globalLimit] = await Promise.all([
+      this.users.listWithStats(),
+      this.settings.getRoleTokenLimits(),
+      this.settings.getGlobalTokenLimit(),
+    ]);
+    // سقف نقش/سراسری به صورت زنده روی هر کاربر resolve می‌شود تا جدول
+    // کاربران پنل ادمین همیشه سقف مؤثر (اختصاصی ← نقش ← سراسری) را ببیند.
+    const withEffective = all.map((u: any) => ({
+      ...u,
+      effectiveTokenLimit: resolveEffectiveTokenLimit(u, roleLimits, globalLimit),
+    }));
     if (!query || Object.keys(query).length === 0) {
-      return all;
+      return withEffective;
     }
-    const result = ApiFeatures.applyToArray(all, query, {
+    const result = ApiFeatures.applyToArray(withEffective, query, {
       searchableFields: ['displayName', 'email', 'username'],
       allowedFilterFields: ['role', 'isActive'],
       defaultSortField: 'createdAt',

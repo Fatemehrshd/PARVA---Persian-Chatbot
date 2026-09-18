@@ -1,5 +1,17 @@
 # Features
 
+## Task 37: Per-Role Global Token Limits in Admin Panel (v1.3.3)
+- **سقف توکن سراسری به ازای هر نقش (`Per-Role Token Limits`)**:
+  - ادمین می‌تواند برای هر نقش کاربری (user، admin و نقش‌های آینده) یک سقف مصرف توکن سراسری تعیین کند تا روی همه‌ی کاربران آن نقش اعمال شود.
+  - در بخش «دستورالعمل سیستم و سقف سراسری» پنل ادمین، کارت جدیدی با جدول داینامیک نقش‌ها اضافه شد: ستون نقش، ستون سقف توکن و دکمه ویرایش (همان الگوی `Edit` بقیه بخش‌ها).
+  - لیست نقش‌ها از جدول کاربران (`DISTINCT role` + پیش‌فرض‌ها) خوانده می‌شود؛ با اضافه شدن نقش جدید در آینده، ردیفش خودکار ظاهر می‌شود.
+  - کلیک روی ویرایش، مدال ریسپانسیو `RoleTokenLimitModal.vue` را باز می‌کند — همان الگوی `UserEditorModal` (پوسته `AdminModal`، دکمه‌های `BaseButton`، فرم دوگانه دلار/توکن با نرخ برابری، Tailwind فقط).
+  - ذخیره‌سازی: کلید `role_token_limits` (JSON) در `system_settings`؛ آپدیت هر نقش به صورت merge است و بقیه نقش‌ها را پاک نمی‌کند؛ حذف سقف نقش = خالی گذاشتن فیلد (null).
+  - اعمال سقف در `ChatService.generate` سه‌لایه شد: سقف اختصاصی کاربر ← سقف نقش کاربر ← سقف سراسری. سقف `0` یا غایبِ نقش یعنی سقف سراسری اعمال شود (همان معنای 0 در بقیه سیستم).
+  - API: `GET /admin/settings` حالا `roleTokenLimits` و `roles` را برمی‌گرداند؛ `PUT /admin/settings` فیلد `roleTokenLimits` را می‌پذیرد.
+  - **اعمال زنده روی جدول کاربران**: `GET /admin/users` برای هر کاربر فیلد `effectiveTokenLimit` را resolve می‌کند (اختصاصی ← نقش ← سراسری — تابع خالص `resolveEffectiveTokenLimit`). جدول کاربران پنل ادمین درصد مصرف، نوار پیشرفت و بج «اتمام سهمیه» را بر اساس همین سقف مؤثر نشان می‌دهد و منبع سقف (تگ «سقف نقش» یا «سقف سراسری») را نمایش می‌دهد. با تغییر سقف یک نقش در بخش تنظیمات، با لود مجدد جدول کاربران (سوئیچ تب) بلافاصله روی همه‌ی اعضای آن نقش اعمال می‌شود — بدون نیاز به ویرایش دستی کاربران.
+  - تست: `role-token-limits.spec.ts` (راندتریپ تنظیمات + اولویت سه‌لایه سقف + resolve سقف مؤثر) و `RoleTokenLimitModal.spec.ts` (پیش‌فرض‌گذاری، همگامی دلار/توکن، emit ذخیره).
+
 ## Task 36: Show-Once Error Messages, Draft & Upload Persistence, Admin Model Connectivity Ping & Message Likes/UX Dashboard (v1.3.2)
 - **نمایش تک‌باره پیام‌های خطا در چت (`Show-Once Dismissible Errors`)**:
   - پیام‌های خطای استریمینگ چت پس از بسته شدن توسط کاربر (کلیک روی ✕) در `sessionStorage` ثبت شده و مجدداً با رفرش صفحه یا اتصال‌های بعدی نمایش داده نمی‌شوند.
@@ -419,6 +431,7 @@
 - Frontend: `WebSource` types; `dispatchSseEvent` (unit-tested) drives `readSseStream` + reconnect path; per-conversation flags in `convFlags` (+localStorage, `__new__`→real-id migration); 🌐 toggle with reusable `BaseToggle` in the + menu; `SourcesBlock` (Tailwind + shadcn `Button` only, no new CSS) under stored AND streaming answers; `[n]` markers become links via `linkCitationsInHtml` (unit-tested).
 - Verification: backend full suite green (21 suites/144 tests incl. `web-search.spec`, `chat-search-flow.spec`); frontend specs green (16 tests); `vue-tsc` error set IDENTICAL to branch baseline (pre-existing errors only, incl. known dead `deleteMessage` regenerate block — untouched).
 - Manual checklist for reviewer: toggle on → cards + clickable [n]; toggle off → old behavior; admin off → skipped; no SERPER_API_KEY → failure note, answer continues; refresh mid-stream → sources replay.
+- **Bugfix — sources hidden for user-stopped messages**: پیام متوقف‌شده توسط کاربر (Abort) دیگر منابع وب را نمایش نمی‌دهد. بک‌اند `isInterrupted=true` و `stoppedByUser=true` را ست می‌کند و `sources=null` ذخیره می‌شود. فرانت‌اند `SourcesBlock` را فقط برای پیام کامل (غیرمتوقف) رندر می‌کند. تست موجود `chat-stop-sources.spec.ts` این رفتار را تایید می‌کند.
 
 ## Task 32: Serper Quota Display in Admin Panel (UNCOMMITTED WIP)
 - Serper publishes no credits API (balance is dashboard-only), so usage is counted locally: `WebSearchService` atomically increments `web_search_used_credits` (+1 per successful search; failures uncounted) via `ON CONFLICT DO UPDATE` — counting can never break searching (try/catch + warn).

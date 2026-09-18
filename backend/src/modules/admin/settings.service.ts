@@ -12,6 +12,27 @@ export const WEB_SEARCH_ENABLED_KEY = 'web_search_enabled';
 export const WEB_SEARCH_USED_KEY = 'web_search_used_credits';
 export const WEB_SEARCH_QUOTA_KEY = 'web_search_quota_total';
 export const DEFAULT_WEB_SEARCH_QUOTA = 2500; // Serper free trial credits
+export const ROLE_TOKEN_LIMITS_KEY = 'role_token_limits';
+
+/**
+ * سقف مؤثر توکن یک کاربر با همان اولویت اعمال در ChatService:
+ * سقف اختصاصی کاربر ← سقف نقش ← سقف سراسری. مقدار 0 هر لایه یعنی
+ * «نامحدود» و لایه‌های بعدی را نادیده می‌گیرد. null = نامحدود.
+ */
+export function resolveEffectiveTokenLimit(
+  user: { tokenLimit?: number | null; role?: string },
+  roleLimits: Record<string, number>,
+  globalLimit: number,
+): number | null {
+  if (user.tokenLimit !== null && user.tokenLimit !== undefined) {
+    return user.tokenLimit > 0 ? user.tokenLimit : null;
+  }
+  const roleLimit = user.role ? roleLimits[user.role] : undefined;
+  if (roleLimit !== undefined && roleLimit !== null) {
+    return roleLimit > 0 ? roleLimit : null;
+  }
+  return globalLimit > 0 ? globalLimit : null;
+}
 
 @Injectable()
 export class SettingsService {
@@ -74,6 +95,45 @@ export class SettingsService {
     return { used, total, remaining: Math.max(0, total - used) };
   }
 
+  /**
+   * سقف توکن به ازای هر نقش (مثلاً user/admin و نقش‌های آینده). فقط مقادیر
+   * صحیح غیرمنفی نگه داشته می‌شوند؛ ورودی خراب نادیده گرفته می‌شود تا هرگز
+   * جلوی چت را نگیرد. نقشِ غایب یعنی سقف سراسری برایش اعمال شود.
+   */
+  async getRoleTokenLimits(): Promise<Record<string, number>> {
+    const raw = await this.get(ROLE_TOKEN_LIMITS_KEY, '{}');
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+      const clean: Record<string, number> = {};
+      for (const [role, val] of Object.entries(parsed)) {
+        if (typeof role !== 'string' || !/^[a-z0-9_-]{1,32}$/i.test(role)) continue;
+        const num = typeof val === 'number' ? val : parseInt(String(val), 10);
+        if (Number.isFinite(num) && num >= 0) clean[role] = Math.floor(num);
+      }
+      return clean;
+    } catch {
+      return {};
+    }
+  }
+
+  /** ثبت/به‌روزرسانی سقف یک نقش به صورت منفرد؛ null یعنی حذف سقف آن نقش. */
+  async setRoleTokenLimit(role: string, limit: number | null): Promise<Record<string, number>> {
+    const current = await this.getRoleTokenLimits();
+    if (limit === null || limit === undefined) {
+      delete current[role];
+    } else {
+      const num = Math.floor(Number(limit));
+      if (!Number.isFinite(num) || num < 0) {
+        delete current[role];
+      } else {
+        current[role] = num;
+      }
+    }
+    await this.set(ROLE_TOKEN_LIMITS_KEY, JSON.stringify(current));
+    return current;
+  }
+
   async getAll(): Promise<{
     globalTokenLimit: number;
     tokenRatePer1000: number;
@@ -85,6 +145,7 @@ export class SettingsService {
     fileProcessingTimeoutSec: number;
     webSearchEnabled: boolean;
     webSearchUsage: { used: number; total: number; remaining: number };
+    roleTokenLimits: Record<string, number>;
   }> {
     const [
       globalTokenLimit,
@@ -95,6 +156,7 @@ export class SettingsService {
       fileMaxCount,
       excelMaxRows,
       fileProcessingTimeoutSec,
+      roleTokenLimits,
     ] = await Promise.all([
       this.getGlobalTokenLimit(),
       this.getTokenRatePer1000(),
@@ -104,6 +166,7 @@ export class SettingsService {
       this.get('file_max_count', '5').then(Number),
       this.get('excel_max_rows', '5000').then(Number),
       this.get('file_processing_timeout_sec', '120').then(Number),
+      this.getRoleTokenLimits(),
     ]);
 
     return {
@@ -117,6 +180,7 @@ export class SettingsService {
       fileProcessingTimeoutSec: isNaN(fileProcessingTimeoutSec) ? 120 : fileProcessingTimeoutSec,
       webSearchEnabled: await this.getWebSearchEnabled(),
       webSearchUsage: await this.getWebSearchUsage(),
+      roleTokenLimits,
     };
   }
 
@@ -153,6 +217,12 @@ export class SettingsService {
     }
     if (dto.webSearchUsedCredits !== undefined) {
       await this.set(WEB_SEARCH_USED_KEY, String(dto.webSearchUsedCredits));
+    }
+    // سقف نقش‌ها به صورت merge اعمال می‌شود تا ویرایش یک نقش بقیه را پاک نکند.
+    if (dto.roleTokenLimits !== undefined && dto.roleTokenLimits !== null) {
+      for (const [role, limit] of Object.entries(dto.roleTokenLimits)) {
+        await this.setRoleTokenLimit(role, limit);
+      }
     }
     return this.getAll();
   }

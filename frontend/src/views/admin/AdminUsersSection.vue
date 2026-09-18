@@ -23,6 +23,9 @@ const isLoading = ref(false)
 const isSaving = ref(false)
 const errorMessage = ref('')
 const tokenRatePer1000 = ref(10)
+// تنظیمات سقف‌ها برای resolve زنده سقف مؤثر هر کاربر (اختصاصی ← نقش ← سراسری)
+const roleTokenLimits = ref<Record<string, number>>({})
+const globalTokenLimit = ref(0)
 
 const isEditorModalOpen = ref(false)
 const editingUser = ref<AdminUser | null>(null)
@@ -30,49 +33,65 @@ const editingUser = ref<AdminUser | null>(null)
 // Column definitions with explicit widths for perfect alignment
 const userColumns: TableColumn[] = [
   { key: 'user', label: 'کاربر (نام و ایمیل)', width: '240px', sortable: true },
-  { key: 'role', label: 'نقش کاربری', width: '120px', sortable: true },
-  { key: 'creditStatus', label: 'وضعیت سقف و مصرف توکن', width: '260px', sortable: true },
-  { key: 'conversations', label: 'تعداد گفتگوها', width: '120px', sortable: true },
-  { key: 'isActive', label: 'وضعیت فعالیت', width: '110px' },
-  { key: 'actions', label: 'عملیات', align: 'left', width: '110px', sortable: false },
+  { key: 'role', label: 'نقش کاربری', width: '120px', sortable: true, align: 'center' },
+  { key: 'creditStatus', label: 'وضعیت سقف و مصرف توکن', width: '170px', sortable: true, align: 'center' },
+  { key: 'remaining', label: 'باقی‌مانده', width: '110px', sortable: false, align: 'center' },
+  { key: 'conversations', label: 'تعداد گفتگوها', width: '120px', sortable: true, align: 'center' },
+  { key: 'isActive', label: 'وضعیت فعالیت', width: '110px', align: 'center' },
+  { key: 'actions', label: 'عملیات', align: 'center', width: '110px', sortable: false },
 ]
 
 function tokensToDollars(tokens: number): number {
   return Number(((tokens / 1000) * tokenRatePer1000.value).toFixed(2))
 }
 
+/** منبع سقف مؤثر کاربر برای نمایش تگ در جدول. */
+function limitSourceFor(user: AdminUser): 'personal' | 'role' | 'global' {
+  if (user.tokenLimit !== null && user.tokenLimit !== undefined) return 'personal'
+  if (user.role && roleTokenLimits.value[user.role] !== undefined) return 'role'
+  return 'global'
+}
+
+/** سقف مؤثر: backend resolve می‌کند؛ در نبودش، محلی با همان اولویت. */
+function effectiveLimitFor(user: AdminUser): number | null {
+  if (user.effectiveTokenLimit !== null && user.effectiveTokenLimit !== undefined) {
+    return Number(user.effectiveTokenLimit) > 0 ? Number(user.effectiveTokenLimit) : null
+  }
+  const source = limitSourceFor(user)
+  if (source === 'personal') return Number(user.tokenLimit) > 0 ? Number(user.tokenLimit) : null
+  if (source === 'role') {
+    const rl = roleTokenLimits.value[user.role || '']
+    return rl > 0 ? rl : null
+  }
+  return globalTokenLimit.value > 0 ? globalTokenLimit.value : null
+}
+
 function getUserStats(user: AdminUser) {
   const used = Number(user.usedTokens || 0)
-  const limit = user.tokenLimit !== null && user.tokenLimit !== undefined ? Number(user.tokenLimit) : null
+  const limit = effectiveLimitFor(user)
+  const limitSource = limitSourceFor(user)
   const hasLimit = limit !== null && limit > 0
-  const usedPercent = hasLimit ? Math.min(100, Math.round((used / limit) * 100)) : 0
+  const remaining = hasLimit ? Math.max(0, limit! - used) : null
+  const remainingPercent = hasLimit ? Math.round((remaining! / limit!) * 100) : null
 
+  // رنگ‌بندی بر اساس میزان باقی‌مانده: >۵۰٪ سبز، ۲۰-۵۰٪ نارنجی، <۲۰٪ قرمز
   let statusColor = 'text-emerald-500'
-  let barColor = 'bg-emerald-500'
-  let badgeLabel = 'مصرف نرمال'
-  let badgeClass = 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-
-  if (usedPercent >= 90) {
-    statusColor = 'text-rose-500'
-    barColor = 'bg-rose-500'
-    badgeLabel = usedPercent >= 100 ? 'اتمام سهمیه' : 'در آستانه اتمام'
-    badgeClass = 'bg-rose-500/10 text-rose-600 border-rose-500/20'
-  } else if (usedPercent >= 70) {
-    statusColor = 'text-amber-500'
-    barColor = 'bg-amber-500'
-    badgeLabel = 'هشدار مصرف'
-    badgeClass = 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+  if (hasLimit) {
+    if (remainingPercent! <= 20) {
+      statusColor = 'text-rose-500'
+    } else if (remainingPercent! <= 50) {
+      statusColor = 'text-amber-500'
+    }
   }
 
   return {
     used,
     limit,
+    remaining,
+    remainingPercent,
+    limitSource,
     hasLimit,
-    usedPercent,
     statusColor,
-    barColor,
-    badgeLabel,
-    badgeClass,
   }
 }
 
@@ -119,8 +138,12 @@ async function loadUsers() {
         totalItems.value = val.length
       }
     }
-    if (sRes.status === 'fulfilled' && sRes.value?.tokenRatePer1000) {
-      tokenRatePer1000.value = sRes.value.tokenRatePer1000
+    if (sRes.status === 'fulfilled' && sRes.value) {
+      if (sRes.value.tokenRatePer1000) {
+        tokenRatePer1000.value = sRes.value.tokenRatePer1000
+      }
+      roleTokenLimits.value = (sRes.value as any).roleTokenLimits || {}
+      globalTokenLimit.value = (sRes.value as any).globalTokenLimit || 0
     }
   } catch (err: any) {
     errorMessage.value = err?.message || 'خطا در دریافت لیست کاربران'
@@ -247,7 +270,7 @@ onMounted(loadUsers)
         </td>
 
         <!-- نقش -->
-        <td data-label="نقش">
+        <td data-label="نقش" class="text-center">
           <span
             class="tag text-xs px-2.5 py-1 rounded-md font-medium"
             :class="user.role === 'admin' ? 'bg-primary/15 text-primary border border-primary/25' : 'bg-muted text-muted-foreground border border-border'"
@@ -256,54 +279,40 @@ onMounted(loadUsers)
           </span>
         </td>
 
-        <!-- وضعیت سقف و مصرف توکن (کاملاً صاف، بدون چرخش و هماهنگ با سایر ستون‌های عددی) -->
-        <td data-label="وضعیت سقف و مصرف توکن">
-          <div class="credit-metric-cell space-y-1.5 py-1">
-            <div class="flex items-center justify-between text-xs">
+        <!-- وضعیت سقف و مصرف توکن: مصرف / سقف مؤثر + هزینه مصرفی -->
+        <td data-label="وضعیت سقف و مصرف توکن" class="text-center">
+          <div class="credit-metric-cell space-y-1 py-1">
+            <div class="text-xs">
               <span class="font-mono font-bold text-foreground">
                 {{ Number(user.usedTokens || 0).toLocaleString('fa-IR') }}
                 <span class="text-[11px] font-normal text-muted-foreground">
-                  / {{ user.tokenLimit ? Number(user.tokenLimit).toLocaleString('fa-IR') : 'نامحدود' }} توکن
+                  / {{ getUserStats(user).hasLimit ? Number(getUserStats(user).limit).toLocaleString('fa-IR') : 'نامحدود' }}
                 </span>
               </span>
-              <span
-                v-if="getUserStats(user).hasLimit"
-                class="font-mono text-[11px] font-bold"
-                :class="getUserStats(user).statusColor"
-              >
-                {{ getUserStats(user).usedPercent }}٪
-              </span>
-              <span v-else class="text-[11px] text-muted-foreground font-mono">∞</span>
             </div>
-
-            <!-- نوار پیشرفت افقی صاف و تمیز -->
-            <div v-if="getUserStats(user).hasLimit" class="progress-track w-full h-1.5 rounded-full bg-muted/60 overflow-hidden">
-              <div
-                class="progress-fill h-full rounded-full transition-all duration-300"
-                :class="getUserStats(user).barColor"
-                :style="{ width: `${getUserStats(user).usedPercent}%` }"
-              />
-            </div>
-
-            <div class="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
-              <span>${{ tokensToDollars(Number(user.usedTokens || 0)) }} مصرفی</span>
-              <span
-                class="px-1.5 py-0.2 rounded text-[10px] font-medium border"
-                :class="getUserStats(user).badgeClass"
-              >
-                {{ getUserStats(user).badgeLabel }}
-              </span>
+            <div class="text-[11px] text-muted-foreground font-mono">
+              ${{ tokensToDollars(Number(user.usedTokens || 0)) }} مصرفی
             </div>
           </div>
         </td>
 
+        <!-- باقی‌مانده: درصد باقی‌مانده سقف مؤثر (>۵۰٪ سبز، ۲۰-۵۰٪ نارنجی، <۲۰٪ قرمز) -->
+        <td data-label="باقی‌مانده" class="text-center">
+          <span class="font-mono text-xs font-bold" :class="getUserStats(user).statusColor">
+            <template v-if="getUserStats(user).hasLimit">
+              {{ getUserStats(user).remainingPercent }}٪
+            </template>
+            <template v-else>∞</template>
+          </span>
+        </td>
+
         <!-- تعداد گفتگوها -->
-        <td data-label="گفتگوها" class="mono font-semibold text-xs text-foreground">
+        <td data-label="گفتگوها" class="mono font-semibold text-xs text-foreground text-center">
           {{ Number(user.conversationsCount || 0).toLocaleString('fa-IR') }}
         </td>
 
         <!-- وضعیت فعالیت -->
-        <td data-label="وضعیت فعالیت">
+        <td data-label="وضعیت فعالیت" class="text-center">
           <BaseToggle
             :model-value="user.isActive !== false"
             size="sm"
@@ -312,8 +321,8 @@ onMounted(loadUsers)
         </td>
 
         <!-- عملیات -->
-        <td data-label="عملیات" class="text-left">
-          <div class="flex items-center justify-end gap-1.5">
+        <td data-label="عملیات" class="text-center">
+          <div class="flex items-center justify-center gap-1.5">
             <BaseButton variant="ghost" size="sm" @click="openEditModal(user)" title="ویرایش و شارژ">
               <Edit :size="14" />
             </BaseButton>

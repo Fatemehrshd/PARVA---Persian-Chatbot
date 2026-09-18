@@ -1,4 +1,4 @@
-import { IsOptional, IsInt, Min, IsString, MinLength, IsIn, IsEmail, IsBoolean, ValidateIf } from 'class-validator';
+import { IsOptional, IsInt, Min, IsString, MinLength, IsIn, IsEmail, IsBoolean, ValidateIf, IsObject } from 'class-validator';
 
 export class UpdateSettingsDto {
   @IsOptional()
@@ -54,6 +54,14 @@ export class UpdateSettingsDto {
   @IsInt({ message: 'مصرف اعتبار جستجو باید عدد صحیح باشد' })
   @Min(0, { message: 'مصرف اعتبار جستجو نمی‌تواند منفی باشد' })
   webSearchUsedCredits?: number;
+
+  /**
+   * سقف توکن به ازای نقش (نقش → سقف). هر مقدار صحیح غیرمنفی است؛
+   * null یعنی حذف سقف آن نقش (سقف سراسری اعمال می‌شود).
+   */
+  @IsOptional()
+  @IsObject({ message: 'سقف نقش‌ها باید یک شیء معتبر باشد' })
+  roleTokenLimits?: Record<string, number | null>;
 }
 
 export class UpdateUserAdminDto {

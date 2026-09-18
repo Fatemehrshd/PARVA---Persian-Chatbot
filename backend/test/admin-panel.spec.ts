@@ -207,6 +207,8 @@ describe('Admin Panel Suite', () => {
         globalTokenLimit: dto.globalTokenLimit ?? 1000,
         systemPrompt: dto.systemPrompt ?? 'Test prompt',
       }),
+      getGlobalTokenLimit: async () => 1000,
+      getRoleTokenLimits: async () => ({ user: 900 }),
     };
 
     const fakeUsers: any[] = [
@@ -410,6 +412,20 @@ describe('Admin Panel Suite', () => {
       expect(Array.isArray(res.body.data)).toBe(true);
       expect(res.body.data[0]).toHaveProperty('conversationsCount');
       expect(res.body.data[0]).toHaveProperty('usedTokens');
+    });
+
+    it('GET /admin/users resolves effectiveTokenLimit per user (personal > role > global)', async () => {
+      currentUserRole = 'admin';
+      const res = await request(app.getHttpServer())
+        .get('/admin/users')
+        .set('Authorization', 'Bearer token');
+      expect(res.status).toBe(200);
+      // admin: بدون سقف اختصاصی، نقش admin در فیک سقفی ندارد → سراسری 1000
+      const adminRow = res.body.data.find((u: any) => u.id === 'admin-id');
+      expect(adminRow.effectiveTokenLimit).toBe(1000);
+      // user: بدون سقف اختصاصی، سقف نقش user = 900 → 900 (نه سراسری)
+      const userRow = res.body.data.find((u: any) => u.id === 'user-id');
+      expect(userRow.effectiveTokenLimit).toBe(900);
     });
 
     it('PATCH /admin/users/:id updates user details and role', async () => {

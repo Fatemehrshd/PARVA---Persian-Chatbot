@@ -205,7 +205,7 @@ function handleSubmit() {
                 :value="form.tokenLimit"
                 type="number"
                 min="0"
-                placeholder="خالی = سقف سراسری سامانه"
+                placeholder="خالی = سقف نقش یا سراسری سامانه"
                 :disabled="isSaving"
                 @input="onTokenLimitInput(($event.target as HTMLInputElement).value)"
               />

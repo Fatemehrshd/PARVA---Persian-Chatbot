@@ -206,6 +206,8 @@ export interface FeedbackItem {
 export interface AdminUser extends User {
   usedTokens: number
   tokenLimit?: number | null
+  /** سقف مؤثر resolve شده در بک‌اند: اختصاصی ← نقش ← سراسری (null = نامحدود) */
+  effectiveTokenLimit?: number | null
   conversationsCount: number
   filesCount?: number
 }

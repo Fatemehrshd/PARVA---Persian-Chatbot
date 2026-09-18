@@ -71,6 +71,9 @@ export class AdminConversationsController {
       },
     );
 
+    if (page || limit) {
+      return applied;
+    }
     return applied.items;
   }
 

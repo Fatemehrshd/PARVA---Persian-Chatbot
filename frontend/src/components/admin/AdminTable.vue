@@ -8,6 +8,8 @@ export interface TableColumn {
   align?: 'right' | 'left' | 'center'
   sortable?: boolean
   filterable?: boolean
+  width?: string
+  minWidth?: string
 }
 
 const props = withDefaults(
@@ -26,6 +28,7 @@ const props = withDefaults(
     searchable?: boolean
     searchFields?: Array<{ key: string; label: string }>
     defaultShowColumnFilters?: boolean
+    searchQuery?: string
   }>(),
   {
     emptyText: 'هیچ موردی برای نمایش یافت نشد.',
@@ -39,6 +42,7 @@ const props = withDefaults(
     searchable: false,
     searchFields: () => [],
     defaultShowColumnFilters: false,
+    searchQuery: '',
   }
 )
 
@@ -70,7 +74,16 @@ watch(
 
 // فیلتر و جستجوی فیلدی محلی
 const selectedSearchField = ref(props.searchFields[0]?.key || (props.columns[0]?.key ?? ''))
-const searchQuery = ref('')
+const searchQuery = ref(props.searchQuery || '')
+
+watch(
+  () => props.searchQuery,
+  (val) => {
+    if (val !== undefined && val !== searchQuery.value) {
+      searchQuery.value = val
+    }
+  }
+)
 
 // فیلترهای ستونی مجزا (MUI DataGrid Column Filters)
 const showColumnFilters = ref(props.defaultShowColumnFilters)
@@ -181,23 +194,39 @@ function onPageSizeChange(e: Event) {
   emit('update:page', 1)
 }
 
-function handleSearchInput() {
-  if (!props.serverSide) {
-    internalPage.value = 1
+let searchDebounceTimer: any = null
+function handleSearchInput(immediate = false) {
+  internalPage.value = 1
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  if (immediate) {
+    emit('search', searchQuery.value, selectedSearchField.value)
+    emit('update:page', 1)
+    return
   }
-  emit('search', searchQuery.value, selectedSearchField.value)
+  searchDebounceTimer = setTimeout(() => {
+    emit('search', searchQuery.value, selectedSearchField.value)
+    emit('update:page', 1)
+  }, 250)
 }
 
-function handleColumnFilterInput(_colKey?: string) {
-  if (!props.serverSide) {
-    internalPage.value = 1
+let filterDebounceTimer: any = null
+function handleColumnFilterInput(immediate = false) {
+  internalPage.value = 1
+  if (filterDebounceTimer) clearTimeout(filterDebounceTimer)
+  if (immediate) {
+    emit('columnFilterChange', { ...columnFilters.value })
+    emit('update:page', 1)
+    return
   }
-  emit('columnFilterChange', { ...columnFilters.value })
+  filterDebounceTimer = setTimeout(() => {
+    emit('columnFilterChange', { ...columnFilters.value })
+    emit('update:page', 1)
+  }, 250)
 }
 
 function clearColumnFilter(colKey: string) {
   columnFilters.value[colKey] = ''
-  handleColumnFilterInput(colKey)
+  handleColumnFilterInput(true)
 }
 
 function handleHeaderClick(col: TableColumn) {
@@ -215,6 +244,8 @@ function handleHeaderClick(col: TableColumn) {
 }
 
 function clearAllFilters() {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  if (filterDebounceTimer) clearTimeout(filterDebounceTimer)
   searchQuery.value = ''
   columnFilters.value = {}
   sortColumn.value = null
@@ -223,6 +254,7 @@ function clearAllFilters() {
   emit('search', '', selectedSearchField.value)
   emit('columnFilterChange', {})
   emit('sortChange', null, null)
+  emit('update:page', 1)
 }
 
 function toPersianDigits(n: number | string): string {
@@ -240,6 +272,7 @@ function toPersianDigits(n: number | string): string {
           v-model="selectedSearchField"
           class="search-field-select"
           title="انتخاب فیلد برای جستجو"
+          @change="handleSearchInput(true)"
         >
           <option value="">همه فیلدها</option>
           <option
@@ -260,13 +293,13 @@ function toPersianDigits(n: number | string): string {
             type="text"
             placeholder="جستجوی سریع در جدول..."
             class="search-text-input"
-            @input="handleSearchInput"
+            @input="handleSearchInput(false)"
           />
           <button
             v-if="searchQuery"
             type="button"
             class="clear-search-btn"
-            @click="searchQuery = ''; handleSearchInput()"
+            @click="searchQuery = ''; handleSearchInput(true)"
             title="پاک کردن جستجو"
           >
             ✕
@@ -316,6 +349,7 @@ function toPersianDigits(n: number | string): string {
             <th
               v-for="col in columns"
               :key="col.key"
+              :style="{ width: col.width, minWidth: col.minWidth || col.width }"
               :class="[
                 col.class,
                 col.align === 'left' ? 'text-left' : col.align === 'center' ? 'text-center' : 'text-right',
@@ -323,7 +357,10 @@ function toPersianDigits(n: number | string): string {
               ]"
               @click="handleHeaderClick(col)"
             >
-              <div class="th-content flex items-center gap-1.5" :class="col.align === 'left' ? 'justify-start' : col.align === 'center' ? 'justify-center' : 'justify-end'">
+              <div
+                class="th-content flex items-center gap-1.5"
+                :class="col.align === 'left' ? 'justify-end' : col.align === 'center' ? 'justify-center' : 'justify-start'"
+              >
                 <span>{{ col.label }}</span>
                 <span
                   v-if="col.key !== 'actions' && col.sortable !== false"
@@ -349,7 +386,7 @@ function toPersianDigits(n: number | string): string {
                   type="text"
                   :placeholder="`فیلتر ${col.label}...`"
                   class="col-filter-input"
-                  @input="handleColumnFilterInput(col.key)"
+                  @input="handleColumnFilterInput(false)"
                 />
                 <button
                   v-if="columnFilters[col.key]"

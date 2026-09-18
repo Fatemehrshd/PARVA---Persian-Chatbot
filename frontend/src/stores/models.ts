@@ -53,7 +53,8 @@ export const useModelsStore = defineStore('models', () => {
       let data: Model[]
       if (forAdmin || authStore.isAdmin) {
         try {
-          data = await modelsService.listModels()
+          const res = await modelsService.listModels()
+          data = Array.isArray(res) ? res : (res?.items || [])
         } catch (err: any) {
           if (err?.statusCode === 403) {
             data = await modelsService.listActiveModels()

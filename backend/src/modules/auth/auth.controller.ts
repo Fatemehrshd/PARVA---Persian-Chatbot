@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Body,
+  Req,
   HttpCode,
   UsePipes,
   UseGuards,
@@ -36,7 +37,9 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post('logout')
   @HttpCode(204)
-  logout(@Body() _d: LogoutDto) {
-    this.auth.logout();
+  logout(@Req() req: any, @Body() _d: LogoutDto) {
+    const authHeader = req.headers?.['authorization'] as string;
+    const token = req.token || (authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined);
+    this.auth.logout(token);
   }
 }

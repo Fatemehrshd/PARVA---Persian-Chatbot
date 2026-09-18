@@ -69,11 +69,16 @@ export class AdminFilesController {
     @Query('status') status?: string,
     @Query('search') search?: string,
     @Query('userId') userId?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
   ) {
     const query = this.fileRepo
       .createQueryBuilder('file')
       .leftJoinAndSelect('file.user', 'user')
       .where('file.isDeleted = false');
+
+    const mappedSort = sortBy === 'name' ? 'originalName' : sortBy === 'size' ? 'fileSize' : (sortBy || 'createdAt');
+    const mappedOrder = (sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC') as 'ASC' | 'DESC';
 
     const apiFeatures = new ApiFeatures(
       query,
@@ -83,12 +88,14 @@ export class AdminFilesController {
         search,
         status: status && status !== 'all' ? status : undefined,
         userId,
+        sortBy: mappedSort,
+        sortOrder: mappedOrder,
       },
       'file',
     )
       .filter(['status', 'userId'])
       .search(['originalName', 'user.email', 'user.displayName'])
-      .sort('createdAt', 'DESC')
+      .sort(mappedSort, mappedOrder)
       .paginate(50);
 
     const { items: files, total, page, limit, totalPages } = await apiFeatures.exec();

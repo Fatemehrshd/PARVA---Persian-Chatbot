@@ -167,6 +167,16 @@ watch(
   { flush: 'post' }
 )
 
+watch(
+  () => chatStore.isLoadingMessages,
+  (isLoading, wasLoading) => {
+    if (wasLoading && !isLoading && chatStore.messages.length > 0) {
+      scrollToBottom(true)
+    }
+  },
+  { flush: 'post' }
+)
+
 onMounted(() => {
   const container = containerRef.value
   if (container) {

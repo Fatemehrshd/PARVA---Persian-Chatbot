@@ -189,4 +189,53 @@ describe('MessageList streaming scroll behavior', () => {
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.chat-branded-loader').exists()).toBe(false)
   })
+
+  it('scrolls to the latest messages after reloading history with the same message count', async () => {
+    const chatStore = useChatStore()
+    chatStore.currentConversationId = TEST_CONV_ID
+    chatStore.messages.push({
+      id: 'old-message',
+      conversationId: TEST_CONV_ID,
+      role: 'assistant',
+      content: 'پیام قبلی',
+      createdAt: new Date().toISOString()
+    })
+    chatStore.isLoadingMessages = true
+
+    const wrapper = mount(MessageList, {
+      global: {
+        stubs: {
+          EmptyState: true,
+          MessageBubble: true,
+          MarkdownContent: true,
+          ThinkingIndicator: true
+        }
+      }
+    })
+    const container = wrapper.find('.message-list-viewport').element as HTMLElement
+
+    Object.defineProperties(container, {
+      clientHeight: { configurable: true, value: 500 },
+      scrollHeight: { configurable: true, writable: true, value: 1000 },
+      scrollTop: { configurable: true, writable: true, value: 0 }
+    })
+    await wrapper.vm.$nextTick()
+    container.dispatchEvent(new Event('scroll'))
+
+    chatStore.messages.splice(0, chatStore.messages.length, {
+      id: 'msg-history-last',
+      conversationId: TEST_CONV_ID,
+      role: 'assistant',
+      content: 'آخرین پیام تاریخچه',
+      createdAt: new Date().toISOString()
+    })
+    container.scrollHeight = 1800
+
+    chatStore.isLoadingMessages = false
+
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+
+    expect(container.scrollTop).toBe(1800)
+  })
 })

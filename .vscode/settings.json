@@ -3,6 +3,7 @@
         "npm test": true,
         "npx jest": true,
         "npm run lint": true,
-        "npm run test:unit": true
+        "npm run test:unit": true,
+        "npx vitest": true
     }
 }

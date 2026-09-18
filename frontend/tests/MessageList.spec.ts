@@ -60,8 +60,8 @@ describe('MessageList streaming scroll behavior', () => {
     const { wrapper, chatStore, container } = mountStreamingList()
     await wrapper.vm.$nextTick()
 
-    container.scrollTop = 400
-    container.dispatchEvent(new Event('scroll'))
+    // Content growth made the viewport slightly shorter — same pinned position
+    // counts as still near the bottom, so follow continues.
     container.scrollHeight = 1100
     chatStore.convStreamStates.set(TEST_CONV_ID, makeStreamState({ currentStreamingText: 'second token' }))
     await wrapper.vm.$nextTick()
@@ -136,6 +136,22 @@ describe('MessageList streaming scroll behavior', () => {
 
     // Must jump to the absolute bottom (2500)
     expect(container.scrollTop).toBe(2500)
+  })
+
+  it('releases follow immediately when the user slowly scrolls up inside the bottom threshold', async () => {
+    const { wrapper, chatStore, container } = mountStreamingList()
+    await wrapper.vm.$nextTick()
+
+    // Slow upward scroll: still near the bottom (within 120px), but moving up
+    // is user intent and must not fight the stream.
+    container.scrollTop = 480
+    container.dispatchEvent(new Event('scroll'))
+    container.scrollHeight = 1100
+    chatStore.convStreamStates.set(TEST_CONV_ID, makeStreamState({ currentStreamingText: 'second token' }))
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+
+    expect(container.scrollTop).toBe(480)
   })
 
   it('renders jump-to-bottom button when user is scrolled up and triggers scroll on click', async () => {

@@ -122,6 +122,13 @@ export const useChatStore = defineStore('chat', () => {
   // ─── Backward-compatible computed aliases (used by ChatComposer, MessageList, etc.) ──
   const isStreaming = computed(() => getState(currentConversationId.value)?.isStreaming ?? false)
   const isThinking = computed(() => getState(currentConversationId.value)?.isThinking ?? false)
+  const isAnyStreaming = computed(() => {
+    if (isStreaming.value || isThinking.value) return true
+    for (const s of convStreamStates.value.values()) {
+      if (s.isStreaming || s.isThinking) return true
+    }
+    return false
+  })
   const currentStreamingText = computed(() => getState(currentConversationId.value)?.currentStreamingText ?? '')
   const streamError = computed(() => getState(currentConversationId.value)?.streamError ?? null)
   const lastUserPrompt = computed(() => getState(currentConversationId.value)?.lastUserPrompt ?? '')
@@ -451,6 +458,11 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function createNewConversation(title = 'گفتگوی جدید'): Promise<string> {
+    // Prevent starting a new conversation while a model is responding / streaming
+    if (isAnyStreaming.value) {
+      return ''
+    }
+
     // New chats always start on the current platform default and the input
     // follows it. The dedicated endpoint is tried first (cheap + exact);
     // the list-based resolution is the fallback. Explicit per-conversation
@@ -1237,6 +1249,7 @@ export const useChatStore = defineStore('chat', () => {
     // Computed aliases (backward-compatible)
     isStreaming,
     isThinking,
+    isAnyStreaming,
     currentStreamingText,
     lastUserPrompt,
     streamError,

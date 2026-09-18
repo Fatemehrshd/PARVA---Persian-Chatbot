@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { FileAttachment } from './file-attachment.entity';
 import { User } from '../users/user.entity';
@@ -17,8 +17,8 @@ import { FileCleanupService } from './file-cleanup.service';
   imports: [
     TypeOrmModule.forFeature([FileAttachment, User]),
     StorageModule,
-    AdminModule,
-    AuthModule,
+    forwardRef(() => AdminModule),
+    forwardRef(() => AuthModule),
   ],
   controllers: [FilesController, AdminFilesController],
   providers: [

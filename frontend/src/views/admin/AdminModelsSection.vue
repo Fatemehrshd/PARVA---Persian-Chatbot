@@ -43,7 +43,7 @@ const modelColumns: TableColumn[] = [
   { key: 'provider', label: 'ارائه‌دهنده', width: '150px', sortable: true },
   { key: 'apiIdentifier', label: 'شناسه API', width: '220px', sortable: true },
   { key: 'isActive', label: 'وضعیت', width: '110px' },
-  { key: 'actions', label: 'عملیات', align: 'left', width: '100px', sortable: false },
+  { key: 'actions', label: 'عملیات', align: 'center', width: '100px', sortable: false },
 ]
 
 async function loadModels() {

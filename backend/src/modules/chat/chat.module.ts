@@ -1,11 +1,11 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { Conversation } from './conversation.entity';
 import { Message } from './message.entity';
 import { ChatService } from './chat.service';
 import { ActiveStreamService } from './active-stream.service';
-import { ChatController } from './chat.controller';
+import { ChatController, ChatQuotaController } from './chat.controller';
 import { OpenAiCompatController } from './openai-compat.controller';
 import { ModelsAdminModule } from '../models-admin/models-admin.module';
 import { AiModule } from '../ai/ai.module';
@@ -15,20 +15,21 @@ import { FilesModule } from '../files/files.module';
 import { UsersModule } from '../users/users.module';
 import { WebSearchModule } from '../web-search/web-search.module';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
+import { QuotaInterceptor } from '../../shared/response-envelope.interceptor';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Conversation, Message, FileAttachment]),
     ModelsAdminModule,
     AiModule,
-    AdminModule,
-    UsersModule,
-    FilesModule,
+    forwardRef(() => AdminModule),
+    forwardRef(() => UsersModule),
+    forwardRef(() => FilesModule),
     WebSearchModule,
     JwtModule.register({ secret: process.env.JWT_SECRET ?? 'dev-secret' }),
   ],
-  controllers: [ChatController, OpenAiCompatController],
-  providers: [ChatService, ActiveStreamService, JwtAuthGuard],
+  controllers: [ChatController, ChatQuotaController, OpenAiCompatController],
+  providers: [ChatService, ActiveStreamService, JwtAuthGuard, QuotaInterceptor],
   exports: [ChatService, ActiveStreamService],
 })
 export class ChatModule {}

@@ -59,13 +59,17 @@ const isOnEmptyChat = computed(() =>
 )
 
 const isNewChatDisabled = computed(() =>
-  isOnEmptyChat.value || isChatResponding.value
+  isOnEmptyChat.value || isChatResponding.value || authStore.quota.blocked
 )
 
 // ──────────────────────────────────────────
 // Navigation actions
 // ──────────────────────────────────────────
 async function handleNewChat() {
+  if (authStore.quota.blocked) {
+    uiStore.showToast('سهمیه شما به پایان رسیده است؛ ارسال پیام تا پایان دوره ممکن نیست.', 'warning')
+    return
+  }
   if (isChatResponding.value) {
     uiStore.showToast('امکان شروع گفتگوی جدید در هنگام دریافت پاسخ وجود ندارد.', 'info')
     return

@@ -51,6 +51,17 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
     headers
   })
 
+  const quotaHeader = response.headers?.get?.('x-user-quota')
+  if (quotaHeader && !endpoint.includes('/auth/')) {
+    try {
+      const snapshot = JSON.parse(atob(quotaHeader))
+      const { useAuthStore } = await import('../stores/auth')
+      useAuthStore().applyQuotaSnapshot(snapshot)
+    } catch {
+      // Ignore malformed or unavailable quota snapshots.
+    }
+  }
+
   // 204 No Content
   if (response.status === 204) {
     return {} as T

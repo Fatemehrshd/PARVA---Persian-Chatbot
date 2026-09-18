@@ -8,6 +8,7 @@ import type {
   SearchResult,
   ActiveStreamStatus,
   WebSource,
+  QuotaState,
 } from '../types'
 
 /** Callbacks for every SSE event the chat stream can emit. */
@@ -58,6 +59,9 @@ export function dispatchSseEvent(
  * Handles conversation creation, message history, and real-time SSE streaming.
  */
 export const chatService = {
+  async getQuota(): Promise<QuotaState> {
+    return request<QuotaState>('/chat/quota')
+  },
   /**
    * List the current user's conversations.
    * GET /chat/conversations

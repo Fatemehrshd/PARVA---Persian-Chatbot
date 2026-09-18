@@ -646,6 +646,7 @@ function toPersianDigits(n: number | string): string {
   border-collapse: collapse;
   text-align: right;
   font-family: inherit;
+  direction: rtl;
 }
 
 .admin-table th {
@@ -656,6 +657,36 @@ function toPersianDigits(n: number | string): string {
   background: color-mix(in srgb, var(--muted) 45%, transparent);
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
+}
+
+/* همه ستون‌ها وسط‌چین هستند؛ ستون اول برای خوانایی متن از تراز شروع استفاده می‌کند. */
+.admin-table > thead > tr > th,
+.admin-table > tbody > tr.table-row > :deep(td) {
+  text-align: center !important;
+  direction: rtl;
+}
+
+.admin-table > thead > tr > th:first-child,
+.admin-table > tbody > tr.table-row > :deep(td:first-child) {
+  text-align: start !important;
+}
+
+.admin-table > tbody > tr.table-row > :deep(td.text-left) {
+  text-align: center !important;
+}
+
+.admin-table > tbody > tr.table-row > :deep(.mono),
+.admin-table > tbody > tr.table-row > :deep(.font-mono) {
+  direction: rtl !important;
+  text-align: center !important;
+}
+
+.admin-table > thead > tr > th > .th-content {
+  justify-content: center !important;
+}
+
+.admin-table > thead > tr > th:first-child > .th-content {
+  justify-content: flex-start !important;
 }
 
 .sortable-header {

@@ -14,12 +14,15 @@ import {
   Req,
   UsePipes,
   ValidationPipe,
+  UseInterceptors,
 } from '@nestjs/common';
 import type { Response, Request } from 'express';
 import { ChatService } from './chat.service';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { CreateConvDto, UpdateConvDto, SendMsgDto } from './dto';
+import { QuotaInterceptor } from '../../shared/response-envelope.interceptor';
 @UseGuards(JwtAuthGuard)
+@UseInterceptors(QuotaInterceptor)
 @Controller('chat/conversations')
 export class ChatController {
   constructor(private chat: ChatService) {}
@@ -347,5 +350,17 @@ export class ChatController {
     @Param('messageId') messageId: string,
   ) {
     return this.chat.stopMessage(req.user.sub, id, messageId);
+  }
+}
+
+@UseGuards(JwtAuthGuard)
+@UseInterceptors(QuotaInterceptor)
+@Controller('chat')
+export class ChatQuotaController {
+  constructor(private chat: ChatService) {}
+
+  @Get('quota')
+  getQuota(@Req() req: any) {
+    return this.chat.getQuotaState(req.user.sub);
   }
 }

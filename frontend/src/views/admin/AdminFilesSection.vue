@@ -44,7 +44,7 @@ const fileColumns: TableColumn[] = [
   { key: 'size', label: 'حجم فایل', width: '120px', sortable: true },
   { key: 'status', label: 'وضعیت پردازش', width: '130px', sortable: true },
   { key: 'createdAt', label: 'زمان آپلود', width: '160px', sortable: true },
-  { key: 'actions', label: 'عملیات', align: 'left', width: '120px', sortable: false },
+  { key: 'actions', label: 'عملیات', align: 'center', width: '120px', sortable: false },
 ]
 
 function formatFileSize(bytes?: number): string {

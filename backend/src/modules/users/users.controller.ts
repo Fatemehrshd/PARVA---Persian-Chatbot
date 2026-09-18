@@ -22,8 +22,10 @@ import { StorageService } from '../storage/storage.service';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { CurrentUser } from '../../shared/current-user.decorator';
 import { UpdateProfileDto, ChangeEmailDto, ChangePasswordDto } from './dto';
+import { QuotaInterceptor } from '../../shared/response-envelope.interceptor';
 
 @UseGuards(JwtAuthGuard)
+@UseInterceptors(QuotaInterceptor)
 @Controller('users/me')
 export class UsersController {
   constructor(private profile: ProfileService) {}

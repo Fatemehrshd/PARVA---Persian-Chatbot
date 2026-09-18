@@ -291,7 +291,7 @@ onMounted(loadUsers)
               </span>
             </div>
             <div class="text-[11px] text-muted-foreground font-mono">
-              ${{ tokensToDollars(Number(user.usedTokens || 0)) }} مصرفی
+              ${{ Number(user.usedCostUsd ?? tokensToDollars(Number(user.usedTokens || 0))).toFixed(2) }} مصرفی
             </div>
           </div>
         </td>

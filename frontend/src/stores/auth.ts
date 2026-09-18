@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { User } from '../types'
+import type { User, QuotaState } from '../types'
 import { authService } from '../services/auth.service'
 import { profileService } from '../services/profile.service'
 import { isTokenExpired } from '../lib/jwt'
@@ -19,9 +19,31 @@ export const useAuthStore = defineStore('auth', () => {
   const refreshToken = ref<string | null>(localStorage.getItem('refreshToken'))
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const quota = ref<QuotaState>({ blocked: false, reason: null, remainingTokens: null, remainingMessages: null, remainingPercent: null, resetAt: null })
+  const quotaLoaded = ref(false)
 
   const isAuthenticated = computed(() => !!token.value && !!user.value)
   const isAdmin = computed(() => user.value?.role === 'admin')
+  const quotaStatusColor = computed(() => {
+    const percent = quota.value.remainingPercent
+    if (percent === null || percent > 50) return 'text-emerald-500'
+    if (percent >= 20) return 'text-amber-500'
+    return 'text-rose-500'
+  })
+
+  function applyQuotaSnapshot(snapshot: QuotaState) {
+    quota.value = snapshot
+    quotaLoaded.value = true
+  }
+
+  async function refreshQuota() {
+    try {
+      const { chatService } = await import('../services/chat.service')
+      applyQuotaSnapshot(await chatService.getQuota())
+    } catch {
+      // Quota refresh is advisory; sending still remains server-authoritative.
+    }
+  }
 
   function setSession(newUser: User, newAccessToken: string, newRefreshToken: string) {
     user.value = newUser
@@ -150,5 +172,10 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     updateUser,
     refreshProfile,
+    quota,
+    quotaLoaded,
+    quotaStatusColor,
+    applyQuotaSnapshot,
+    refreshQuota,
   }
 })

@@ -30,16 +30,30 @@ export class AdminUsersController {
 
   @Get()
   async listUsers(@Query() query: Record<string, any>) {
-    const [all, roleLimits, globalLimit] = await Promise.all([
+    const [all, roleLimits, globalLimit, multipliers, rate] = await Promise.all([
       this.users.listWithStats(),
       this.settings.getRoleTokenLimits(),
       this.settings.getGlobalTokenLimit(),
+      typeof this.settings.getTaskMultipliers === 'function'
+        ? this.settings.getTaskMultipliers().catch(() => ({}))
+        : Promise.resolve({}),
+      typeof this.settings.getTokenRatePer1000 === 'function'
+        ? this.settings.getTokenRatePer1000().catch(() => 10)
+        : Promise.resolve(10),
     ]);
     // سقف نقش/سراسری به صورت زنده روی هر کاربر resolve می‌شود تا جدول
     // کاربران پنل ادمین همیشه سقف مؤثر (اختصاصی ← نقش ← سراسری) را ببیند.
     const withEffective = all.map((u: any) => ({
       ...u,
       effectiveTokenLimit: resolveEffectiveTokenLimit(u, roleLimits, globalLimit),
+      usedCostUsd: Number(
+        Object.entries(u.usageByType || {})
+          .reduce((sum, [type, tokens]) => {
+            const multiplier = type === 'normal' ? 1 : (multipliers as Record<string, number>)[type] ?? 1;
+            return sum + (Number(tokens) * rate * multiplier) / 1000;
+          }, 0)
+          .toFixed(4),
+      ),
     }));
     if (!query || Object.keys(query).length === 0) {
       return withEffective;

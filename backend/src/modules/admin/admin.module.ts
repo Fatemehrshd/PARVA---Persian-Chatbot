@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SystemSetting } from './system-setting.entity';
 import { User } from '../users/user.entity';
@@ -30,7 +30,7 @@ import { FileAttachment } from '../files/file-attachment.entity';
       FileAttachment,
     ]),
     JwtModule.register({ secret: process.env.JWT_SECRET ?? 'dev-secret' }),
-    UsersModule,
+    forwardRef(() => UsersModule),
   ],
   controllers: [
     AdminSettingsController,

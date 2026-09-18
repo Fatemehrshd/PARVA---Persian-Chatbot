@@ -1,7 +1,9 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
-import { Observable } from 'rxjs';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Optional } from '@nestjs/common';
+import { Observable, from } from 'rxjs';
 import { map } from 'rxjs/operators';
 import type { Response, Request } from 'express';
+import { mergeMap } from 'rxjs/operators';
+import { ChatService } from '../modules/chat/chat.service';
 
 export interface ApiResponseEnvelope<T = any> {
   success: boolean;
@@ -62,6 +64,33 @@ export class ResponseEnvelopeInterceptor<T> implements NestInterceptor<
           data: data ?? null,
         };
       }),
+    );
+  }
+}
+
+@Injectable()
+export class QuotaInterceptor implements NestInterceptor {
+  constructor(@Optional() private chat?: ChatService) {}
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const request = context.switchToHttp().getRequest();
+    const response = context.switchToHttp().getResponse();
+    const userId = request?.user?.sub;
+    if (!userId || !this.chat || typeof (this.chat as any).getQuotaState !== 'function') return next.handle();
+
+    return next.handle().pipe(
+      mergeMap((value) =>
+        from(Promise.resolve().then(() => this.chat?.getQuotaState(userId)).catch(() => null)).pipe(
+          map((state) => {
+            try {
+              if (state) response.setHeader('X-User-Quota', Buffer.from(JSON.stringify(state)).toString('base64'));
+            } catch {
+              // Quota telemetry must never break the original response.
+            }
+            return value;
+          }),
+        ),
+      ),
     );
   }
 }

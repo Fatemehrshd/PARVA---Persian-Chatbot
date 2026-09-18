@@ -7,7 +7,6 @@ import MessageBubble from './MessageBubble.vue'
 import MarkdownContent from './MarkdownContent.vue'
 import EmptyState from './EmptyState.vue'
 import ThinkingIndicator from './ThinkingIndicator.vue'
-import SourcesBlock from './SourcesBlock.vue'
 
 const chatStore = useChatStore()
 const { activeLogo } = useThemeLogo()
@@ -17,10 +16,10 @@ const contentRef = ref<HTMLElement | null>(null)
 const shouldAutoScroll = ref(true)
 const isUserScrolling = ref(false)
 const streamingDirection = computed(() => getTextDirection(chatStore.currentStreamingText))
-const streamingSources = computed(() => {
+const isSearching = computed(() => {
   const id = chatStore.currentConversationId
-  if (!id) return null
-  return chatStore.convStreamStates.get(id)?.streamingSources ?? null
+  if (!id) return false
+  return chatStore.convStreamStates.get(id)?.isSearching ?? false
 })
 
 let scrollTimeout: ReturnType<typeof setTimeout> | undefined
@@ -263,11 +262,13 @@ onBeforeUnmount(() => {
                 :dir="streamingDirection"
               >
                 <div v-if="chatStore.currentStreamingText" class="message-text relative">
-                  <MarkdownContent :content="chatStore.currentStreamingText" :streaming="true" :sources="streamingSources" />
-                  
+                  <MarkdownContent :content="chatStore.currentStreamingText" :streaming="true" />
+
+                </div>
+                <div v-else-if="isSearching" class="inline-flex min-h-[28px] items-center gap-2 rounded-full border border-primary/20 bg-primary/[0.07] px-2.5 py-1.5 text-[13px] text-muted-foreground">
+                  <span class="animate-pulse">در حال جستجو ...</span>
                 </div>
                 <ThinkingIndicator v-else />
-                <SourcesBlock v-if="streamingSources && streamingSources.length > 0" :sources="streamingSources" />
               </div>
             </div>
           </div>

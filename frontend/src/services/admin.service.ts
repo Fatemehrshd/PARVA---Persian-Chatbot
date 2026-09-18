@@ -1,6 +1,7 @@
 import { request } from './api'
 import type {
   AdminDashboardStats,
+  WebSearchUsage,
   AdminUser,
   UpdateAdminUserRequest,
   AdminConversationSummary,
@@ -33,7 +34,7 @@ export const adminService = {
     })
   },
 
-  async getSettings(): Promise<{ globalTokenLimit: number; systemPrompt: string }> {
+  async getSettings(): Promise<{ globalTokenLimit: number; systemPrompt: string; webSearchUsage?: WebSearchUsage | null }> {
     return request('/admin/settings')
   },
 
@@ -43,8 +44,10 @@ export const adminService = {
     fileMaxSizeMb?: number
     fileMaxTotalSizeMb?: number
     fileMaxCount?: number
-  }): Promise<{ globalTokenLimit: number; systemPrompt: string }> {
-    return request<{ globalTokenLimit: number; systemPrompt: string }>('/admin/settings', {
+    webSearchQuotaTotal?: number
+    webSearchUsedCredits?: number
+  }): Promise<{ globalTokenLimit: number; systemPrompt: string; webSearchUsage?: WebSearchUsage | null }> {
+    return request<{ globalTokenLimit: number; systemPrompt: string; webSearchUsage?: WebSearchUsage | null }>('/admin/settings', {
       method: 'PUT',
       body: JSON.stringify(data),
     })

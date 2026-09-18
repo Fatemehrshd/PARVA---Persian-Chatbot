@@ -3,7 +3,9 @@ import { ref, computed } from 'vue'
 import type { Conversation, Message, FileAttachmentItem, WebSource } from '../types'
 import { chatService } from '../services/chat.service'
 import { filesService } from '../services/files.service'
+import { modelsService } from '../services/models.service'
 import { checkBackendHealth } from '../services/api'
+import { markDefaultModel } from '../utils/models'
 import { useModelsStore } from './models'
 import { useUiStore } from './ui'
 
@@ -18,7 +20,7 @@ interface ConvStreamState {
   lastUserPrompt: string
   charBuffer: string[]
   releaseTimer: ReturnType<typeof setTimeout> | null
-  streamingSources: WebSource[] | null
+  pendingSources: WebSource[] | null
   isSearching: boolean
   searchFailed: boolean
 }
@@ -38,7 +40,7 @@ function makeDefaultState(): ConvStreamState {
     lastUserPrompt: '',
     charBuffer: [],
     releaseTimer: null,
-    streamingSources: null,
+    pendingSources: null,
     isSearching: false,
     searchFailed: false,
   }
@@ -442,8 +444,38 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   // ─── Create conversation ───────────────────────────────────────────────────
+  /** Platform default for a fresh chat (active-first). Never throws. */
+  function platformDefaultModelId(): string | undefined {
+    const pool = modelsStore.activeModels.length > 0 ? modelsStore.activeModels : modelsStore.models
+    return (pool.find((m) => m.isDefault) ?? pool[0])?.id
+  }
+
   async function createNewConversation(title = 'گفتگوی جدید'): Promise<string> {
-    const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
+    // New chats always start on the current platform default and the input
+    // follows it. The dedicated endpoint is tried first (cheap + exact);
+    // the list-based resolution is the fallback. Explicit per-conversation
+    // picks still win via switchConversationModel.
+    let modelId: string | undefined
+    try {
+      const fresh = await modelsService.getDefaultModel()
+      if (fresh?.id) {
+        if (!modelsStore.models.some((m) => m.id === fresh.id)) {
+          await modelsStore.fetchModels().catch(() => {})
+        }
+        markDefaultModel(modelsStore.models, fresh.id)
+        modelsStore.selectModel(fresh.id)
+        modelId = fresh.id
+      }
+    } catch {
+      // fall through to list-based resolution below
+    }
+    if (!modelId) {
+      await modelsStore.fetchModels().catch(() => {})
+      const active = modelsStore.activeModels
+      const def = active.find((m) => m.isDefault) ?? modelsStore.defaultModel
+      modelId = def?.id ?? modelsStore.selectedModel?.id ?? modelsStore.selectedModelId
+      if (def?.id) modelsStore.selectModel(def.id)
+    }
     try {
       const created = await chatService.createConversation(modelId, title)
       if (created && created.id) {
@@ -494,6 +526,10 @@ export const useChatStore = defineStore('chat', () => {
       } else {
         currentConversationId.value = null
         messages.value = []
+        // Fresh composer with no conversation shows the platform default,
+        // not a leftover pick from the deleted chat.
+        const defId = platformDefaultModelId()
+        if (defId) modelsStore.selectModel(defId)
       }
     }
   }
@@ -573,6 +609,7 @@ export const useChatStore = defineStore('chat', () => {
       (token: string) => {
         const s = ensureState(convId)
         s.isThinking = false
+        s.isSearching = false
         streamedAny = true
         userMessage.status = 'sent'
         s.streamError = null
@@ -626,6 +663,7 @@ export const useChatStore = defineStore('chat', () => {
         const s = ensureState(convId)
         s.abortController = null
         s.isThinking = false
+        s.isSearching = false
         s.isStreaming = false
         sessionStorage.removeItem('active_streaming_conv')
 
@@ -665,6 +703,7 @@ export const useChatStore = defineStore('chat', () => {
       (syncText: string) => {
         const s = ensureState(convId)
         s.isThinking = false
+        s.isSearching = false
         streamedAny = true
         userMessage.status = 'sent'
         s.streamError = null
@@ -681,8 +720,7 @@ export const useChatStore = defineStore('chat', () => {
       },
       (sources: WebSource[]) => {
         const s = ensureState(convId)
-        s.isSearching = false
-        s.streamingSources = sources
+        s.pendingSources = sources
         streamedAny = true
         userMessage.status = 'sent'
         convStreamStates.value.set(convId, { ...s })
@@ -990,6 +1028,7 @@ export const useChatStore = defineStore('chat', () => {
       (token: string) => {
         const s = ensureState(convId)
         s.isThinking = false
+        s.isSearching = false
         streamedAny = true
         userMessage.status = 'sent'
         s.streamError = null
@@ -1024,6 +1063,7 @@ export const useChatStore = defineStore('chat', () => {
         const s = ensureState(convId)
         s.abortController = null
         s.isThinking = false
+        s.isSearching = false
         s.isStreaming = false
         sessionStorage.removeItem('active_streaming_conv')
 
@@ -1070,6 +1110,7 @@ export const useChatStore = defineStore('chat', () => {
       (syncText: string) => {
         const s = ensureState(convId)
         s.isThinking = false
+        s.isSearching = false
         streamedAny = true
         userMessage.status = 'sent'
         s.streamError = null
@@ -1085,8 +1126,7 @@ export const useChatStore = defineStore('chat', () => {
       },
       (sources: WebSource[]) => {
         const s = ensureState(regenConvId)
-        s.isSearching = false
-        s.streamingSources = sources
+        s.pendingSources = sources
         convStreamStates.value.set(regenConvId, { ...s })
         resetWatchdog(regenConvId, 25000)
       },
@@ -1127,15 +1167,25 @@ export const useChatStore = defineStore('chat', () => {
           content: textToSave,
           createdAt: new Date().toISOString(),
           isInterrupted,
-          sources: s.streamingSources,
+          sources: s.pendingSources,
           searchFailed: s.searchFailed || undefined
         })
       }
     }
+    // Live sidebar reorder (mirrors backend updatedAt DESC): the conversation
+    // that just got activity jumps to the top without needing a refresh.
+    const convIdx = conversations.value.findIndex((c) => c.id === convId)
+    if (convIdx > 0) {
+      const [bumped] = conversations.value.splice(convIdx, 1)
+      bumped.updatedAt = new Date().toISOString()
+      conversations.value.unshift(bumped)
+    } else if (convIdx === 0) {
+      conversations.value[0].updatedAt = new Date().toISOString()
+    }
     s.currentStreamingText = ''
     s.isStreaming = false
     s.isThinking = false
-    s.streamingSources = null
+    s.pendingSources = null
     s.isSearching = false
     s.searchFailed = false
     convStreamStates.value.set(convId, { ...s })
@@ -1273,6 +1323,14 @@ export const useChatStore = defineStore('chat', () => {
     }
     sessionStorage.removeItem('active_streaming_conv')
 
+    // A user-stopped answer claims no sources: drop anything pending so the
+    // stopped message (live and, via the backend fix, in history too) shows
+    // no sources card.
+    const st = ensureState(convId)
+    st.pendingSources = null
+    st.isSearching = false
+    convStreamStates.value.set(convId, { ...st })
+
     const stoppedText = s?.currentStreamingText?.trim() || ''
     const content = stoppedText || 'تولید پاسخ توسط کاربر متوقف شد.'
     finishStream(convId, `msg-${Date.now()}`, true, content)
@@ -1330,6 +1388,7 @@ export const useChatStore = defineStore('chat', () => {
     continueLastMessage,
     resumeInterruptedMessage,
     stopStreaming,
+    finishStream,
     clearStreamError,
     pendingMessageQueue
   }

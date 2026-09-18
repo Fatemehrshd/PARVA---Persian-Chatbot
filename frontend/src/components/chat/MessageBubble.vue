@@ -7,6 +7,7 @@ import { getTextDirection, getLineDirection } from '../../utils/textDirection'
 import MarkdownContent from './MarkdownContent.vue'
 import FilePreviewCard from './FilePreviewCard.vue'
 import SourcesBlock from './SourcesBlock.vue'
+import { stripTrailingSourcesLine } from '../../utils/citations'
 
 const props = defineProps<{
   message: Message
@@ -58,6 +59,10 @@ const formattedTime = computed(() => {
   const minutesStr = minutes < 10 ? `۰${toPersianDigits(minutes)}` : toPersianDigits(minutes)
   return `${toPersianDigits(hours)}:${minutesStr} ${period}`
 })
+
+const displayContent = computed(() =>
+  stripTrailingSourcesLine(props.message.content, props.message.sources ?? null),
+)
 
 const userInitial = computed(() => {
   if (authStore.user?.displayName) return authStore.user.displayName.charAt(0).toUpperCase()
@@ -148,7 +153,7 @@ function copyContent() {
 
         <!-- Assistant: Rich Markdown -->
         <div v-else class="message-text">
-          <MarkdownContent :content="message.content" :sources="message.sources ?? null" />
+          <MarkdownContent :content="displayContent" :sources="message.sources ?? null" />
         </div>
 
         <!-- Web-search sources (stored on the message; survive refresh) -->

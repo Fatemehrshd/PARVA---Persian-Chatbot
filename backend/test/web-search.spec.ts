@@ -38,3 +38,34 @@ it('throws on non-https URLs being dropped, keeps https only', async () => {
     svc.search('q', fakeFetchImpl({ organic: [{ title: 'x', link: 'ftp://e.com/a', snippet: '' }] }) as any),
   ).resolves.toEqual([]);
 });
+
+it('increments the usage counter once per successful search', async () => {
+  const queries: any[] = [];
+  const repo: any = { query: async (...args: any[]) => { queries.push(args); return []; } };
+  const svc = new WebSearchService(repo);
+  const out = await svc.search(
+    'q',
+    fakeFetchImpl({ organic: [{ title: 't', link: 'https://e.com', snippet: 's' }] }) as any,
+  );
+  expect(out).toHaveLength(1);
+  expect(queries).toHaveLength(1);
+  expect(queries[0][1]).toEqual(['web_search_used_credits']);
+});
+
+it('still returns results when the usage counter fails', async () => {
+  const repo: any = { query: async () => { throw new Error('db down'); } };
+  const svc = new WebSearchService(repo);
+  const out = await svc.search(
+    'q',
+    fakeFetchImpl({ organic: [{ title: 't', link: 'https://e.com', snippet: 's' }] }) as any,
+  );
+  expect(out).toHaveLength(1);
+});
+
+it('does not count failed searches', async () => {
+  const queries: any[] = [];
+  const repo: any = { query: async (...args: any[]) => { queries.push(args); return []; } };
+  const svc = new WebSearchService(repo);
+  await expect(svc.search('q', fakeFetchImpl({}, false) as any)).rejects.toThrow('خطا در سرویس جستجوی وب');
+  expect(queries).toHaveLength(0);
+});

@@ -8,7 +8,7 @@ const props = defineProps<{
   failed?: boolean
 }>()
 
-const open = ref(true)
+const open = ref(false)
 const showAll = ref(false)
 const visibleSources = computed(() => {
   const list = props.sources ?? []
@@ -26,11 +26,11 @@ const visibleSources = computed(() => {
       <span class="text-xs font-medium text-muted-foreground">
         منابع{{ sources && sources.length > 0 ? ` (${sources.length})` : '' }}
       </span>
-      <Button variant="ghost" size="sm" @click="open = !open">
+      <Button variant="ghost" size="sm" data-testid="sources-toggle" @click="open = !open">
         {{ open ? 'بستن' : 'نمایش' }}
       </Button>
     </div>
-    <div v-show="open">
+    <div v-show="open" data-testid="sources-body">
       <p v-if="failed" class="mt-2 text-xs text-amber-600 dark:text-amber-400">
         جستجوی وب ناموفق بود؛ این پاسخ بدون منابع تولید شده است.
       </p>

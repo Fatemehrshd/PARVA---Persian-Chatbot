@@ -1,4 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { SystemSetting } from '../admin/system-setting.entity';
+import { WEB_SEARCH_USED_KEY } from '../admin/settings.service';
 
 export interface WebSource {
   title: string;
@@ -12,6 +16,11 @@ const MAX_SOURCES = 8;
 @Injectable()
 export class WebSearchService {
   private readonly logger = new Logger(WebSearchService.name);
+  constructor(
+    @Optional()
+    @InjectRepository(SystemSetting)
+    private readonly settingsRepo?: Repository<SystemSetting>,
+  ) {}
 
   /**
    * `fetcher` is an explicit ambient capability (global fetch), NOT a Nest
@@ -35,6 +44,11 @@ export class WebSearchService {
       });
       if (!res.ok) throw new Error(`خطا در سرویس جستجوی وب (${res.status})`);
       const data: any = await res.json();
+      // Serper bills 1 credit per successful search — count it. Counting must
+      // NEVER break searching, so any failure here is only warned about.
+      await this.countUsage().catch((err) =>
+        this.logger.warn(`Web-search usage counter failed: ${err instanceof Error ? err.message : String(err)}`),
+      );
       const organic: any[] = Array.isArray(data?.organic) ? data.organic : [];
       return organic.slice(0, MAX_SOURCES).flatMap((r) => {
         const url = String(r?.link ?? r?.url ?? '');
@@ -44,5 +58,16 @@ export class WebSearchService {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /** Atomically increments the used-credits counter (race-safe under concurrency). */
+  private async countUsage(): Promise<void> {
+    if (!this.settingsRepo) return;
+    await this.settingsRepo.query(
+      `INSERT INTO system_settings ("key", "value") VALUES ($1, '1')
+       ON CONFLICT ("key") DO UPDATE
+       SET "value" = (COALESCE(NULLIF(system_settings."value", ''), '0')::int + 1)::text`,
+      [WEB_SEARCH_USED_KEY],
+    );
   }
 }

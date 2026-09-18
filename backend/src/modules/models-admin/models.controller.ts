@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, NotFoundException, UseGuards } from '@nestjs/common';
 import { ModelsAdminService } from './models-admin.service';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 
@@ -14,5 +14,12 @@ export class ModelsController {
   @Get()
   list() {
     return this.svc.listActive();
+  }
+
+  @Get('default')
+  async getDefault() {
+    const m = await this.svc.getUsableDefault();
+    if (!m) throw new NotFoundException('Resource not found');
+    return m;
   }
 }

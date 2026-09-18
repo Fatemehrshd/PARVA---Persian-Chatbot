@@ -168,6 +168,12 @@ export interface UpdateProviderRequest {
   isActive?: boolean
 }
 
+export interface WebSearchUsage {
+  used: number
+  total: number
+  remaining: number
+}
+
 export interface AdminDashboardStats {
   totalUsers: number
   totalModels: number
@@ -179,6 +185,7 @@ export interface AdminDashboardStats {
   totalTokensUsed: number
   globalTokenLimit: number
   systemPrompt: string
+  webSearchUsage?: WebSearchUsage | null
 }
 
 export interface AdminUser extends User {

@@ -503,6 +503,11 @@ export class ChatService {
         this.activeStream?.appendToken(id, note);
         yield { token: note };
       }
+      // A user-aborted (stopped) answer must not claim sources: the reply was
+      // cut off mid-way, so persisting citations would be dishonest. Provider
+      // mid-stream failures keep theirs (partial answer + streamed sources).
+      const stoppedByUserAbort =
+        session?.abortController?.signal.aborted === true && !failedMidStream;
       if (full && !savedAssistant) {
         savedAssistant = await this.msg.save(
           this.msg.create({
@@ -511,7 +516,7 @@ export class ChatService {
             content: full,
             isInterrupted: failedMidStream,
             stoppedByUser: false,
-            sources: webSources,
+            sources: stoppedByUserAbort ? null : webSources,
           }),
         );
         const consumedTokens = Math.ceil((content.length + full.length) / 4);

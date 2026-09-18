@@ -16,6 +16,20 @@ export const modelsService = {
   },
 
   /**
+   * Current platform default model for all users (masked).
+   * Returns null when no usable default is configured (404).
+   * GET /models/default
+   */
+  async getDefaultModel(): Promise<Model | null> {
+    try {
+      return await request<Model>('/models/default')
+    } catch (err: any) {
+      if (err?.statusCode === 404) return null
+      throw err
+    }
+  },
+
+  /**
    * List all configured AI models (admin only).
    * GET /admin/models
    */

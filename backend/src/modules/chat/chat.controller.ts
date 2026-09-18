@@ -188,6 +188,18 @@ export class ChatController {
     if (!first.done && first.value?.sync) {
       res.write(`event: sync\ndata: ${JSON.stringify({ content: first.value.sync })}\n\n`);
     }
+    // The first chunk is consumed by gen.next() above — every chunk type must
+    // be written here too, or the first event is swallowed. (searchStatus is
+    // typically the very first yield when web search is on.)
+    if (!first.done && first.value?.searchStatus && !res.writableEnded) {
+      res.write(`event: search-status\ndata: ${JSON.stringify({ state: first.value.searchStatus })}\n\n`);
+    }
+    if (!first.done && first.value?.sources && !res.writableEnded) {
+      res.write(`event: sources\ndata: ${JSON.stringify({ sources: first.value.sources })}\n\n`);
+    }
+    if (!first.done && first.value?.searchFailed && !res.writableEnded) {
+      res.write(`event: sources-error\ndata: ${JSON.stringify({ message: 'جستجوی وب ناموفق بود؛ پاسخ بدون منابع ادامه می‌یابد' })}\n\n`);
+    }
     if (!first.done && first.value?.token) writeToken(first.value.token);
     try {
       for await (const chunk of gen) {

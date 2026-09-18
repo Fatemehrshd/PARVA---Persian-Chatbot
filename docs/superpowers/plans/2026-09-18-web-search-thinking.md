@@ -639,7 +639,7 @@ git commit -m "feat(web-search): SSE sources events and active-stream replay"
 
 **Interfaces:**
 - Consumes: new SSE events
-- Produces: `WebSource`; `Message.sources?/searchFailed?`; store `convFlags: Record<string, { web: boolean }>` + `setConvFlag(convId, 'web', v)`; stream state `{ streamingSources, isSearching, searchFailed }`; `sendMessage(content, files?, opts?: { useWebSearch?: boolean })`
+- Produces: `WebSource`; `Message.sources?/searchFailed?`; store `convFlags: Record<string, { web: boolean }>` + `setConvFlag(convId, 'web', v)`; stream state `{ pendingSources, isSearching, searchFailed }` (sources are held until finish — never shown mid-stream); `sendMessage(content, files?, opts?: { useWebSearch?: boolean })`
 
 - [ ] **Step 1: Types**
 
@@ -707,7 +707,7 @@ Expected: FAIL (no such export)
 
 Store (`stores/chat.ts` — exact anchors: `ConvStreamState` lines 11-21, `makeDefaultState` 27-39, `finishStream` 1019-1051, `sendMessage` 713+):
 - Line 3 import: add `WebSource` to the type import from `'../types'`.
-- `ConvStreamState` interface: append `streamingSources: WebSource[] | null`, `isSearching: boolean`, `searchFailed: boolean`. `makeDefaultState()`: append `streamingSources: null, isSearching: false, searchFailed: false`.
+- `ConvStreamState` interface: append `pendingSources: WebSource[] | null`, `isSearching: boolean`, `searchFailed: boolean`. `makeDefaultState()`: append `pendingSources: null, isSearching: false, searchFailed: false`.
 - Flags block (place next to the stream-state map):
 
 ```ts
@@ -729,8 +729,8 @@ try {
 ```
 
 return/getters: expose `convFlags, getConvFlag, setConvFlag` from the store (ChatComposer uses them).
-- `executeMessageStream(convId, content, userMessage, fileIds?, opts?: { useWebSearch?: boolean })`: pass `opts?.useWebSearch` into the service payload (service change in this task) and wire the three new service callbacks (`onSearchStatus/onSources/onSourcesError`) to set `isSearching/streamingSources/searchFailed` + `resetWatchdog(convId, 25000)` each (same call the token handler at line ~570 makes).
-- `finishStream` push (lines 1037-1044): extend the pushed object with `sources: s.streamingSources, searchFailed: s.searchFailed || undefined`; after the push add `s.streamingSources = null; s.isSearching = false; s.searchFailed = false` before the state reset at line 1047.
+- `executeMessageStream(convId, content, userMessage, fileIds?, opts?: { useWebSearch?: boolean })`: pass `opts?.useWebSearch` into the service payload (service change in this task) and wire the three new service callbacks (`onSearchStatus/onSources/onSourcesError`) to set `isSearching/pendingSources/searchFailed` (onSources stashes into pendingSources only) + `resetWatchdog(convId, 25000)` each (same call the token handler at line ~570 makes).
+- `finishStream` push (lines 1037-1044): extend the pushed object with `sources: s.pendingSources, searchFailed: s.searchFailed || undefined`; after the push add `s.pendingSources = null; s.isSearching = false; s.searchFailed = false` before the state reset at line 1047.
 - `sendMessage(content, files?, opts?: { useWebSearch?: boolean })`: after `let convId = currentConversationId.value!` (line 730) resolve `const useWebSearch = opts?.useWebSearch ?? getConvFlag(convId).web`; after the temp→real migration block (line 797, `convId = created.id`) migrate a pre-send flag: `if (convFlags.value['__new__']) { convFlags.value[convId] = { ...getConvFlag(convId), ...convFlags.value['__new__'] }; delete convFlags.value['__new__']; persistConvFlags() }`. At the existing `executeMessageStream(convId, content, userMessage, fileIds)` call, append `{ useWebSearch }` (re-resolve after migration: `getConvFlag(convId).web || useWebSearch`). Retry path (`retryLastMessage` → `sendMessage(prompt, files)` with no opts) therefore inherits the stored per-conversation flag.
 
 - [ ] **Step 5: Verify**
@@ -1415,7 +1415,7 @@ describe('live thinking box', () => {
       isStreaming: true, isThinking: false, streamError: null,
       currentStreamingText: '', abortController: null, watchdogTimer: null,
       lastUserPrompt: '', charBuffer: [], releaseTimer: null,
-      streamingSources: null, isSearching: false, searchFailed: false,
+      pendingSources: null, isSearching: false, searchFailed: false,
       streamingThinking: 'بخشی از استدلال', isThinkingActive: true, thinkingDurationMs: null,
     } as any)
     const wrapper = mount(MessageList, {

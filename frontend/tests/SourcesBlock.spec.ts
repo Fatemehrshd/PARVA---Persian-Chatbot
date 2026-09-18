@@ -24,4 +24,13 @@ describe('SourcesBlock', () => {
     const w = mount(SourcesBlock, { props: { sources: null } })
     expect(w.find('[data-testid="sources-block"]').exists()).toBe(false)
   })
+
+  it('starts collapsed and expands only on click', async () => {
+    const w = mount(SourcesBlock, { props: { sources: srcs } })
+    expect(w.find('[data-testid="sources-toggle"]').text()).toBe('نمایش')
+    expect(w.find('[data-testid="sources-body"]').attributes('style')).toContain('display: none')
+    await w.find('[data-testid="sources-toggle"]').trigger('click')
+    expect(w.find('[data-testid="sources-toggle"]').text()).toBe('بستن')
+    expect(w.find('[data-testid="sources-body"]').attributes('style') ?? '').not.toContain('display: none')
+  })
 })

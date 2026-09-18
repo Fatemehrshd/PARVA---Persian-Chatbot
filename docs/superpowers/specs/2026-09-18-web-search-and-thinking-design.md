@@ -51,7 +51,7 @@
 - ترتیب داخل generate وقتی useWebSearch true و کلید ادمین روشن:
   1. yield { searchStatus: 'searching' }
   2. فراخوانی WebSearchService.search
-  3. موفق: yield { sources: [...] } و تزریق بلوک منابع به system prompt + دستور ارجاع [n]
+  3. موفق: yield { sources: [...] } و تزریق بلوک منابع به system prompt + دستور ارجاع [n] — فرانت منابع را تا پایان پاسخ نگه می‌دارد (pending) و بعد از اتمام، زیر جواب کامل (بسته، جمع‌شونده) نشان می‌دهد تا حین استریم پرش布局 پیش نیاید
   4. شکست: yield { searchFailed: true } و ادامه بدون منابع + متن یادداشت در پاسخ نهایی ذخیره شود
 - ChatChunk گسترش: { searchStatus?: 'searching', sources?: Source[], searchFailed?: boolean }
 - ChatController.send و streamActive: رویدادهای جدید SSE:

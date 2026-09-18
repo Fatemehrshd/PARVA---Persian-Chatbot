@@ -358,3 +358,25 @@
 - Frontend: `WebSource` types; `dispatchSseEvent` (unit-tested) drives `readSseStream` + reconnect path; per-conversation flags in `convFlags` (+localStorage, `__new__`→real-id migration); 🌐 toggle with reusable `BaseToggle` in the + menu; `SourcesBlock` (Tailwind + shadcn `Button` only, no new CSS) under stored AND streaming answers; `[n]` markers become links via `linkCitationsInHtml` (unit-tested).
 - Verification: backend full suite green (21 suites/144 tests incl. `web-search.spec`, `chat-search-flow.spec`); frontend specs green (16 tests); `vue-tsc` error set IDENTICAL to branch baseline (pre-existing errors only, incl. known dead `deleteMessage` regenerate block — untouched).
 - Manual checklist for reviewer: toggle on → cards + clickable [n]; toggle off → old behavior; admin off → skipped; no SERPER_API_KEY → failure note, answer continues; refresh mid-stream → sources replay.
+
+## Task 32: Serper Quota Display in Admin Panel (UNCOMMITTED WIP)
+- Serper publishes no credits API (balance is dashboard-only), so usage is counted locally: `WebSearchService` atomically increments `web_search_used_credits` (+1 per successful search; failures uncounted) via `ON CONFLICT DO UPDATE` — counting can never break searching (try/catch + warn).
+- `SettingsService.getWebSearchUsage() → { used, total, remaining }` (defaults 0/2500, clamped, garbage-safe); included in `GET /admin/settings` + dashboard stats; `PUT` accepts `webSearchQuotaTotal` (min 1) and `webSearchUsedCredits` (min 0, for one-time calibration with the Serper dashboard).
+- Admin settings modal: «اعتبار جستجوی وب» section with remaining/total, Tailwind progress bar, <10% low warning, and the two editable numbers — same existing classes, no new CSS.
+- Verification: backend 23 suites/152 green (counter-once, counter-failure resilience, quota math, update persistence); frontend 152 green; vue-tsc identical to baseline.
+
+## Admin Optimistic Updates (UNCOMMITTED WIP)
+- علت: اکشن‌های پنل ادمین لیست را رفرش می‌کردند ولی شمارنده‌های داشبورد (`stats`) تا رفرش صفحه کهنه می‌ماند (مثلاً غیرفعال‌کردن مدل، تعداد «مدل‌های فعال» را عوض نمی‌کرد).
+- فیکس فقط در فرانت: هلپر خالص `utils/stats.ts#adjustStat` + `bumpStat`/`refreshStats` در `AdminPanelView`. تاگل مدل/پروایدر/کاربر: تغییر instant سطر و KPI با rollback при خطا؛ add/edit/delete: رفرش موجود + `refreshStats()` برای تطبیق (cascade پروایدر هم پوشش داده می‌شود). هیچ تغییری در بک‌اند یا منطق چت داده نشد.
+- Verification: `tests/stats.spec.ts` جدید؛ فول سوئیت فرانت ۱۵۵ سبز؛ vue-tsc دقیقاً برابر خط مبنا.
+
+## Global Default Model with Optimistic Updates (UNCOMMITTED WIP)
+- شکاف: تابع `setPlatformDefault` در پنل ادمین تعریف شده بود ولی هیچ دکمه‌ای آن را صدا نمی‌زد (خطای `never read` در تایپ‌چک!) — ادمین عملاً نمی‌توانست دیفالت را عوض کند. همچنین ورودی چت، انتخابِ باقی‌مانده از مکالمه قبلی را نشان می‌داد نه دیفالت پلتفرم.
+- فیکس فقط فرانت: دکمه ستاره «پیش‌فرض سراسری» در ردیف هر مدل (فقط وقتی دیفالت نیست) با بج لحظه‌ای + rollback при خطا (هلپر تست‌پذیر `markDefaultModel`)؛ چت جدید همیشه با دیفالت فعلی پلتفرم شروع می‌شود (با re-sync مدل‌ها موقع ساخت، پس تغییر ادمین بدون رفرش صفحه اعمال می‌شود) و ورودی هم همان را نشان می‌دهد؛ انتخاب دستی داخل هر مکالمه دست‌نخورده ماند. حذف آخرین گفتگو هم ورودی را به دیفالت برمی‌گرداند.
+- Verification: ۴ تست جدید (`model-default.spec`, `chat-newchat-default.spec`)؛ فول سوئیت ۱۵۹ سبز؛ vue-tsc یک خطا کمتر از مبنا شد (همان never-read پاک شد).
+
+## User-Facing Default Model Endpoint (UNCOMMITTED WIP)
+- شکاف: کلاینت دیفالت را فقط از روی فلگ لیست `GET /models` حدس می‌زد؛ اندپوینت صریحی نبود.
+- اندپوینت جدید `GET /models/default` (با JWT همه کاربرها): مدل flagged را فقط وقتی برمی‌گرداند که فعال و پروایدرش فعال باشد (کلید maskشده)؛ در غیر این صورت 404 و کلاینت به منطق لیستی برمی‌گردد. هیچ رفتار قبلی عوض نشد.
+- فرانت: `createNewConversation` اول همین اندپوینت را می‌زند (ارزان و دقیق) و فلگ‌های محلی + ورودی را با آن همگام می‌کند؛ فقط при خطا/404 به fetchModels+لیست برمی‌گردد.
+- Verification: ۳ تست بک‌اند + ۱ تست فرانت جدید؛ بک‌اند ۱۵۹ سبز + lint؛ فرانت ۱۶۰ سبز؛ تایپ‌چک بدون خطای جدید.

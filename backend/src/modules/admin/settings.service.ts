@@ -8,6 +8,10 @@ export const DEFAULT_SYSTEM_PROMPT = 'You are a helpful and knowledgeable AI ass
 export const DEFAULT_GLOBAL_TOKEN_LIMIT = 0; // 0 = unlimited
 /** نرخ پیش‌فرض هر ۱۰۰۰ توکن به دلار */
 export const DEFAULT_TOKEN_RATE_PER_1000 = 10; // $10 per 1000 tokens
+export const WEB_SEARCH_ENABLED_KEY = 'web_search_enabled';
+export const WEB_SEARCH_USED_KEY = 'web_search_used_credits';
+export const WEB_SEARCH_QUOTA_KEY = 'web_search_quota_total';
+export const DEFAULT_WEB_SEARCH_QUOTA = 2500; // Serper free trial credits
 
 @Injectable()
 export class SettingsService {
@@ -55,6 +59,21 @@ export class SettingsService {
     return this.get('system_prompt', DEFAULT_SYSTEM_PROMPT);
   }
 
+  async getWebSearchEnabled(): Promise<boolean> {
+    const v = await this.get(WEB_SEARCH_ENABLED_KEY, 'true');
+    return v !== 'false';
+  }
+
+  async getWebSearchUsage(): Promise<{ used: number; total: number; remaining: number }> {
+    const usedRaw = await this.get(WEB_SEARCH_USED_KEY, '0');
+    const totalRaw = await this.get(WEB_SEARCH_QUOTA_KEY, String(DEFAULT_WEB_SEARCH_QUOTA));
+    const usedParsed = parseInt(usedRaw, 10);
+    const totalParsed = parseInt(totalRaw, 10);
+    const used = isNaN(usedParsed) || usedParsed < 0 ? 0 : usedParsed;
+    const total = isNaN(totalParsed) || totalParsed < 0 ? DEFAULT_WEB_SEARCH_QUOTA : totalParsed;
+    return { used, total, remaining: Math.max(0, total - used) };
+  }
+
   async getAll(): Promise<{
     globalTokenLimit: number;
     tokenRatePer1000: number;
@@ -64,6 +83,8 @@ export class SettingsService {
     fileMaxCount: number;
     excelMaxRows: number;
     fileProcessingTimeoutSec: number;
+    webSearchEnabled: boolean;
+    webSearchUsage: { used: number; total: number; remaining: number };
   }> {
     const [
       globalTokenLimit,
@@ -94,6 +115,8 @@ export class SettingsService {
       fileMaxCount: isNaN(fileMaxCount) ? 5 : fileMaxCount,
       excelMaxRows: isNaN(excelMaxRows) ? 5000 : excelMaxRows,
       fileProcessingTimeoutSec: isNaN(fileProcessingTimeoutSec) ? 120 : fileProcessingTimeoutSec,
+      webSearchEnabled: await this.getWebSearchEnabled(),
+      webSearchUsage: await this.getWebSearchUsage(),
     };
   }
 
@@ -121,6 +144,15 @@ export class SettingsService {
     }
     if (dto.fileProcessingTimeoutSec !== undefined) {
       await this.set('file_processing_timeout_sec', String(dto.fileProcessingTimeoutSec));
+    }
+    if (dto.webSearchEnabled !== undefined) {
+      await this.set(WEB_SEARCH_ENABLED_KEY, dto.webSearchEnabled ? 'true' : 'false');
+    }
+    if (dto.webSearchQuotaTotal !== undefined) {
+      await this.set(WEB_SEARCH_QUOTA_KEY, String(dto.webSearchQuotaTotal));
+    }
+    if (dto.webSearchUsedCredits !== undefined) {
+      await this.set(WEB_SEARCH_USED_KEY, String(dto.webSearchUsedCredits));
     }
     return this.getAll();
   }

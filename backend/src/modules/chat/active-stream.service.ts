@@ -7,7 +7,8 @@ export type StreamEvent =
   | { type: 'sync'; content: string }
   | { type: 'title'; title: string }
   | { type: 'done'; messageId: string }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | { type: 'sources'; sources: { title: string; url: string; snippet?: string }[] };
 
 export interface ActiveStreamSession {
   conversationId: string;
@@ -19,6 +20,7 @@ export interface ActiveStreamSession {
   error?: string;
   savedMessageId?: string;
   title?: string;
+  sources?: { title: string; url: string; snippet?: string }[];
   abortController: AbortController;
   subscribers: Set<(event: StreamEvent) => void>;
   startedAt: number;
@@ -32,6 +34,7 @@ export interface ActiveStreamStatus {
   accumulatedText: string;
   title?: string;
   messageId?: string;
+  sources?: { title: string; url: string; snippet?: string }[];
 }
 
 /**
@@ -132,6 +135,40 @@ export class ActiveStreamService {
       } catch (err) {
         this.logger.warn(`Subscriber error on title emit: ${err}`);
       }
+    }
+  }
+
+  setSources(
+    conversationId: string,
+    sources: { title: string; url: string; snippet?: string }[],
+  ): void {
+    const session = this.sessions.get(conversationId);
+    if (!session) return;
+    session.sources = sources;
+    this.resetThinkingTimer(conversationId);
+    const event: StreamEvent = { type: 'sources', sources };
+    for (const sub of session.subscribers) {
+      try {
+        sub(event);
+      } catch (err) {
+        this.logger.warn(`Subscriber error on sources emit: ${err}`);
+      }
+    }
+  }
+
+  /** Re-arms the 35s thinking watchdog (long search/reasoning must not trip it). */
+  resetThinkingTimer(conversationId: string): void {
+    const session = this.sessions.get(conversationId);
+    if (!session || (session.status !== 'thinking' && session.status !== 'streaming')) return;
+    if (session.thinkingTimer) clearTimeout(session.thinkingTimer);
+    session.thinkingTimer = setTimeout(() => {
+      if (session.status === 'thinking' && !session.accumulatedText) {
+        this.logger.warn(`Session ${conversationId} timed out in thinking state`);
+        this.failSession(conversationId, 'زمان انتظار برای پردازش پیام به پایان رسید (Timeout)');
+      }
+    }, 35000);
+    if (session.thinkingTimer && typeof session.thinkingTimer.unref === 'function') {
+      session.thinkingTimer.unref();
     }
   }
 
@@ -252,6 +289,7 @@ export class ActiveStreamService {
       accumulatedText: session.accumulatedText,
       title: session.title,
       messageId: session.savedMessageId,
+      sources: session.sources,
     };
   }
 

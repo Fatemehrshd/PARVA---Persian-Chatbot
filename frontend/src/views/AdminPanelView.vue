@@ -39,6 +39,8 @@ import type {
   AdminFileStats,
   AdminFileDetail,
 } from '../types'
+import { adjustStat } from '../utils/stats'
+import { markDefaultModel } from '../utils/models'
 
 const router = useRouter()
 const modelsStore = useModelsStore()
@@ -114,6 +116,33 @@ const errorMessage = ref('')
 const providers = ref<Provider[]>([])
 const users = ref<AdminUser[]>([])
 const stats = ref<AdminDashboardStats | null>(null)
+
+// ─── Optimistic dashboard counters ─────────────────────────────────────────
+// Mutations patch the row + KPI instantly and roll back on failure, so the
+// dashboard never waits for a refresh. refreshStats() reconciles with the
+// server after structural changes (add/delete) and cascades (provider toggle).
+function bumpStat(
+  key:
+    | 'totalModels'
+    | 'activeModels'
+    | 'totalProviders'
+    | 'activeProviders'
+    | 'totalUsers'
+    | 'totalConversations'
+    | 'totalMessages',
+  delta: number,
+) {
+  adjustStat(stats.value, key, delta)
+}
+
+async function refreshStats() {
+  try {
+    const data = await adminService.getDashboardStats()
+    if (data) stats.value = data
+  } catch {
+    // keep optimistic values; the next full load reconciles
+  }
+}
 const conversations = ref<AdminConversationSummary[]>([])
 const isLoadingConversations = ref(false)
 const chatPage = ref(1)
@@ -284,6 +313,8 @@ const settingsForm = ref({
   fileMaxSizeMb: 20,
   fileMaxTotalSizeMb: 50,
   fileMaxCount: 5,
+  webSearchQuotaTotal: 2500,
+  webSearchUsedCredits: 0,
 })
 
 // ========================
@@ -402,6 +433,18 @@ function getUserCreditStats(user: AdminUser) {
     isSpecific: hasSpecificLimit,
   }
 }
+
+// Web-search quota display (Serper credits) — derived from the form so the
+// bar updates live while typing; persisted via saveSettings.
+const webSearchQuota = computed(() => Number(settingsForm.value.webSearchQuotaTotal) || 2500)
+const webSearchUsed = computed(() => Math.max(0, Number(settingsForm.value.webSearchUsedCredits) || 0))
+const webSearchRemaining = computed(() => Math.max(0, webSearchQuota.value - webSearchUsed.value))
+const webSearchPercent = computed(() =>
+  webSearchQuota.value > 0 ? Math.round((webSearchRemaining.value / webSearchQuota.value) * 100) : 0,
+)
+const webSearchLow = computed(
+  () => webSearchQuota.value > 0 && webSearchRemaining.value / webSearchQuota.value < 0.1,
+)
 
 // Persian Labels
 const labels = {
@@ -610,6 +653,15 @@ async function saveModel() {
   if (!modelForm.value.name.trim() || !modelForm.value.apiIdentifier.trim()) return
   isSaving.value = true
   errorMessage.value = ''
+  const isModelAdd = !editingModel.value
+  const modelFormActive = !!modelForm.value.isActive
+  const modelPrevActive = editingModel.value?.isActive
+  if (isModelAdd) {
+    bumpStat('totalModels', 1)
+    if (modelFormActive) bumpStat('activeModels', 1)
+  } else if (modelPrevActive !== undefined && modelPrevActive !== modelFormActive) {
+    bumpStat('activeModels', modelFormActive ? 1 : -1)
+  }
   try {
     const provider =
       providers.value.find((item) => item.id === modelForm.value.providerId) ||
@@ -629,8 +681,15 @@ async function saveModel() {
     }
     modelModalOpen.value = false
     await modelsStore.fetchModels(true).catch(() => {})
+    await refreshStats()
     uiStore.showToast(editingModel.value ? 'مدل با موفقیت ویرایش شد.' : 'مدل جدید با موفقیت اضافه شد.', 'success')
   } catch (error: any) {
+    if (isModelAdd) {
+      bumpStat('totalModels', -1)
+      if (modelFormActive) bumpStat('activeModels', -1)
+    } else if (modelPrevActive !== undefined && modelPrevActive !== modelFormActive) {
+      bumpStat('activeModels', modelFormActive ? -1 : 1)
+    }
     errorMessage.value = error?.message || 'ذخیره اطلاعات مدل با خطا مواجه شد'
   } finally {
     isSaving.value = false
@@ -638,16 +697,42 @@ async function saveModel() {
 }
 
 async function toggleModel(model: Model) {
+  const prev = model.isActive
+  const next = !prev
+  model.isActive = next
+  bumpStat('activeModels', next ? 1 : -1)
   try {
-    await modelsService.updateModelStatus(model.id, !model.isActive)
+    const updated = await modelsService.updateModelStatus(model.id, next)
     await modelsStore.fetchModels(true)
+    if (updated && typeof updated.isActive === 'boolean' && updated.isActive !== next) {
+      model.isActive = updated.isActive
+      bumpStat('activeModels', updated.isActive ? 1 : -1)
+    }
     uiStore.showToast(`وضعیت مدل «${model.name}» تغییر کرد.`, 'info')
   } catch (error: any) {
+    model.isActive = prev
+    bumpStat('activeModels', prev ? 1 : -1)
     errorMessage.value = error?.message || 'تغییر وضعیت مدل با خطا مواجه شد'
   }
 }
 
-// توجه: قابلیت علامت‌گذاری مدل به عنوان پیش‌فرض با ستاره طبق درخواست کارفرما از سیستم حذف شد.
+async function setPlatformDefault(model: Model) {
+  const prevId = markDefaultModel(modelsStore.models, model.id)
+  try {
+    await modelsService.setDefaultModel(model.id)
+    await modelsStore.fetchModels(true).catch(() => {})
+    uiStore.showToast(`مدل «${model.name}» به عنوان پیش‌فرض پلتفرم انتخاب شد.`, 'success')
+  } catch (error: any) {
+    if (prevId !== undefined) {
+      markDefaultModel(modelsStore.models, prevId)
+    } else {
+      modelsStore.models.forEach((m) => {
+        m.isDefault = false
+      })
+    }
+    errorMessage.value = error?.message || 'تنظیم مدل پیش‌فرض با خطا مواجه شد'
+  }
+}
 
 function promptDeleteModel(model: Model) {
   deleteTarget.value = { type: 'model', id: model.id, name: model.name }
@@ -680,6 +765,15 @@ async function saveProvider() {
   if (!providerForm.value.name.trim()) return
   isSaving.value = true
   errorMessage.value = ''
+  const isProviderAdd = !editingProvider.value
+  const providerFormActive = !!providerForm.value.isActive
+  const providerPrevActive = editingProvider.value?.isActive
+  if (isProviderAdd) {
+    bumpStat('totalProviders', 1)
+    if (providerFormActive) bumpStat('activeProviders', 1)
+  } else if (providerPrevActive !== undefined && providerPrevActive !== providerFormActive) {
+    bumpStat('activeProviders', providerFormActive ? 1 : -1)
+  }
   try {
     const payload = {
       name: providerForm.value.name.trim(),
@@ -696,9 +790,16 @@ async function saveProvider() {
     const data = await modelsService.listProviders()
     providers.value = Array.isArray(data) ? data : []
     await modelsStore.fetchModels(true)
+    await refreshStats()
     providerModalOpen.value = false
     uiStore.showToast(editingProvider.value ? 'ارائه‌دهنده با موفقیت ویرایش شد.' : 'ارائه‌دهنده جدید اضافه شد.', 'success')
   } catch (error: any) {
+    if (isProviderAdd) {
+      bumpStat('totalProviders', -1)
+      if (providerFormActive) bumpStat('activeProviders', -1)
+    } else if (providerPrevActive !== undefined && providerPrevActive !== providerFormActive) {
+      bumpStat('activeProviders', providerFormActive ? -1 : 1)
+    }
     errorMessage.value = error?.message || 'ذخیره اطلاعات ارائه‌دهنده با خطا مواجه شد'
   } finally {
     isSaving.value = false
@@ -706,13 +807,25 @@ async function saveProvider() {
 }
 
 async function toggleProvider(provider: Provider) {
+  const prev = provider.isActive
+  const next = !prev
+  provider.isActive = next
+  bumpStat('activeProviders', next ? 1 : -1)
   try {
-    await modelsService.updateProviderStatus(provider.id, !provider.isActive)
+    const updated = await modelsService.updateProviderStatus(provider.id, next)
+    if (updated && typeof updated.isActive === 'boolean') {
+      provider.isActive = updated.isActive
+      if (updated.isActive !== next) bumpStat('activeProviders', updated.isActive ? 1 : -1)
+    }
     const data = await modelsService.listProviders()
     providers.value = Array.isArray(data) ? data : []
     await modelsStore.fetchModels(true)
+    // Provider toggles can cascade to its models — reconcile counters.
+    await refreshStats()
     uiStore.showToast(`وضعیت ارائه‌دهنده «${provider.name}» تغییر کرد.`, 'info')
   } catch (error: any) {
+    provider.isActive = prev
+    bumpStat('activeProviders', prev ? 1 : -1)
     errorMessage.value = error?.message || 'تغییر وضعیت ارائه‌دهنده با خطا مواجه شد'
   }
 }
@@ -773,12 +886,14 @@ async function saveUser() {
 }
 
 async function toggleUser(user: AdminUser) {
+  const prevActive = user.isActive
+  const nextState = prevActive === false
+  user.isActive = nextState
   try {
-    const nextState = user.isActive === false
     await adminService.updateUserStatus(user.id, nextState)
-    user.isActive = nextState
     uiStore.showToast(`وضعیت حساب «${user.displayName || user.email}» تغییر کرد.`, 'info')
   } catch (error: any) {
+    user.isActive = prevActive
     errorMessage.value = error?.message || 'تغییر وضعیت کاربر با خطا مواجه شد'
   }
 }
@@ -792,6 +907,8 @@ function openSettingsEditor() {
     fileMaxSizeMb: (stats.value as any)?.fileMaxSizeMb ?? 20,
     fileMaxTotalSizeMb: (stats.value as any)?.fileMaxTotalSizeMb ?? 50,
     fileMaxCount: (stats.value as any)?.fileMaxCount ?? 5,
+    webSearchQuotaTotal: stats.value?.webSearchUsage?.total ?? 2500,
+    webSearchUsedCredits: stats.value?.webSearchUsage?.used ?? 0,
   }
   settingsModalOpen.value = true
   errorMessage.value = ''
@@ -808,11 +925,14 @@ async function saveSettings() {
       fileMaxSizeMb: Number(settingsForm.value.fileMaxSizeMb) || 20,
       fileMaxTotalSizeMb: Number(settingsForm.value.fileMaxTotalSizeMb) || 50,
       fileMaxCount: Number(settingsForm.value.fileMaxCount) || 5,
+      webSearchQuotaTotal: Number(settingsForm.value.webSearchQuotaTotal) || 2500,
+      webSearchUsedCredits: Math.max(0, Number(settingsForm.value.webSearchUsedCredits) || 0),
     })
     if (stats.value) {
       stats.value.globalTokenLimit = res.globalTokenLimit
       stats.value.tokenRatePer1000 = res.tokenRatePer1000
       stats.value.systemPrompt = res.systemPrompt
+      if (res.webSearchUsage) stats.value.webSearchUsage = res.webSearchUsage
     }
     settingsModalOpen.value = false
     uiStore.showToast('تنظیمات با موفقیت ذخیره شد.', 'success')
@@ -887,15 +1007,51 @@ async function executeDelete() {
   errorMessage.value = ''
   try {
     if (deleteTarget.value.type === 'model') {
-      await modelsStore.removeModel(deleteTarget.value.id)
+      const targetId = deleteTarget.value.id
+      const wasActive = modelsStore.models.find((m) => m.id === targetId)?.isActive !== false
+      bumpStat('totalModels', -1)
+      if (wasActive) bumpStat('activeModels', -1)
+      try {
+        await modelsStore.removeModel(targetId)
+        await refreshStats()
+      } catch (err) {
+        bumpStat('totalModels', 1)
+        if (wasActive) bumpStat('activeModels', 1)
+        throw err
+      }
     } else if (deleteTarget.value.type === 'provider') {
-      await modelsService.deleteProvider(deleteTarget.value.id)
-      providers.value = providers.value.filter((p) => p.id !== deleteTarget.value?.id)
-      await modelsStore.fetchModels(true)
+      const targetId = deleteTarget.value.id
+      const prevList = [...providers.value]
+      const wasActive = prevList.find((p) => p.id === targetId)?.isActive !== false
+      providers.value = prevList.filter((p) => p.id !== targetId)
+      bumpStat('totalProviders', -1)
+      if (wasActive) bumpStat('activeProviders', -1)
+      try {
+        await modelsService.deleteProvider(targetId)
+        const data = await modelsService.listProviders()
+        providers.value = Array.isArray(data) ? data : []
+        await modelsStore.fetchModels(true)
+        await refreshStats()
+      } catch (err) {
+        providers.value = prevList
+        bumpStat('totalProviders', 1)
+        if (wasActive) bumpStat('activeProviders', 1)
+        throw err
+      }
     } else if (deleteTarget.value.type === 'conversation') {
-      await adminService.deleteConversation(deleteTarget.value.id)
-      conversations.value = conversations.value.filter((c) => c.id !== deleteTarget.value?.id)
-      uiStore.showToast('گفتگو با موفقیت حذف شد.', 'success')
+      const targetId = deleteTarget.value.id
+      const prevList = [...conversations.value]
+      conversations.value = prevList.filter((c) => c.id !== targetId)
+      bumpStat('totalConversations', -1)
+      try {
+        await adminService.deleteConversation(targetId)
+        await refreshStats()
+        uiStore.showToast('گفتگو با موفقیت حذف شد.', 'success')
+      } catch (err) {
+        conversations.value = prevList
+        bumpStat('totalConversations', 1)
+        throw err
+      }
     } else if (deleteTarget.value.type === 'file') {
       await adminService.deleteFile(deleteTarget.value.id)
       files.value = files.value.filter((f) => f.id !== deleteTarget.value?.id)
@@ -1501,6 +1657,19 @@ onMounted(loadData)
             </td>
             <td :data-label="labels.actions" class="actions-cell">
               <div class="action-buttons">
+                <BaseButton
+                  variant="ghost"
+                  size="sm"
+                  icon
+                  :title="model.isDefault ? 'مدل پیش‌فرض فعلی' : 'تعیین به‌عنوان مدل پیش‌فرض سراسری'"
+                  :disabled="model.isDefault"
+                  data-testid="make-default-model"
+                  @click="setPlatformDefault(model)"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" :fill="model.isDefault ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" :class="model.isDefault ? 'text-amber-400' : ''">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                  </svg>
+                </BaseButton>
                 <BaseButton variant="ghost" size="sm" @click="openModelEditor(model)">
                   {{ labels.edit }}
                 </BaseButton>
@@ -2348,6 +2517,38 @@ onMounted(loadData)
               type="number"
               min="1"
               max="20"
+              :disabled="isSaving"
+            />
+          </label>
+
+          <!-- Web Search Quota (Serper credits) -->
+          <div class="col-span-full settings-section-divider">
+            <span class="settings-section-label">اعتبار جستجوی وب (Serper)</span>
+          </div>
+          <div class="col-span-full">
+            <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>باقی‌مانده: {{ webSearchRemaining.toLocaleString() }} از {{ webSearchQuota.toLocaleString() }}</span>
+              <span v-if="webSearchLow" class="font-medium text-amber-600 dark:text-amber-400">اعتبار رو به اتمام است</span>
+            </div>
+            <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
+              <div class="h-full rounded-full bg-primary transition-all" :style="{ width: webSearchPercent + '%' }"></div>
+            </div>
+          </div>
+          <label>
+            <span class="field-label">سقف اعتبار جستجو</span>
+            <input
+              v-model.number="settingsForm.webSearchQuotaTotal"
+              type="number"
+              min="1"
+              :disabled="isSaving"
+            />
+          </label>
+          <label>
+            <span class="field-label">مصرف‌شده (اصلاح دستی برای تطبیق با داشبورد Serper)</span>
+            <input
+              v-model.number="settingsForm.webSearchUsedCredits"
+              type="number"
+              min="0"
               :disabled="isSaving"
             />
           </label>

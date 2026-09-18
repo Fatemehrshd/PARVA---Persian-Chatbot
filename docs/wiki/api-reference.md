@@ -242,9 +242,12 @@
 - **بدنه درخواست:**
   ```json
   {
-    "content": "متن سوال کاربر"
+    "content": "متن سوال کاربر",
+    "fileIds": ["file-uuid-1"],
+    "useWebSearch": true
   }
   ```
+  (`fileIds` و `useWebSearch` اختیاری‌اند؛ `useWebSearch: true` فقط وقتی جستجو می‌کند که کلید سراسری ادمین هم روشن باشد.)
 - **پروتکل پاسخ سرور (Event Stream Framing):**
   1. هر توکن کلمه با رویداد `event: token` ارسال می‌شود:
      ```http
@@ -260,6 +263,21 @@
      data: {"messageId":"msg-uuid-assistant"}
      ```
   3. اتصال بسته می‌شود.
+
+- **رویدادهای جستجوی وب (فقط وقتی `useWebSearch: true` و کلید ادمین روشن):**
+  ```http
+  event: search-status
+  data: {"state":"searching"}
+
+  event: sources
+  data: {"sources":[{"title":"...","url":"https://...","snippet":"..."}]}
+
+  event: sources-error
+  data: {"message":"جستجوی وب ناموفق بود؛ پاسخ بدون منابع ادامه می‌یابد"}
+  ```
+  منابع در ستون `sources` پیام دستیار ذخیره می‌شوند و در تاریخچه (`GET .../messages`) برمی‌گردند. هر سه رویداد در مسیر بازاتصال (`GET .../stream`) هم بازپخش می‌شوند.
+- **تنظیم ادمین:** `PUT /admin/settings` با `{ "webSearchEnabled": true|false }` (پیش‌فرض روشن)؛ در `GET /admin/settings` خوانده می‌شود.
+- **مدل پیش‌فرض کاربر:** `GET /models/default` مدل پیش‌فرض سراسریِ قابل‌استفاده را (با کلید maskشده) برمی‌گرداند؛ اگر دیفالتی تنظیم نشده یا غیرفعال باشد 404 می‌دهد و کلاینت به منطق لیستی برمی‌گردد.
 
 #### ب) حالت غیراستریمینگ (JSON Fallback):
 - در صورت ارسال هدر `Accept: application/json`، سرور کل پاسخ هوش مصنوعی را در حافظه تجمیع کرده و پس از اتمام به شکل یک پاکت استاندارد JSON بازمی‌گرداند:

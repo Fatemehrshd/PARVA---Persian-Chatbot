@@ -7,7 +7,51 @@ import type {
   SendMessageRequest,
   SearchResult,
   ActiveStreamStatus,
+  WebSource,
 } from '../types'
+
+/** Callbacks for every SSE event the chat stream can emit. */
+export interface SseCallbacks {
+  onToken?: (token: string) => void
+  onSync?: (content: string) => void
+  onTitle?: (title: string) => void
+  onDone?: (messageId: string) => void
+  onError?: (err: any) => void
+  onSearchStatus?: (state: string) => void
+  onSources?: (sources: WebSource[]) => void
+  onSourcesError?: (message: string) => void
+  onActivity?: () => void
+}
+
+/**
+ * Dispatches one parsed SSE data payload to the matching callback.
+ * Returns 'done'/'error' for terminal events so the reader can update its flags.
+ */
+export function dispatchSseEvent(
+  currentEvent: string,
+  data: any,
+  cb: SseCallbacks
+): 'done' | 'error' | void {
+  if (currentEvent === 'token' && data.content !== undefined) {
+    cb.onToken?.(data.content)
+  } else if (currentEvent === 'sync' && data.content !== undefined) {
+    cb.onSync?.(data.content)
+  } else if (currentEvent === 'title' && data.title) {
+    cb.onTitle?.(data.title)
+  } else if (currentEvent === 'done' && data.messageId) {
+    cb.onDone?.(data.messageId)
+    return 'done'
+  } else if (currentEvent === 'search-status' && data.state) {
+    cb.onSearchStatus?.(data.state)
+  } else if (currentEvent === 'sources' && Array.isArray(data.sources)) {
+    cb.onSources?.(data.sources)
+  } else if (currentEvent === 'sources-error') {
+    cb.onSourcesError?.(data.message || 'خطا در جستجو')
+  } else if (currentEvent === 'error') {
+    cb.onError?.(new Error(data.error || data.message || 'خطا در برقراری ارتباط'))
+    return 'error'
+  }
+}
 
 /**
  * Chat Service (Maps 1:1 with OpenAPI tag: Chat)
@@ -189,7 +233,10 @@ export const chatService = {
     onDone?: (messageId: string) => void,
     onError?: (err: any) => void,
     signal?: AbortSignal,
-    onTitle?: (title: string) => void
+    onTitle?: (title: string) => void,
+    onSearchStatus?: (state: string) => void,
+    onSources?: (sources: WebSource[]) => void,
+    onSourcesError?: (message: string) => void
   ): Promise<void> {
     const token = localStorage.getItem('token')
     const headers: Record<string, string> = {
@@ -214,7 +261,7 @@ export const chatService = {
       if (!response.ok) {
         throw new Error(`Reconnection failed: ${response.status}`)
       }
-      await readSseStream(response, { onToken, onSync, onTitle, onDone, onError }, internalAbort.signal)
+      await readSseStream(response, { onToken, onSync, onTitle, onDone, onError, onSearchStatus, onSources, onSourcesError }, internalAbort.signal)
     } catch (err: any) {
       if (isTimeout) {
         onError?.(new Error('زمان انتظار برای دریافت پاسخ به پایان رسید (Timeout)'))
@@ -242,7 +289,11 @@ export const chatService = {
     signal?: AbortSignal,
     onTitle?: (title: string) => void,
     onSync?: (accumulated: string) => void,
-    fileIds?: string[]
+    fileIds?: string[],
+    onSearchStatus?: (state: string) => void,
+    onSources?: (sources: WebSource[]) => void,
+    onSourcesError?: (message: string) => void,
+    opts?: { useWebSearch?: boolean }
   ): Promise<void> {
     const token = localStorage.getItem('token')
     const headers: Record<string, string> = {
@@ -280,6 +331,9 @@ export const chatService = {
       if (fileIds && fileIds.length > 0) {
         payload.fileIds = fileIds
       }
+      if (opts?.useWebSearch) {
+        payload.useWebSearch = true
+      }
       const response = await fetch(url, {
         method: 'POST',
         headers,
@@ -311,7 +365,7 @@ export const chatService = {
 
       const streamRes = await readSseStream(
         response,
-        { onToken, onSync, onTitle, onDone, onError, onActivity: armInactivityTimer },
+        { onToken, onSync, onTitle, onDone, onError, onSearchStatus, onSources, onSourcesError, onActivity: armInactivityTimer },
         internalAbort.signal
       )
 
@@ -328,7 +382,10 @@ export const chatService = {
           onDone,
           onError,
           signal,
-          onTitle
+          onTitle,
+          onSearchStatus,
+          onSources,
+          onSourcesError
         )
       }
     } catch (error: any) {
@@ -353,7 +410,10 @@ export const chatService = {
           onDone,
           onError,
           signal,
-          onTitle
+          onTitle,
+          onSearchStatus,
+          onSources,
+          onSourcesError
         )
       } catch {
         const msg = error?.message?.includes('fetch') || error?.message?.includes('NetworkError')
@@ -372,14 +432,7 @@ export const chatService = {
  */
 async function readSseStream(
   response: Response,
-  callbacks: {
-    onToken?: (token: string) => void
-    onSync?: (content: string) => void
-    onTitle?: (title: string) => void
-    onDone?: (messageId: string) => void
-    onError?: (err: any) => void
-    onActivity?: () => void
-  },
+  callbacks: SseCallbacks,
   signal?: AbortSignal
 ): Promise<{ done: boolean; hasError: boolean }> {
   if (!response.body) {
@@ -418,19 +471,11 @@ async function readSseStream(
         const dataStr = trimmed.substring(5).trim()
         try {
           const data = JSON.parse(dataStr)
-          if (currentEvent === 'token' && data.content !== undefined) {
-            callbacks.onToken?.(data.content)
-          } else if (currentEvent === 'sync' && data.content !== undefined) {
-            callbacks.onSync?.(data.content)
-          } else if (currentEvent === 'title' && data.title) {
-            callbacks.onTitle?.(data.title)
-          } else if (currentEvent === 'done' && data.messageId) {
+          const outcome = dispatchSseEvent(currentEvent, data, callbacks)
+          if (outcome === 'done') {
             receivedDone = true
-            callbacks.onDone?.(data.messageId)
-          } else if (currentEvent === 'error') {
+          } else if (outcome === 'error') {
             receivedError = true
-            const errorMsg = data.error || data.message || 'خطا در برقراری ارتباط'
-            callbacks.onError?.(new Error(errorMsg))
             reader.cancel().catch(() => {})
             return { done: false, hasError: true }
           }

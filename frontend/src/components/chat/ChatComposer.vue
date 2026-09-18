@@ -6,6 +6,7 @@ import { useUiStore } from '../../stores/ui'
 import { getActiveTypingDirection } from '../../utils/textDirection'
 import { useFileUpload } from '../../composables/useFileUpload'
 import FilePreviewCard from './FilePreviewCard.vue'
+import BaseToggle from '../ui/BaseToggle.vue'
 
 const chatStore = useChatStore()
 const modelsStore = useModelsStore()
@@ -74,6 +75,15 @@ function pickDocuments() {
   }
   attachmentMenuOpen.value = false
   docInputRef.value?.click()
+}
+
+// ─── Per-conversation feature flags (web search / thinking) ────────────────
+const activeConvId = computed(() => chatStore.currentConversationId ?? '__new__')
+
+function toggleWebSearch() {
+  const cur = chatStore.getConvFlag(activeConvId.value).web
+  chatStore.setConvFlag(activeConvId.value, { web: !cur })
+  attachmentMenuOpen.value = false
 }
 
 function handleImageChange(e: Event) {
@@ -256,11 +266,13 @@ async function handleSubmit() {
   if (textareaRef.value) {
     textareaRef.value.style.height = 'auto'
   }
-  chatStore.sendMessage(text, files)
+  chatStore.sendMessage(text, files, { useWebSearch: chatStore.getConvFlag(activeConvId.value).web })
 }
 
 const selectableModels = computed(() => {
-  return modelsStore.activeModels.length > 0 ? modelsStore.activeModels : modelsStore.models
+  const list = modelsStore.activeModels.length > 0 ? modelsStore.activeModels : modelsStore.models
+  // Platform default always on top; the rest keeps its order (stable sort).
+  return [...list].sort((a, b) => Number(b.isDefault ?? false) - Number(a.isDefault ?? false))
 })
 
 function handleStop() {
@@ -463,13 +475,33 @@ onUnmounted(() => {
                     <line x1="16" y1="13" x2="8" y2="13"/>
                     <line x1="16" y1="17" x2="8" y2="17"/>
                   </svg>
-                  <span>اسناد (PDF، اکسل، متن)</span>
+                  <span>اسناد</span>
+                </button>
+                <button
+                  type="button"
+                  class="attachment-menu-item"
+                  data-testid="toggle-web-search"
+                  :class="chatStore.getConvFlag(activeConvId).web ? 'bg-primary/10 text-primary' : ''"
+                  @click="toggleWebSearch"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="2" y1="12" x2="22" y2="12"/>
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                  </svg>
+                  <span>جستجوی وب</span>
+                  <BaseToggle
+                    size="sm"
+                    :modelValue="chatStore.getConvFlag(activeConvId).web"
+                    @click.stop
+                    @update:modelValue="toggleWebSearch"
+                  />
                 </button>
               </div>
             </div>
 
             <!-- Model Picker Dropdown inside Chat Form -->
-            <div class="model-picker-container" ref="modelPickerRef" @click.stop>
+            <div class="model-picker-container flex items-center gap-1.5" ref="modelPickerRef" @click.stop>
               <button
                 type="button"
                 class="model-badge-btn"
@@ -480,6 +512,20 @@ onUnmounted(() => {
                 <span class="model-name">{{ modelsStore.selectedModel.name }}</span>
                 <svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline :points="modelMenuOpen ? '6 15 12 9 18 15' : '18 15 12 9 6 15'"></polyline>
+                </svg>
+              </button>
+              <button
+                type="button"
+                data-testid="modelbar-search-toggle"
+                class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors"
+                :class="chatStore.getConvFlag(activeConvId).web ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'"
+                :title="chatStore.getConvFlag(activeConvId).web ? 'جستجوی وب فعال است — کلیک برای غیرفعال‌سازی' : 'فعال‌سازی جستجوی وب'"
+                @click="toggleWebSearch"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="2" y1="12" x2="22" y2="12"/>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
                 </svg>
               </button>
 
@@ -497,7 +543,13 @@ onUnmounted(() => {
                     @click="selectModel(model.id)"
                   >
                     <div class="model-option-info">
-                      <span class="model-option-name">{{ model.name }}</span>
+                      <span class="flex items-center gap-1.5">
+                        <span class="model-option-name">{{ model.name }}</span>
+                        <span
+                          v-if="model.isDefault"
+                          class="rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
+                        >پیش‌فرض</span>
+                      </span>
                       <span class="model-option-meta font-mono">{{ model.provider }} • {{ model.apiIdentifier }}</span>
                     </div>
                     <span v-if="model.id === modelsStore.selectedModelId" class="check-mark">✓</span>

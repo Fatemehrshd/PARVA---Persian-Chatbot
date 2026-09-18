@@ -9,6 +9,7 @@ import { OpenAiCompatForwarder, ChatMessage } from '../ai/openai-compat.forwarde
 import { SettingsService } from '../admin/settings.service';
 import { UsersService } from '../users/users.service';
 import { ActiveStreamService, ActiveStreamStatus } from './active-stream.service';
+import { WebSearchService } from '../web-search/web-search.service';
 
 export interface ChatChunk {
   token?: string;
@@ -16,6 +17,9 @@ export interface ChatChunk {
   saved?: Message;
   title?: string;
   error?: string;
+  searchStatus?: 'searching';
+  sources?: { title: string; url: string; snippet?: string }[];
+  searchFailed?: boolean;
 }
 
 const SYSTEM_PROMPT = 'You are a helpful and knowledgeable AI assistant.';
@@ -70,6 +74,7 @@ export class ChatService {
     @Optional() private users?: UsersService,
     @Optional() private activeStream?: ActiveStreamService,
     @Optional() @InjectRepository(FileAttachment) private fileRepo?: Repository<FileAttachment>,
+    @Optional() private webSearch?: WebSearchService,
   ) {}
 
   list(userId: string, limit: number = 50, page: number = 1) {
@@ -250,6 +255,7 @@ export class ChatService {
     id: string,
     content: string,
     fileIds?: string[],
+    options?: { useWebSearch?: boolean },
   ): AsyncGenerator<ChatChunk> {
     const conversation = await this.assertOwned(userId, id);
 
@@ -317,6 +323,34 @@ export class ChatService {
 
     const rawContent = (content || '').trim();
     const session = this.activeStream?.startSession(id, userId, rawContent);
+
+    // Live web search (opt-in per message + admin kill-switch).
+    let webSources: { title: string; url: string; snippet?: string }[] | null = null;
+    let webSearchFailed = false;
+    const wantSearch = options?.useWebSearch === true;
+    if (wantSearch) {
+      const enabled =
+        this.settings && typeof (this.settings as any).getWebSearchEnabled === 'function'
+          ? await (this.settings as any).getWebSearchEnabled()
+          : true;
+      if (enabled && this.webSearch) {
+        yield { searchStatus: 'searching' };
+        // resetThinkingTimer/setSources land in the ActiveStream task — the
+        // `as any` keeps this compiling until then (fakes stay safe via ?. ).
+        (this.activeStream as any)?.resetThinkingTimer?.(id);
+        try {
+          webSources = await this.webSearch.search(rawContent || 'تحلیل فایل پیوست');
+          (this.activeStream as any)?.setSources?.(id, webSources);
+          yield { sources: webSources };
+        } catch (err) {
+          webSearchFailed = true;
+          this.logger.warn(
+            `Web search failed, continuing without sources: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          yield { searchFailed: true };
+        }
+      }
+    }
 
     // If the last message in DB is already an unanswered user message with the exact same content (e.g. from retry),
     // avoid saving duplicate user messages in DB.
@@ -400,6 +434,7 @@ export class ChatService {
           content: full,
           isInterrupted: false,
           stoppedByUser: false,
+          sources: webSources,
         }),
       );
       // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست
@@ -434,8 +469,14 @@ export class ChatService {
       : SYSTEM_PROMPT;
 
     const historyWithoutLast = history.length > 0 ? history.slice(0, -1) : [];
+    const systemContent =
+      webSources && webSources.length > 0
+        ? `${activeSystemPrompt}\n\n[منابع وب (در پاسخ با [n] به شماره منبع ارجاع بده)]:\n${webSources
+            .map((s, i) => `[${i + 1}] ${s.title} — ${s.url}\n${s.snippet ?? ''}`)
+            .join('\n')}`
+        : activeSystemPrompt;
     const messages: ChatMessage[] = [
-      { role: 'system', content: activeSystemPrompt },
+      { role: 'system', content: systemContent },
       ...historyWithoutLast.map((m) => ({ role: m.role, content: m.content })),
     ];
 
@@ -488,6 +529,19 @@ export class ChatService {
         );
       }
     } finally {
+      // On search failure the note is streamed AND saved, so live text and
+      // history stay identical (the searchFailed flag itself is live-only).
+      if (webSearchFailed && full) {
+        const note = '\n\n(جستجوی وب ناموفق بود؛ این پاسخ بدون استفاده از منابع وب تولید می‌شود.)';
+        full += note;
+        this.activeStream?.appendToken(id, note);
+        yield { token: note };
+      }
+      // A user-aborted (stopped) answer must not claim sources: the reply was
+      // cut off mid-way, so persisting citations would be dishonest. Provider
+      // mid-stream failures keep theirs (partial answer + streamed sources).
+      const stoppedByUserAbort =
+        session?.abortController?.signal.aborted === true && !failedMidStream;
       if (full && !savedAssistant) {
         savedAssistant = await this.msg.save(
           this.msg.create({
@@ -496,6 +550,7 @@ export class ChatService {
             content: full,
             isInterrupted: failedMidStream,
             stoppedByUser: false,
+            sources: stoppedByUserAbort ? null : webSources,
           }),
         );
         // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست
@@ -676,6 +731,9 @@ export class ChatService {
     if (session.accumulatedText) {
       yield { sync: session.accumulatedText };
     }
+    if (session.sources) {
+      yield { sources: session.sources };
+    }
     if (session.title) {
       yield { title: session.title };
     }
@@ -691,6 +749,8 @@ export class ChatService {
     const unsubscribe = this.activeStream?.subscribe(id, (event: any) => {
       if (event.type === 'token') {
         queue.push({ token: event.content });
+      } else if (event.type === 'sources') {
+        queue.push({ sources: event.sources });
       } else if (event.type === 'title') {
         queue.push({ title: event.title });
       } else if (event.type === 'done') {

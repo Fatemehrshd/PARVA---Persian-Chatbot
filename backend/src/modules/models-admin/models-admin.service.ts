@@ -171,7 +171,9 @@ export class ModelsAdminService {
       throw err;
     }
     if (!m) throw new NotFoundException('Resource not found');
-    await this.repo.update({}, { isDefault: false });
+    // NB: TypeORM rejects update() with empty criteria — and clearing only the
+    // previously-default row(s) is cheaper anyway.
+    await this.repo.update({ isDefault: true }, { isDefault: false });
     m.isDefault = true;
     const saved = await this.repo.save(m);
     return this.maskApiKey(saved);
@@ -179,5 +181,19 @@ export class ModelsAdminService {
 
   async getDefault(): Promise<AiModel | null> {
     return this.repo.findOne({ where: { isDefault: true } });
+  }
+
+  /**
+   * User-facing platform default: the flagged model, but only when it is
+   * actually usable (active itself, provider not disabled). Credentials stay
+   * masked. Returns null when no usable default exists — callers fall back
+   * to their list-based resolution.
+   */
+  async getUsableDefault(): Promise<AiModel | null> {
+    const m = await this.getDefault();
+    if (!m || m.isActive === false) return null;
+    const provider = await this.resolveProvider(m);
+    if (provider && provider.isActive === false) return null;
+    return this.maskApiKey(m);
   }
 }

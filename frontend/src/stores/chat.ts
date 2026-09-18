@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Conversation, Message, FileAttachmentItem } from '../types'
+import type { Conversation, Message, FileAttachmentItem, WebSource } from '../types'
 import { chatService } from '../services/chat.service'
 import { filesService } from '../services/files.service'
+import { modelsService } from '../services/models.service'
 import { checkBackendHealth } from '../services/api'
+import { markDefaultModel } from '../utils/models'
 import { useModelsStore } from './models'
 import { useUiStore } from './ui'
 
@@ -18,6 +20,9 @@ interface ConvStreamState {
   lastUserPrompt: string
   charBuffer: string[]
   releaseTimer: ReturnType<typeof setTimeout> | null
+  pendingSources: WebSource[] | null
+  isSearching: boolean
+  searchFailed: boolean
 }
 
 // Delay between rendered characters during streaming — small enough to feel
@@ -35,6 +40,9 @@ function makeDefaultState(): ConvStreamState {
     lastUserPrompt: '',
     charBuffer: [],
     releaseTimer: null,
+    pendingSources: null,
+    isSearching: false,
+    searchFailed: false,
   }
 }
 
@@ -76,6 +84,24 @@ export const useChatStore = defineStore('chat', () => {
   // Using a Map so each conversation can have completely independent streaming state.
   // We wrap it in a ref<Map> so Vue can track mutations when we replace entries.
   const convStreamStates = ref<Map<string, ConvStreamState>>(new Map())
+
+  // ─── Per-conversation feature flags (web search / thinking) ───────────────
+  // Survives refresh via localStorage; a new conversation starts with both off.
+  const convFlags = ref<Record<string, { web: boolean }>>({})
+  function persistConvFlags() {
+    try { localStorage.setItem('chat_conv_flags', JSON.stringify(convFlags.value)) } catch {}
+  }
+  function getConvFlag(convId: string) {
+    return convFlags.value[convId] ?? { web: false }
+  }
+  function setConvFlag(convId: string, patch: Partial<{ web: boolean }>) {
+    convFlags.value[convId] = { ...getConvFlag(convId), ...patch }
+    persistConvFlags()
+  }
+  try {
+    const raw = localStorage.getItem('chat_conv_flags')
+    if (raw) convFlags.value = JSON.parse(raw)
+  } catch {}
 
   // ─── Helper to get/init state for a convId ────────────────────────────────
   function getState(convId: string | null): ConvStreamState | null {
@@ -418,8 +444,38 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   // ─── Create conversation ───────────────────────────────────────────────────
+  /** Platform default for a fresh chat (active-first). Never throws. */
+  function platformDefaultModelId(): string | undefined {
+    const pool = modelsStore.activeModels.length > 0 ? modelsStore.activeModels : modelsStore.models
+    return (pool.find((m) => m.isDefault) ?? pool[0])?.id
+  }
+
   async function createNewConversation(title = 'گفتگوی جدید'): Promise<string> {
-    const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
+    // New chats always start on the current platform default and the input
+    // follows it. The dedicated endpoint is tried first (cheap + exact);
+    // the list-based resolution is the fallback. Explicit per-conversation
+    // picks still win via switchConversationModel.
+    let modelId: string | undefined
+    try {
+      const fresh = await modelsService.getDefaultModel()
+      if (fresh?.id) {
+        if (!modelsStore.models.some((m) => m.id === fresh.id)) {
+          await modelsStore.fetchModels().catch(() => {})
+        }
+        markDefaultModel(modelsStore.models, fresh.id)
+        modelsStore.selectModel(fresh.id)
+        modelId = fresh.id
+      }
+    } catch {
+      // fall through to list-based resolution below
+    }
+    if (!modelId) {
+      await modelsStore.fetchModels().catch(() => {})
+      const active = modelsStore.activeModels
+      const def = active.find((m) => m.isDefault) ?? modelsStore.defaultModel
+      modelId = def?.id ?? modelsStore.selectedModel?.id ?? modelsStore.selectedModelId
+      if (def?.id) modelsStore.selectModel(def.id)
+    }
     try {
       const created = await chatService.createConversation(modelId, title)
       if (created && created.id) {
@@ -470,6 +526,10 @@ export const useChatStore = defineStore('chat', () => {
       } else {
         currentConversationId.value = null
         messages.value = []
+        // Fresh composer with no conversation shows the platform default,
+        // not a leftover pick from the deleted chat.
+        const defId = platformDefaultModelId()
+        if (defId) modelsStore.selectModel(defId)
       }
     }
   }
@@ -508,7 +568,8 @@ export const useChatStore = defineStore('chat', () => {
     convId: string,
     content: string,
     userMessage: Message,
-    fileIds?: string[]
+    fileIds?: string[],
+    opts?: { useWebSearch?: boolean }
   ) {
     // Prepare streaming state
     {
@@ -538,12 +599,17 @@ export const useChatStore = defineStore('chat', () => {
     }
     resetWatchdog(convId, 35000)
 
+    // Explicit opts win (composer passes the toggled value); every other path
+    // (queue, files, resume/retry) inherits the stored per-conversation flag.
+    const useWebSearch = opts?.useWebSearch ?? getConvFlag(convId).web
+
     await chatService.sendMessageStream(
       convId,
       content,
       (token: string) => {
         const s = ensureState(convId)
         s.isThinking = false
+        s.isSearching = false
         streamedAny = true
         userMessage.status = 'sent'
         s.streamError = null
@@ -597,6 +663,7 @@ export const useChatStore = defineStore('chat', () => {
         const s = ensureState(convId)
         s.abortController = null
         s.isThinking = false
+        s.isSearching = false
         s.isStreaming = false
         sessionStorage.removeItem('active_streaming_conv')
 
@@ -645,6 +712,7 @@ export const useChatStore = defineStore('chat', () => {
       (syncText: string) => {
         const s = ensureState(convId)
         s.isThinking = false
+        s.isSearching = false
         streamedAny = true
         userMessage.status = 'sent'
         s.streamError = null
@@ -652,7 +720,30 @@ export const useChatStore = defineStore('chat', () => {
         convStreamStates.value.set(convId, { ...s })
         resetWatchdog(convId, 25000)
       },
-      fileIds
+      fileIds,
+      (searchState: string) => {
+        const s = ensureState(convId)
+        s.isSearching = searchState === 'searching'
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 25000)
+      },
+      (sources: WebSource[]) => {
+        const s = ensureState(convId)
+        s.pendingSources = sources
+        streamedAny = true
+        userMessage.status = 'sent'
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 25000)
+      },
+      (_message: string) => {
+        const s = ensureState(convId)
+        s.isSearching = false
+        s.searchFailed = true
+        streamedAny = true
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 25000)
+      },
+      { useWebSearch }
     )
   }
 
@@ -719,7 +810,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   // ─── Send message ──────────────────────────────────────────────────────────
-  async function sendMessage(content: string, files?: FileAttachmentItem[]) {
+  async function sendMessage(content: string, files?: FileAttachmentItem[], opts?: { useWebSearch?: boolean }) {
     if (isTokenLimitExceeded.value) {
       uiStore.showToast('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است). امکان ارسال پیام جدید وجود ندارد.', 'error')
       return
@@ -820,6 +911,12 @@ export const useChatStore = defineStore('chat', () => {
             pendingMessageQueue.value.delete(convId)
             pendingMessageQueue.value.set(created.id, oldQueue)
           }
+          // Move pre-send feature flags ('__new__' → real id)
+          if (convFlags.value['__new__']) {
+            convFlags.value[created.id] = { ...getConvFlag(created.id), ...convFlags.value['__new__'] }
+            delete convFlags.value['__new__']
+            persistConvFlags()
+          }
           convId = created.id
         }
       } catch (err) {
@@ -857,7 +954,7 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     // 3. Dispatch stream immediately
-    await executeMessageStream(convId, content, userMessage, fileIds)
+    await executeMessageStream(convId, content, userMessage, fileIds, opts)
   }
 
   // ─── Retry failed file in message ──────────────────────────────────────────
@@ -964,13 +1061,28 @@ export const useChatStore = defineStore('chat', () => {
           role: 'assistant',
           content: textToSave,
           createdAt: new Date().toISOString(),
-          isInterrupted
+          isInterrupted,
+          sources: s.pendingSources,
+          searchFailed: s.searchFailed || undefined
         })
       }
+    }
+    // Live sidebar reorder (mirrors backend updatedAt DESC): the conversation
+    // that just got activity jumps to the top without needing a refresh.
+    const convIdx = conversations.value.findIndex((c) => c.id === convId)
+    if (convIdx > 0) {
+      const [bumped] = conversations.value.splice(convIdx, 1)
+      bumped.updatedAt = new Date().toISOString()
+      conversations.value.unshift(bumped)
+    } else if (convIdx === 0) {
+      conversations.value[0].updatedAt = new Date().toISOString()
     }
     s.currentStreamingText = ''
     s.isStreaming = false
     s.isThinking = false
+    s.pendingSources = null
+    s.isSearching = false
+    s.searchFailed = false
     convStreamStates.value.set(convId, { ...s })
   }
 
@@ -1097,6 +1209,14 @@ export const useChatStore = defineStore('chat', () => {
     }
     sessionStorage.removeItem('active_streaming_conv')
 
+    // A user-stopped answer claims no sources: drop anything pending so the
+    // stopped message (live and, via the backend fix, in history too) shows
+    // no sources card.
+    const st = ensureState(convId)
+    st.pendingSources = null
+    st.isSearching = false
+    convStreamStates.value.set(convId, { ...st })
+
     const stoppedText = s?.currentStreamingText?.trim() || ''
     const content = stoppedText || 'تولید پاسخ توسط کاربر متوقف شد.'
     finishStream(convId, `msg-${Date.now()}`, true, content)
@@ -1133,6 +1253,10 @@ export const useChatStore = defineStore('chat', () => {
     // Per-conv streaming state (for sidebar indicators)
     convStreamStates,
     getConvIsStreaming,
+    // Per-conversation feature flags (web search / thinking)
+    convFlags,
+    getConvFlag,
+    setConvFlag,
     // Actions
     loadConversations,
     loadMoreConversations,
@@ -1150,6 +1274,7 @@ export const useChatStore = defineStore('chat', () => {
     continueLastMessage,
     resumeInterruptedMessage,
     stopStreaming,
+    finishStream,
     clearStreamError,
     pendingMessageQueue
   }

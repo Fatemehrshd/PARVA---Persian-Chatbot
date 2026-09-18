@@ -74,6 +74,7 @@ export class AdminDashboardController {
       globalTokenLimit: settingsData.globalTokenLimit,
       tokenRatePer1000: settingsData.tokenRatePer1000,
       systemPrompt: settingsData.systemPrompt,
+      webSearchUsage: settingsData.webSearchUsage,
     };
   }
 }

@@ -13,6 +13,7 @@ import { AdminModule } from '../admin/admin.module';
 import { FileAttachment } from '../files/file-attachment.entity';
 import { FilesModule } from '../files/files.module';
 import { UsersModule } from '../users/users.module';
+import { WebSearchModule } from '../web-search/web-search.module';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 
 @Module({
@@ -23,6 +24,7 @@ import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
     AdminModule,
     UsersModule,
     FilesModule,
+    WebSearchModule,
     JwtModule.register({ secret: process.env.JWT_SECRET ?? 'dev-secret' }),
   ],
   controllers: [ChatController, OpenAiCompatController],

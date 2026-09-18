@@ -40,6 +40,20 @@ export class UpdateSettingsDto {
   @IsInt({ message: 'تایم‌اوت پردازش باید عدد صحیح باشد' })
   @Min(10)
   fileProcessingTimeoutSec?: number;
+
+  @IsOptional()
+  @IsBoolean({ message: 'وضعیت جستجوی وب باید boolean باشد' })
+  webSearchEnabled?: boolean;
+
+  @IsOptional()
+  @IsInt({ message: 'سقف اعتبار جستجو باید عدد صحیح باشد' })
+  @Min(1, { message: 'سقف اعتبار جستجو باید حداقل ۱ باشد' })
+  webSearchQuotaTotal?: number;
+
+  @IsOptional()
+  @IsInt({ message: 'مصرف اعتبار جستجو باید عدد صحیح باشد' })
+  @Min(0, { message: 'مصرف اعتبار جستجو نمی‌تواند منفی باشد' })
+  webSearchUsedCredits?: number;
 }
 
 export class UpdateUserAdminDto {

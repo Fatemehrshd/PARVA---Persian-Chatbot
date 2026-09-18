@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { AiModel } from '../models-admin/ai-model.entity';
 import { AiProvider } from '../models-admin/ai-provider.entity';
+import { OpenAiCompatAdapter } from './adapters/openai-compat.adapter';
 
 export interface ChatMessage {
   role: string;
@@ -35,6 +36,7 @@ export interface StreamOptions {
 @Injectable()
 export class OpenAiCompatForwarder {
   private readonly logger = new Logger(OpenAiCompatForwarder.name);
+  private readonly adapter = new OpenAiCompatAdapter();
 
   resolveTarget(model: AiModel | null, provider: AiProvider | null): ResolvedTarget | null {
     const apiKey = model?.apiKey || provider?.apiKey || process.env.OPENAI_API_KEY || '';
@@ -48,12 +50,15 @@ export class OpenAiCompatForwarder {
     return { apiIdentifier: model?.apiIdentifier || 'gpt-4o', apiKey, baseUrl };
   }
 
-  /** Streams assistant deltas token-by-token from the upstream SSE response. */
+  /**
+   * Streams assistant deltas token-by-token from the upstream SSE response.
+   * Yields string (for content deltas) or { reasoning: string } (for reasoning deltas).
+   */
   async *stream(
     target: ResolvedTarget,
     messages: ChatMessage[],
     options?: StreamOptions,
-  ): AsyncGenerator<string> {
+  ): AsyncGenerator<any> {
     const url = target.baseUrl.endsWith('/chat/completions')
       ? target.baseUrl
       : `${target.baseUrl}/chat/completions`;
@@ -164,15 +169,21 @@ export class OpenAiCompatForwarder {
           if (!line.startsWith('data:')) continue;
           const payload = line.slice(5).trim();
           if (payload === '[DONE]') return;
-          let delta: unknown;
+          let parsed: unknown;
           try {
-            delta = JSON.parse(payload)?.choices?.[0]?.delta?.content;
+            parsed = JSON.parse(payload);
           } catch {
             continue; // keep-alives / partial frames from the upstream
           }
-          if (typeof delta === 'string' && delta) {
-            emitted = true;
-            yield delta;
+          const chunks = this.adapter.parseStreamChunk(parsed);
+          for (const chunk of chunks) {
+            if (chunk.type === 'reasoning') {
+              emitted = true;
+              yield { reasoning: chunk.text };
+            } else if (chunk.type === 'content') {
+              emitted = true;
+              yield chunk.text;
+            }
           }
         }
       }

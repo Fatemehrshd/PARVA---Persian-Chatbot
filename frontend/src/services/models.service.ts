@@ -153,17 +153,6 @@ export const modelsService = {
   },
 
   /**
-   * Toggle provider active/inactive status (admin only).
-   * PATCH /admin/providers/{providerId}/status
-   */
-  async updateProviderStatus(providerId: string, isActive: boolean): Promise<Provider> {
-    return request<Provider>(`/admin/providers/${providerId}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ isActive })
-    })
-  },
-
-  /**
    * Set provider's default model (admin only).
    * PATCH /admin/providers/{providerId}/default
    */

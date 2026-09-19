@@ -1,28 +1,15 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
 import {
-  Settings,
   Palette,
   Moon,
   Sun,
-  ShieldCheck,
   Check,
   X,
-  ChevronLeft,
-  Sparkles,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { useUiStore } from '../../stores/ui'
-import { useAuthStore } from '../../stores/auth'
 
-const router = useRouter()
 const uiStore = useUiStore()
-const authStore = useAuthStore()
-
-function navigateToAdmin() {
-  uiStore.closeSettings()
-  router.push('/admin/models')
-}
 </script>
 
 <template>
@@ -42,11 +29,11 @@ function navigateToAdmin() {
       <div class="px-6 py-4 border-b border-border flex items-center justify-between bg-surface-alt">
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-sm">
-            <Settings :size="18" />
+            <Palette :size="18" />
           </div>
           <div>
             <h2 id="settings-dialog-title" class="text-base sm:text-lg font-semibold text-foreground leading-tight">
-              تنظیمات
+              تم و رنگ‌بندی
             </h2>
           </div>
         </div>
@@ -68,15 +55,6 @@ function navigateToAdmin() {
              Theme Selection (Dark / Light)
         ═══════════════════════════════════════════ -->
         <div class="flex flex-col gap-3.5">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <Palette :size="16" class="text-primary" />
-              <label class="text-sm font-semibold text-foreground">
-                تم و رنگ‌بندی 
-              </label>
-            </div>
-          </div>
-
           <!-- Cards Grid -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             
@@ -231,30 +209,6 @@ function navigateToAdmin() {
             </button>
 
           </div>
-        </div>
-
-        <!-- ═══════════════════════════════════════════
-             Admin Panel Access (Admin Only)
-        ═══════════════════════════════════════════ -->
-        <div v-if="authStore.isAdmin" class="flex flex-col gap-2 pt-3 border-t border-border">
-          <div class="flex items-center gap-2">
-            <ShieldCheck :size="16" class="text-primary" />
-            <label class="text-sm font-semibold text-foreground">
-              مدیریت و پیکربندی سامانه
-            </label>
-          </div>
-
-          <button
-            type="button"
-            @click="navigateToAdmin"
-            class="flex items-center justify-between py-2.5 px-4 rounded-xl border border-primary/30 bg-surface-alt hover:bg-secondary text-primary text-xs sm:text-sm font-medium transition-all shadow-xs group cursor-pointer"
-          >
-            <div class="flex items-center gap-2.5">
-              <Sparkles :size="15" class="text-primary group-hover:rotate-12 transition-transform" />
-              <span>ورود به پنل مدیریت مدل‌های هوش مصنوعی</span>
-            </div>
-            <ChevronLeft :size="16" class="opacity-70 group-hover:opacity-100 group-hover:translate-x-[-2px] transition-all" />
-          </button>
         </div>
 
       </div>

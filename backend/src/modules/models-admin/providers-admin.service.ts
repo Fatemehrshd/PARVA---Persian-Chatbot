@@ -80,6 +80,8 @@ export class ProvidersAdminService {
   async updateStatus(id: string, isActive: boolean) {
     const p = await this.byId(id);
     p.isActive = isActive;
+    // Provider-level enable/disable is intentionally kept only as a legacy data flag.
+    // The product no longer treats provider status as a cascade control over models.
     return this.mask(await this.repo.save(p));
   }
 

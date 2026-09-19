@@ -16,6 +16,13 @@ export const DEFAULT_WEB_SEARCH_QUOTA = 2500; // Serper free trial credits
 export const ROLE_TOKEN_LIMITS_KEY = 'role_token_limits';
 export const TASK_MULTIPLIERS_KEY = 'task_multipliers';
 export const ROLE_QUOTAS_KEY = 'role_quotas';
+export const MODEL_ACCESS_KEY = 'model_access';
+export type ModelAccessLevelName = 'public' | 'commercial' | 'private';
+/** Default role → allowed model access levels; admin always sees everything. */
+export const DEFAULT_MODEL_ACCESS: Record<string, ModelAccessLevelName[]> = {
+  user: ['public'],
+  admin: ['public', 'commercial', 'private'],
+};
 export const TASK_TYPES = ['image', 'document', 'thinking'] as const;
 export const DEFAULT_RESET_HOURS = 6;
 export type RoleQuota = {
@@ -42,6 +49,36 @@ export function resolveEffectiveTokenLimit(
     return roleLimit > 0 ? roleLimit : null;
   }
   return globalLimit > 0 ? globalLimit : null;
+}
+
+const ACCESS_LEVELS: ModelAccessLevelName[] = ['public', 'commercial', 'private'];
+
+/**
+ * Whether `user` may see/use a model carrying the given access fields.
+ * Pure and testable: inactive/deleted models are always hidden; public is for
+ * everyone; commercial requires the role's allowed levels; private requires
+ * whitelist membership. Admins always have access.
+ */
+export function resolveModelAccess(
+  model: {
+    isActive?: boolean;
+    isDeleted?: boolean;
+    accessLevel?: string;
+    allowedUserIds?: string[];
+  },
+  user: { id?: string; role?: string },
+  modelAccess: Record<string, string[]>,
+): boolean {
+  if (model.isActive === false || model.isDeleted === true) return false;
+  const level = (model.accessLevel || 'public') as ModelAccessLevelName;
+  if (user.role === 'admin') return true;
+  if (level === 'public') return true;
+  if (level === 'commercial') {
+    const allowed = modelAccess[user.role || ''] ?? DEFAULT_MODEL_ACCESS[user.role || ''] ?? ['public'];
+    return allowed.includes('commercial');
+  }
+  // private
+  return !!user.id && Array.isArray(model.allowedUserIds) && model.allowedUserIds.includes(user.id);
 }
 
 @Injectable()
@@ -169,6 +206,55 @@ export class SettingsService {
     await this.set(TASK_MULTIPLIERS_KEY, JSON.stringify(current));
   }
 
+  /** نقش → سطوح دسترسی مدل مجاز؛ merge با پیش‌فرض‌ها، admin همیشه همه سطوح. */
+  async getModelAccess(): Promise<Record<string, ModelAccessLevelName[]>> {
+    const raw = await this.get(MODEL_ACCESS_KEY, '');
+    const parsed: Record<string, ModelAccessLevelName[]> = {};
+    try {
+      const p = raw ? JSON.parse(raw) : {};
+      if (p && typeof p === 'object' && !Array.isArray(p)) {
+        for (const [role, levels] of Object.entries(p as Record<string, unknown>)) {
+          if (Array.isArray(levels)) {
+            parsed[role] = levels.filter((l): l is ModelAccessLevelName =>
+              ACCESS_LEVELS.includes(l as ModelAccessLevelName),
+            );
+          }
+        }
+      }
+    } catch {
+      // A corrupt/missing setting falls back to the defaults below.
+    }
+    const merged: Record<string, ModelAccessLevelName[]> = { ...DEFAULT_MODEL_ACCESS, ...parsed };
+    merged.admin = [...ACCESS_LEVELS];
+    return merged;
+  }
+
+  async setModelAccess(
+    role: string,
+    levels: ModelAccessLevelName[] | null,
+  ): Promise<Record<string, ModelAccessLevelName[]>> {
+    const raw = await this.get(MODEL_ACCESS_KEY, '');
+    const current: Record<string, ModelAccessLevelName[]> = {};
+    try {
+      const p = raw ? JSON.parse(raw) : {};
+      if (p && typeof p === 'object' && !Array.isArray(p)) {
+        for (const [key, value] of Object.entries(p as Record<string, unknown>)) {
+          if (Array.isArray(value)) {
+            current[key] = value.filter((l): l is ModelAccessLevelName =>
+              ACCESS_LEVELS.includes(l as ModelAccessLevelName),
+            );
+          }
+        }
+      }
+    } catch {
+      // Corrupt value: start from an empty map and overwrite this role only.
+    }
+    if (levels === null) delete current[role];
+    else current[role] = levels.filter((l) => ACCESS_LEVELS.includes(l));
+    await this.set(MODEL_ACCESS_KEY, JSON.stringify(current));
+    return this.getModelAccess();
+  }
+
   async getRoleQuotas(): Promise<Record<string, RoleQuota>> {
     const raw = await this.get(ROLE_QUOTAS_KEY, '');
     if (!raw) {
@@ -225,6 +311,7 @@ export class SettingsService {
     roleTokenLimits: Record<string, number>;
     taskMultipliers: Record<string, number>;
     roleQuotas: Record<string, RoleQuota>;
+    modelAccess: Record<string, ModelAccessLevelName[]>;
   }> {
     const [
       globalTokenLimit,
@@ -238,6 +325,7 @@ export class SettingsService {
       roleTokenLimits,
       taskMultipliers,
       roleQuotas,
+      modelAccess,
     ] = await Promise.all([
       this.getGlobalTokenLimit(),
       this.getTokenRatePer1000(),
@@ -250,6 +338,7 @@ export class SettingsService {
       this.getRoleTokenLimits(),
       this.getTaskMultipliers(),
       this.getRoleQuotas(),
+      this.getModelAccess(),
     ]);
 
     return {
@@ -266,6 +355,7 @@ export class SettingsService {
       roleTokenLimits,
       taskMultipliers,
       roleQuotas,
+      modelAccess,
     };
   }
 
@@ -332,6 +422,14 @@ export class SettingsService {
           messageLimit: normalizeQuotaValue(quota.messageLimit),
           resetHours: normalizeQuotaValue(quota.resetHours),
         });
+      }
+    }
+    if (dto.modelAccess !== undefined && dto.modelAccess !== null) {
+      for (const [role, levels] of Object.entries(dto.modelAccess)) {
+        await this.setModelAccess(
+          role,
+          levels === null ? null : (levels as ModelAccessLevelName[]),
+        );
       }
     }
     return this.getAll();

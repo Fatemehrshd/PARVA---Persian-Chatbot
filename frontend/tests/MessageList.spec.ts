@@ -254,4 +254,48 @@ describe('MessageList streaming scroll behavior', () => {
 
     expect(container.scrollTop).toBe(1800)
   })
+
+  it('keeps following when sources appear on the final assistant message', async () => {
+    const chatStore = useChatStore()
+    chatStore.currentConversationId = TEST_CONV_ID
+    chatStore.messages.push({
+      id: 'msg-source-root',
+      conversationId: TEST_CONV_ID,
+      role: 'assistant',
+      content: 'پاسخ نهایی',
+      createdAt: new Date().toISOString(),
+    })
+
+    const wrapper = mount(MessageList, {
+      global: {
+        stubs: {
+          EmptyState: true,
+          MessageBubble: true,
+          MarkdownContent: true,
+          ThinkingIndicator: true
+        }
+      }
+    })
+    const container = wrapper.find('.message-list-viewport').element as HTMLElement
+
+    Object.defineProperties(container, {
+      clientHeight: { configurable: true, value: 500 },
+      scrollHeight: { configurable: true, writable: true, value: 1200 },
+      scrollTop: { configurable: true, writable: true, value: 650 }
+    })
+
+    chatStore.messages[0].sources = [{
+      id: 'src-1',
+      title: 'منبع',
+      url: 'https://example.com',
+      snippet: 'نمونه',
+      displayUrl: 'example.com'
+    }]
+
+    await wrapper.vm.$nextTick()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await wrapper.vm.$nextTick()
+
+    expect(container.scrollTop).toBe(1200)
+  })
 })

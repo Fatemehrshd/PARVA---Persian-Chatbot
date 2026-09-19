@@ -45,6 +45,7 @@ export class ProfileService {
       username: u.username ?? null,
       avatarUrl: u.avatarUrl ?? null,
       role: u.role,
+      isActive: u.isActive !== false,
       createdAt: u.createdAt,
     };
   }

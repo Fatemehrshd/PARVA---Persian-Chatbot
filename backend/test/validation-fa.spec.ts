@@ -12,6 +12,7 @@ import { ModelsAdminController } from '../src/modules/models-admin/models-admin.
 import { ModelsAdminService } from '../src/modules/models-admin/models-admin.service';
 import { JwtAuthGuard } from '../src/shared/jwt-auth.guard';
 import { AdminGuard } from '../src/shared/admin.guard';
+import { testAdminGuard } from './test-utils';
 
 /**
  * Validation message localization: every validation error returned by the API
@@ -194,7 +195,7 @@ describe('Validation messages are Persian (fa)', () => {
           },
         },
         JwtAuthGuard,
-        AdminGuard,
+        { provide: AdminGuard, useValue: testAdminGuard },
         { provide: JwtService, useValue: { verify: () => ({ sub: 'a', role: 'admin' }) } },
       ],
     }).compile();

@@ -58,7 +58,15 @@ describe('AdminModelsView.vue (Dashboard)', () => {
 
     vi.useFakeTimers()
     await searchInput.setValue('gpt')
-    vi.advanceTimersByTime(3000)
+    await vi.advanceTimersByTimeAsync(3000)
+    // AdminTable's own 250ms search debounce fires after the parent's 3s one
+    await vi.advanceTimersByTimeAsync(250)
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+
+    // The async list request fired by the search must settle before asserting
+    await vi.advanceTimersByTimeAsync(0)
+    await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
 
     // Table rows should filter to gpt models

@@ -137,6 +137,26 @@ describe('ProvidersAdminService', () => {
     // platform default moved to the oldest remaining usable model
     expect(models.find((m) => m.id === 'k1').isDefault).toBe(true);
   });
+
+  it('provider status is a legacy data flag and does not cascade into model activity', async () => {
+    const { pRepo, mRepo, providers, models } = fakeStores();
+    const svc = new ProvidersAdminService(pRepo, mRepo);
+    const provider: any = await svc.create({ name: 'openai' });
+    models.push(
+      { id: 'm1', providerId: provider.id, provider: 'openai', isActive: true, isDefault: true },
+      { id: 'm2', providerId: provider.id, provider: 'openai', isActive: true, isDefault: false },
+      { id: 'm3', providerId: 'other', provider: 'other', isActive: true, isDefault: false },
+    );
+
+    const updated = await svc.updateStatus(provider.id, false);
+
+    expect(updated.isActive).toBe(false);
+    expect(providers.find((x) => x.id === provider.id).isActive).toBe(false);
+    expect(models.find((m) => m.id === 'm1').isActive).toBe(true);
+    expect(models.find((m) => m.id === 'm2').isActive).toBe(true);
+    expect(models.filter((m) => m.isDefault).length).toBe(1);
+    expect(models.find((m) => m.id === 'm3').isDefault).toBe(false);
+  });
 });
 
 describe('maskSecret', () => {

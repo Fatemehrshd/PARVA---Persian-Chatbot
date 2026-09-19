@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsUUID, IsIn, IsArray } from 'class-validator';
 import { FA } from '../../shared/messages.fa';
 
 export class CreateModelDto {
@@ -26,6 +26,15 @@ export class CreateModelDto {
   @IsOptional()
   @IsBoolean({ message: FA.boolean('isActive') })
   isActive?: boolean;
+
+  @IsOptional()
+  @IsIn(['public', 'commercial', 'private'], { message: 'سطح دسترسی باید public، commercial یا private باشد' })
+  accessLevel?: 'public' | 'commercial' | 'private';
+
+  @IsOptional()
+  @IsArray({ message: 'لیست کاربران مجاز باید آرایه باشد' })
+  @IsUUID('4', { each: true, message: FA.uuid('allowedUserIds') })
+  allowedUserIds?: string[];
 }
 
 export class UpdateModelStatusDto {
@@ -61,5 +70,14 @@ export class UpdateModelDto {
   @IsOptional()
   @IsBoolean({ message: FA.boolean('isActive') })
   isActive?: boolean;
+
+  @IsOptional()
+  @IsIn(['public', 'commercial', 'private'], { message: 'سطح دسترسی باید public، commercial یا private باشد' })
+  accessLevel?: 'public' | 'commercial' | 'private';
+
+  @IsOptional()
+  @IsArray({ message: 'لیست کاربران مجاز باید آرایه باشد' })
+  @IsUUID('4', { each: true, message: FA.uuid('allowedUserIds') })
+  allowedUserIds?: string[];
 }
 

@@ -60,7 +60,7 @@ describe('New Chat gating & sidebar visibility', () => {
     fetchSpy.mockRestore()
   })
 
-  it('disables New Chat when no conversation is selected at all', async () => {
+  it('keeps New Chat enabled when the user is on a fresh empty chat', async () => {
     const chatStore = useChatStore()
 
     const { useUiStore } = await import('../src/stores/ui')
@@ -71,7 +71,7 @@ describe('New Chat gating & sidebar visibility', () => {
 
     expect(chatStore.currentConversationId).toBeNull()
     const btn = wrapper.get('.new-chat-btn')
-    expect(btn.attributes('disabled')).toBeDefined()
+    expect(btn.attributes('disabled')).toBeUndefined()
     wrapper.unmount()
   })
 

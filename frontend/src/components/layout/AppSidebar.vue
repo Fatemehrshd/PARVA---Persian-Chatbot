@@ -50,16 +50,11 @@ const SidebarExpandIcon = PanelRightOpen
 // Check whether any conversation or the active chat is actively answering / streaming
 const isChatResponding = computed(() => chatStore.isAnyStreaming)
 
-// Disable "New Chat" when:
-// 1. The user has no conversation selected at all, or is already sitting on an empty (fresh) conversation
-// 2. The chat is actively answering / streaming a response
-const isOnEmptyChat = computed(() =>
-  chatStore.currentConversationId === null ||
-  (chatStore.messages.length === 0 && !isChatResponding.value)
-)
-
+// A fresh empty chat is a valid state for the user on entry, so the action
+// to create a new conversation remains enabled unless the model is actively
+// responding or the quota is blocked.
 const isNewChatDisabled = computed(() =>
-  isOnEmptyChat.value || isChatResponding.value || authStore.quota.blocked
+  isChatResponding.value || authStore.quota.blocked
 )
 
 // ──────────────────────────────────────────
@@ -74,7 +69,6 @@ async function handleNewChat() {
     uiStore.showToast('امکان شروع گفتگوی جدید در هنگام دریافت پاسخ وجود ندارد.', 'info')
     return
   }
-  if (isOnEmptyChat.value) return
   const newId = await chatStore.createNewConversation()
   if (newId) router.push(`/chat/${newId}`)
 }
@@ -161,7 +155,7 @@ function openProfile() {
 
 function openAdminPanel() {
   profileMenuOpen.value = false
-  router.push('/admin/models')
+  router.push('/admin/dashboard')
 }
 
 function openLogoutModal() {

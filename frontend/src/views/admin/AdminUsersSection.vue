@@ -3,6 +3,7 @@
 import { ref, watch, onMounted } from 'vue'
 import { Edit, FileText } from '@lucide/vue'
 import AdminTable, { type TableColumn } from '../../components/admin/AdminTable.vue'
+import AdminTableSkeleton from '../../components/admin/AdminTableSkeleton.vue'
 import BaseButton from '../../components/ui/BaseButton.vue'
 import BaseToggle from '../../components/ui/BaseToggle.vue'
 import UserEditorModal from '../../components/admin/modals/UserEditorModal.vue'
@@ -237,7 +238,10 @@ onMounted(loadUsers)
       {{ errorMessage }}
     </div>
 
+    <AdminTableSkeleton v-if="isLoading && !users.length" :rows="pageSize || 8" :columns="userColumns.length" />
+
     <AdminTable
+      v-else
       :columns="userColumns"
       :items="users"
       serverSide

@@ -54,9 +54,14 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   const quotaHeader = response.headers?.get?.('x-user-quota')
   if (quotaHeader && !endpoint.includes('/auth/')) {
     try {
-      const snapshot = JSON.parse(atob(quotaHeader))
+      // The snapshot always belongs to the holder of the CURRENT session
+      // token; if the user logged out/switched accounts mid-flight, the stale
+      // numbers must not leak into the new session.
       const { useAuthStore } = await import('../stores/auth')
-      useAuthStore().applyQuotaSnapshot(snapshot)
+      const store = useAuthStore()
+      if (store.token === token) {
+        store.applyQuotaSnapshot(JSON.parse(atob(quotaHeader)))
+      }
     } catch {
       // Ignore malformed or unavailable quota snapshots.
     }

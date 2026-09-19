@@ -83,6 +83,11 @@ export class UpdateSettingsDto {
   @IsOptional()
   @IsObject({ message: 'سهمیه نقش‌ها باید شیء معتبر باشد' })
   roleQuotas?: Record<string, { tokenLimit: number | null; messageLimit: number | null; resetHours: number | null } | null>;
+
+  /** نقش → سطوح دسترسی مدل مجاز (['public','commercial','private'])؛ null = بازگشت به پیش‌فرض. */
+  @IsOptional()
+  @IsObject({ message: 'دسترسی مدل نقش‌ها باید شیء معتبر باشد' })
+  modelAccess?: Record<string, string[] | null>;
 }
 
 export class UpdateUserAdminDto {

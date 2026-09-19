@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { Plus, Network, ShieldCheck, Trash2, Edit } from '@lucide/vue'
 import BaseButton from '../../components/ui/BaseButton.vue'
-import BaseToggle from '../../components/ui/BaseToggle.vue'
+import { Skeleton } from '../../components/ui/skeleton'
 import ProviderEditorModal from '../../components/admin/modals/ProviderEditorModal.vue'
 import { modelsService } from '../../services/models.service'
 import { useUiStore } from '../../stores/ui'
@@ -83,7 +83,7 @@ function openEditModal(provider: Provider) {
   isEditorModalOpen.value = true
 }
 
-async function handleSaveProvider(payload: { name: string; baseUrl: string; apiKey?: string; isActive: boolean }) {
+async function handleSaveProvider(payload: { name: string; baseUrl: string; apiKey?: string }) {
   isSaving.value = true
   try {
     if (editingProvider.value) {
@@ -99,16 +99,6 @@ async function handleSaveProvider(payload: { name: string; baseUrl: string; apiK
     uiStore.showToast(err?.message || 'خطا در ذخیره ارائه‌دهنده', 'error')
   } finally {
     isSaving.value = false
-  }
-}
-
-async function toggleProviderStatus(provider: Provider) {
-  try {
-    await modelsService.updateProviderStatus(provider.id, !provider.isActive)
-    provider.isActive = !provider.isActive
-    uiStore.showToast(`وضعیت ارائه‌دهنده «${provider.name}» به‌روز شد.`, 'info')
-  } catch (err: any) {
-    uiStore.showToast(err?.message || 'خطا در تغییر وضعیت ارائه‌دهنده', 'error')
   }
 }
 
@@ -150,12 +140,6 @@ onMounted(loadProviders)
                 <span class="text-[11px] text-muted-foreground block mono">{{ p.id.slice(0, 8) }}...</span>
               </div>
             </div>
-            <span
-              class="px-2 py-0.5 rounded-full text-[11px] font-medium border"
-              :class="p.isActive ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : 'bg-muted text-muted-foreground border-border'"
-            >
-              {{ p.isActive ? 'فعال' : 'غیرفعال' }}
-            </span>
           </div>
 
           <div class="provider-meta space-y-1.5 text-xs">
@@ -175,12 +159,7 @@ onMounted(loadProviders)
           </div>
         </div>
 
-        <div class="card-footer mt-4 pt-3 border-t border-border flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <BaseToggle :model-value="p.isActive" size="sm" @update:model-value="toggleProviderStatus(p)" />
-            <span class="text-xs text-muted-foreground">{{ p.isActive ? 'فعال' : 'غیرفعال' }}</span>
-          </div>
-
+        <div class="card-footer mt-4 pt-3 border-t border-border flex items-center justify-end">
           <div class="flex items-center gap-1.5">
             <BaseButton variant="ghost" size="sm" @click="openEditModal(p)" title="ویرایش">
               <Edit :size="14" />
@@ -192,7 +171,11 @@ onMounted(loadProviders)
         </div>
       </div>
 
-      <div v-if="!providers.length && !isLoading" class="col-span-full p-8 rounded-xl border border-dashed border-border text-center text-xs text-muted-foreground">
+      <div v-if="isLoading && !providers.length" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Skeleton v-for="n in 6" :key="`provider-skeleton-${n}`" class="h-40 rounded-xl" />
+      </div>
+
+      <div v-else-if="!providers.length" class="col-span-full p-8 rounded-xl border border-dashed border-border text-center text-xs text-muted-foreground">
         هیچ ارائه‌دهنده‌ای یافت نشد.
       </div>
     </div>

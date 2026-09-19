@@ -3,7 +3,8 @@ import { ref, watch } from 'vue'
 import AdminModal from '../AdminModal.vue'
 import BaseButton from '../../ui/BaseButton.vue'
 import BaseToggle from '../../ui/BaseToggle.vue'
-import type { Model, Provider } from '../../../types'
+import ModelAccessPicker from '../ModelAccessPicker.vue'
+import type { AdminUser, Model, ModelAccessLevel, Provider } from '../../../types'
 
 import { modelsService } from '../../../services/models.service'
 
@@ -11,13 +12,14 @@ const props = defineProps<{
   open: boolean
   model?: Model | null
   providers: Provider[]
+  users?: AdminUser[]
   isSaving?: boolean
   labels?: Record<string, string>
 }>()
 
 const emit = defineEmits<{
   close: []
-  save: [data: { name: string; provider: string; providerId?: string; apiIdentifier: string; isActive: boolean }]
+  save: [data: { name: string; provider: string; providerId?: string; apiIdentifier: string; isActive: boolean; accessLevel: ModelAccessLevel; allowedUserIds: string[] }]
 }>()
 
 const form = ref({
@@ -26,6 +28,8 @@ const form = ref({
   providerId: '',
   apiIdentifier: '',
   isActive: true,
+  accessLevel: 'public' as ModelAccessLevel,
+  allowedUserIds: [] as string[],
 })
 
 const isTesting = ref(false)
@@ -42,6 +46,8 @@ watch(
         providerId: m.providerId || '',
         apiIdentifier: m.apiIdentifier,
         isActive: m.isActive,
+        accessLevel: m.accessLevel || 'public',
+        allowedUserIds: Array.isArray(m.allowedUserIds) ? [...m.allowedUserIds] : [],
       }
     } else {
       form.value = {
@@ -50,6 +56,8 @@ watch(
         providerId: props.providers[0]?.id || '',
         apiIdentifier: '',
         isActive: true,
+        accessLevel: 'public',
+        allowedUserIds: [],
       }
     }
   },
@@ -98,6 +106,9 @@ function handleSubmit() {
     providerId: provider?.id || undefined,
     apiIdentifier: form.value.apiIdentifier.trim(),
     isActive: form.value.isActive,
+    accessLevel: form.value.accessLevel,
+    // The whitelist only matters for private models; clearing avoids stale ids.
+    allowedUserIds: form.value.accessLevel === 'private' ? form.value.allowedUserIds : [],
   })
 }
 </script>
@@ -131,6 +142,13 @@ function handleSubmit() {
           <BaseToggle v-model="form.isActive" :disabled="isSaving" />
           <span>مدل در پلتفرم فعال باشد</span>
         </label>
+
+        <ModelAccessPicker
+          v-model:accessLevel="form.accessLevel"
+          v-model:allowedUserIds="form.allowedUserIds"
+          :users="users || []"
+          :disabled="isSaving"
+        />
       </div>
 
       <!-- Test Model Box -->

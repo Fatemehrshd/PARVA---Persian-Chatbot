@@ -4,6 +4,7 @@ import { useChatStore } from '../src/stores/chat'
 import { useModelsStore } from '../src/stores/models'
 import { useUiStore } from '../src/stores/ui'
 import { chatService } from '../src/services/chat.service'
+import { modelsService } from '../src/services/models.service'
 
 describe('Pinia Stores', () => {
   beforeEach(() => {
@@ -39,6 +40,30 @@ describe('Pinia Stores', () => {
     expect(modelsStore.selectedModelId).toBe(targetModel.id)
 
     await modelsStore.makeDefault(targetModel.id)
+    expect(modelsStore.defaultModel.id).toBe(targetModel.id)
+  })
+
+  it('modelsStore: does not update the default optimistically before the API resolves', async () => {
+    const modelsStore = useModelsStore()
+    const originalDefaultId = modelsStore.defaultModel.id
+    const targetModel = modelsStore.models.find((m) => m.id !== originalDefaultId)!
+
+    let resolveRequest!: (value?: unknown) => void
+    const deferred = new Promise<void>((resolve) => {
+      resolveRequest = resolve
+    })
+
+    vi.spyOn(modelsService, 'setDefaultModel').mockImplementation(async () => {
+      await deferred
+      return { id: targetModel.id, name: targetModel.name } as any
+    })
+
+    const run = modelsStore.makeDefault(targetModel.id)
+
+    expect(modelsStore.defaultModel.id).toBe(originalDefaultId)
+
+    resolveRequest()
+    await run
     expect(modelsStore.defaultModel.id).toBe(targetModel.id)
   })
 

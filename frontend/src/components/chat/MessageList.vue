@@ -113,6 +113,19 @@ function handleScrollToBottomClick() {
   }, 250)
 }
 
+function handleSourceToggle() {
+  const container = containerRef.value
+  if (!container) return
+
+  if (shouldAutoScroll.value || isNearBottom(container, 120)) {
+    nextTick(() => {
+      requestAnimationFrame(() => {
+        scrollToBottom(true)
+      })
+    })
+  }
+}
+
 watch(
   () => [
     chatStore.messages.length,
@@ -156,6 +169,38 @@ watch(
         scrollToBottom(false)
       }
     }
+  },
+  { flush: 'post' }
+)
+
+watch(
+  () => chatStore.messages.map((msg) => [
+    msg.id,
+    msg.role,
+    msg.content,
+    msg.sources?.length ?? 0,
+    msg.searchFailed ? 1 : 0,
+    msg.isInterrupted ? 1 : 0,
+    msg.stoppedByUser ? 1 : 0,
+  ].join(':')).join('|'),
+  () => {
+    const container = containerRef.value
+    if (!container) return
+
+    const lastMsg = chatStore.messages[chatStore.messages.length - 1]
+    const hasRenderedSources = !!lastMsg && !lastMsg.isInterrupted && !lastMsg.stoppedByUser && (!!lastMsg.sources?.length || !!lastMsg.searchFailed)
+
+    if (!hasRenderedSources || (!shouldAutoScroll.value && !isNearBottom(container, 120))) {
+      return
+    }
+
+    nextTick(() => {
+      requestAnimationFrame(() => {
+        if (shouldAutoScroll.value || isNearBottom(container, 120)) {
+          scrollToBottom(true)
+        }
+      })
+    })
   },
   { flush: 'post' }
 )
@@ -232,6 +277,7 @@ onBeforeUnmount(() => {
             :key="msg.id"
             :message="msg"
             :is-last="index === chatStore.messages.length - 1"
+            @source-toggle="handleSourceToggle"
           />
 
           <!-- Active Streaming Bubble (Positioned directly under user's prompt) -->

@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import request from 'supertest';
 import { JwtService } from '@nestjs/jwt';
+import { CanActivate, ExecutionContext } from '@nestjs/common';
 import { SettingsService, DEFAULT_GLOBAL_TOKEN_LIMIT, DEFAULT_SYSTEM_PROMPT } from '../src/modules/admin/settings.service';
 import { AdminSettingsController } from '../src/modules/admin/admin-settings.controller';
 import { AdminUsersController } from '../src/modules/admin/admin-users.controller';
@@ -259,6 +260,14 @@ describe('Admin Panel Suite', () => {
       },
     };
 
+    const fakeAdminGuard: CanActivate = {
+      canActivate: (ctx: ExecutionContext) => {
+        const req = ctx.switchToHttp().getRequest();
+        if (req?.user?.role !== 'admin') throw new ForbiddenException('Admin only');
+        return true;
+      },
+    };
+
     const fakeModelsService = {
       list: async () => [],
       create: async (d: any) => ({ id: 'm1', ...d }),
@@ -339,8 +348,8 @@ describe('Admin Panel Suite', () => {
           { provide: 'AiProviderRepository', useValue: fakeRepos.providers },
           { provide: 'ConversationRepository', useValue: fakeRepos.convs },
           { provide: 'MessageRepository', useValue: fakeRepos.messages },
+          { provide: AdminGuard, useValue: fakeAdminGuard },
           JwtAuthGuard,
-          AdminGuard,
           {
             provide: JwtService,
             useValue: {

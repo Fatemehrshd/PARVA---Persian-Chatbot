@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import AdminModal from '../AdminModal.vue'
 import BaseButton from '../../ui/BaseButton.vue'
+import BaseToggle from '../../ui/BaseToggle.vue'
 import { numericInputValue } from '../../../utils/numberInput'
 
 const props = defineProps<{
@@ -11,17 +12,26 @@ const props = defineProps<{
   currentLimit: number | null
   currentMessageLimit?: number | null
   currentResetHours?: number | null
+  /** آیا این نقش به مدل‌های تجاری دسترسی دارد؟ */
+  commercialAccess?: boolean
+  /** برای نقش admin قفل است (همیشه همه سطوح). */
+  isCommercialAccessLocked?: boolean
   tokenRatePer1000: number
   isSaving?: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
-  save: [data: { role: string; quota: { tokenLimit: number | null; messageLimit: number | null; resetHours: number | null } }]
+  save: [data: {
+    role: string
+    quota: { tokenLimit: number | null; messageLimit: number | null; resetHours: number | null }
+    commercialAccess: boolean
+  }]
 }>()
 
 const form = ref<{ tokenLimit: number | null; messageLimit: number | null; resetHours: number | null }>({ tokenLimit: null, messageLimit: null, resetHours: 6 })
 const creditDollarInput = ref<number | null>(null)
+const commercialAccess = ref(false)
 
 function tokensToDollars(tokens: number): number {
   return Number(((tokens / 1000) * props.tokenRatePer1000).toFixed(2))
@@ -38,6 +48,7 @@ watch(
       const limit = props.currentLimit !== null && props.currentLimit !== undefined ? Number(props.currentLimit) : null
       form.value = { tokenLimit: limit, messageLimit: props.currentMessageLimit ?? null, resetHours: props.currentResetHours ?? 6 }
       creditDollarInput.value = limit !== null && limit > 0 ? tokensToDollars(limit) : null
+      commercialAccess.value = props.isCommercialAccessLocked ? true : !!props.commercialAccess
     }
   },
   { immediate: true }
@@ -89,7 +100,7 @@ function handleSubmit() {
     emit('save', { role: props.role, tokenLimit: form.value.tokenLimit } as any)
     return
   }
-  emit('save', { role: props.role, quota: { ...form.value } })
+  emit('save', { role: props.role, quota: { ...form.value }, commercialAccess: commercialAccess.value })
 }
 </script>
 
@@ -154,6 +165,20 @@ function handleSubmit() {
           <span class="field-label">ریست دوره (ساعت)</span>
           <input :value="form.resetHours ?? ''" type="text" inputmode="numeric" min="0" step="1" :disabled="isSaving" @input="onResetHoursInput(($event.target as HTMLInputElement).value)" />
         </label>
+      </div>
+
+      <div class="p-3.5 rounded-lg border border-border bg-secondary/30 flex items-start gap-3">
+        <BaseToggle
+          v-model="commercialAccess"
+          :disabled="isSaving || isCommercialAccessLocked"
+        />
+        <div class="flex flex-col gap-0.5">
+          <span class="text-[13px] font-medium text-foreground">دسترسی به مدل‌های تجاری</span>
+          <small class="text-[11px] text-muted-foreground leading-relaxed">
+            با فعال‌سازی، همه کاربران این نقش به مدل‌های با سطح دسترسی «تجاری» دسترسی پیدا می‌کنند. مدل‌های «اختصاصی» فقط با افزودن کاربر در خود مدل قابل استفاده‌اند.
+            <template v-if="isCommercialAccessLocked"> نقش مدیر سیستم همیشه به همه سطوح دسترسی دارد.</template>
+          </small>
+        </div>
       </div>
 
       <div class="modal-actions">

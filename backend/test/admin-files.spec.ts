@@ -15,6 +15,7 @@ import { FilesService } from '../src/modules/files/files.service';
 import { QueueManagerService } from '../src/modules/files/queue-manager.service';
 import { JwtAuthGuard } from '../src/shared/jwt-auth.guard';
 import { AdminGuard } from '../src/shared/admin.guard';
+import { testAdminGuard } from './test-utils';
 import { HttpExceptionFilter } from '../src/shared/http-exception.filter';
 import { ResponseEnvelopeInterceptor } from '../src/shared/response-envelope.interceptor';
 import { APP_INTERCEPTOR } from '@nestjs/core';
@@ -124,7 +125,7 @@ describe('AdminFilesController E2E / Integration', () => {
           useValue: mockQueueManager,
         },
         JwtAuthGuard,
-        AdminGuard,
+        { provide: AdminGuard, useValue: testAdminGuard },
         {
           provide: JwtService,
           useValue: {

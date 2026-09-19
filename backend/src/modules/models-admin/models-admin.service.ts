@@ -5,12 +5,14 @@ import { AiModel } from './ai-model.entity';
 import { AiProvider } from './ai-provider.entity';
 import { maskSecret } from './mask-secret';
 import { OpenAiCompatForwarder } from '../ai/openai-compat.forwarder';
+import { SettingsService, resolveModelAccess } from '../admin/settings.service';
 @Injectable()
 export class ModelsAdminService {
   constructor(
     @InjectRepository(AiModel) private repo: Repository<AiModel>,
     @InjectRepository(AiProvider) private providers: Repository<AiProvider>,
     @Optional() private forwarder?: OpenAiCompatForwarder,
+    @Optional() private settings?: SettingsService,
   ) {}
 
   private maskApiKey(m: AiModel): AiModel {
@@ -25,19 +27,33 @@ export class ModelsAdminService {
 
   /**
    * Chat-ready listing: active models whose owning provider (when one is
-   * linked/resolvable) is also active.
+   * linked/resolvable) is also active. When a `user` is supplied, models are
+   * additionally filtered by that user's access rights (public/commercial/private).
    */
-  async listActive() {
+  async listActive(user?: { id?: string; role?: string } | null) {
     const models = await this.repo.find({
       where: { isActive: true, isDeleted: false },
       order: { createdAt: 'ASC' },
     });
+    const access = this.settings ? await this.settings.getModelAccess().catch(() => ({})) : {};
     const usable: AiModel[] = [];
     for (const m of models) {
       const provider = await this.resolveProvider(m);
-      if (!provider || provider.isActive) usable.push(m);
+      if (provider && provider.isActive === false) continue;
+      if (user && !resolveModelAccess(m, user, access)) continue;
+      usable.push(m);
     }
     return usable.map((m) => this.maskApiKey(m));
+  }
+
+  /** Server-side check used by chat endpoints: may this user use this model? */
+  async isModelAllowedForUser(
+    model: AiModel | null,
+    user: { id?: string; role?: string },
+  ): Promise<boolean> {
+    if (!model) return false;
+    const access = this.settings ? await this.settings.getModelAccess().catch(() => ({})) : {};
+    return resolveModelAccess(model, user, access);
   }
 
   async getRawById(id: string): Promise<AiModel | null> {
@@ -88,8 +104,6 @@ export class ModelsAdminService {
       let p = await this.providers.findOne({ where: { name: d.provider, isDeleted: false } }).catch(() => null);
       if (!p) {
         p = await this.providers.save(this.providers.create({ name: d.provider, isActive: true }));
-      } else if (p.isActive === false) {
-        throw new BadRequestException(`Provider "${p.name}" is disabled`);
       }
       providerId = p.id;
     }
@@ -130,6 +144,8 @@ export class ModelsAdminService {
     if (d.apiKey !== undefined) m.apiKey = d.apiKey;
     if (d.baseUrl !== undefined) m.baseUrl = d.baseUrl;
     if (d.isActive !== undefined) m.isActive = d.isActive;
+    if (d.accessLevel !== undefined) m.accessLevel = d.accessLevel;
+    if (d.allowedUserIds !== undefined) m.allowedUserIds = Array.isArray(d.allowedUserIds) ? d.allowedUserIds : [];
 
     const saved = await this.repo.save(m);
     return this.maskApiKey(saved);
@@ -144,6 +160,33 @@ export class ModelsAdminService {
       throw err;
     }
     if (!m) throw new NotFoundException('Resource not found');
+
+    const provider = await this.resolveProvider(m);
+    const providerDefaultMismatch = provider && provider.defaultModelId === m.id && !isActive;
+
+    if (m.isDefault && !isActive) {
+      const otherDefault = await this.repo.findOne({ where: { isDefault: true, isDeleted: false } }).catch(() => null);
+      if (!otherDefault || otherDefault.id === m.id) {
+        throw new BadRequestException('برای غیرفعال کردن مدل پیش‌فرض، ابتدا یک مدل پیش‌فرض جدید انتخاب کنید');
+      }
+      m.isDefault = false;
+    }
+
+    if (providerDefaultMismatch) {
+      const sameProviderModels = await this.repo.find({
+        where: { providerId: provider.id, isActive: true, isDeleted: false },
+        order: { createdAt: 'ASC' },
+      });
+      const replacement = sameProviderModels.find((candidate) => candidate.id !== m.id) ?? null;
+      if (!replacement) {
+        throw new BadRequestException(
+          'برای غیرفعال کردن مدل پیش‌فرض ارائه‌دهنده، ابتدا یک مدل جایگزین برای همین ارائه‌دهنده انتخاب کنید',
+        );
+      }
+      provider.defaultModelId = replacement.id;
+      await this.providers.save(provider);
+    }
+
     m.isActive = isActive;
     const saved = await this.repo.save(m);
     return this.maskApiKey(saved);
@@ -189,15 +232,20 @@ export class ModelsAdminService {
 
   /**
    * User-facing platform default: the flagged model, but only when it is
-   * actually usable (active itself, provider not disabled). Credentials stay
-   * masked. Returns null when no usable default exists — callers fall back
-   * to their list-based resolution.
+   * actually usable (active itself, provider not disabled). Returns null when
+   * nothing usable is flagged — callers fall back to their list-based
+   * resolution. When a user is supplied and the flagged default is not
+   * accessible to them, the first allowed active model is returned instead.
    */
-  async getUsableDefault(): Promise<AiModel | null> {
+  async getUsableDefault(user?: { id?: string; role?: string } | null): Promise<AiModel | null> {
     const m = await this.getDefault();
     if (!m || m.isActive === false) return null;
     const provider = await this.resolveProvider(m);
     if (provider && provider.isActive === false) return null;
+    if (user && !(await this.isModelAllowedForUser(m, user))) {
+      const active = await this.listActive(user);
+      return active.length ? active[0] : null;
+    }
     return this.maskApiKey(m);
   }
 

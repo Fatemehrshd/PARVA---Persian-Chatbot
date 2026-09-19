@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { AiModel } from './ai-model.entity';
@@ -11,11 +11,16 @@ import { ProvidersAdminController } from './providers-admin.controller';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { AdminGuard } from '../../shared/admin.guard';
 import { AiModule } from '../ai/ai.module';
+import { AdminModule } from '../admin/admin.module';
+import { UsersModule } from '../users/users.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([AiModel, AiProvider]),
     JwtModule.register({ secret: process.env.JWT_SECRET ?? 'dev-secret' }),
     AiModule,
+    // SettingsService supplies the role → model-access map used to filter models.
+    forwardRef(() => AdminModule),
+    forwardRef(() => UsersModule),
   ],
   controllers: [ModelsAdminController, ProvidersAdminController, ModelsController],
   providers: [ModelsAdminService, ProvidersAdminService, JwtAuthGuard, AdminGuard],

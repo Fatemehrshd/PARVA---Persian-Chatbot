@@ -81,13 +81,13 @@ function onCreditDollarInput(val: string | number | null) {
 
 function onTokenLimitInput(val: string | number | null) {
   if (val === '' || val === null || val === undefined) {
-    form.value.tokenLimit = null
+    form.value.tokenLimit = 0
     creditDollarInput.value = null
     return
   }
   const num = typeof val === 'number' ? val : numericInputValue(val)
   if (num === null || num < 0) {
-    form.value.tokenLimit = null
+    form.value.tokenLimit = 0
     creditDollarInput.value = null
   } else {
     form.value.tokenLimit = Math.round(num)
@@ -111,7 +111,7 @@ function handleSubmit() {
     displayName: form.value.displayName.trim() || undefined,
     email: form.value.email.trim(),
     role: form.value.role,
-    tokenLimit: form.value.tokenLimit,
+    tokenLimit: form.value.tokenLimit === null ? 0 : form.value.tokenLimit,
     messageLimit: form.value.messageLimit,
   })
 }

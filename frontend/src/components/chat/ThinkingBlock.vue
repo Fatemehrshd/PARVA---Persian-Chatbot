@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUpdated, onBeforeUnmount, onUnmounted } from 'vue'
 import { Brain, ChevronDown, Copy, Check } from '@lucide/vue'
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible'
 import MarkdownContent from './MarkdownContent.vue'
@@ -70,12 +70,6 @@ watch(
   { immediate: true },
 )
 
-onMounted(() => {
-  if (props.isThinking) {
-    startTimer()
-  }
-})
-
 onUnmounted(() => {
   stopTimer()
 })
@@ -90,6 +84,57 @@ const formattedDuration = computed(() => {
 })
 
 const copied = ref(false)
+const thinkingContentRef = ref<HTMLElement | null>(null)
+const shouldAutoScrollThinking = ref(true)
+let lastThinkingScrollTop = 0
+
+function isThinkingNearBottom(el: HTMLElement, threshold = 40): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold
+}
+
+function handleThinkingScroll() {
+  const el = thinkingContentRef.value
+  if (!el) return
+
+  const scrolledUp = el.scrollTop < lastThinkingScrollTop
+  lastThinkingScrollTop = el.scrollTop
+
+  if (scrolledUp || !isThinkingNearBottom(el, 40)) {
+    shouldAutoScrollThinking.value = false
+  } else {
+    shouldAutoScrollThinking.value = true
+  }
+}
+
+function scrollThinkingContentToBottom() {
+  const el = thinkingContentRef.value
+  if (!el || !props.isThinking) return
+
+  if (!shouldAutoScrollThinking.value && !isThinkingNearBottom(el, 40)) {
+    return
+  }
+
+  if (el.scrollHeight > el.clientHeight) {
+    el.scrollTop = el.scrollHeight
+    lastThinkingScrollTop = el.scrollTop
+  }
+}
+
+watch(
+  () => [props.reasoning, props.isThinking],
+  () => {
+    const el = thinkingContentRef.value
+    if (props.isThinking && (!el || isThinkingNearBottom(el, 40))) {
+      shouldAutoScrollThinking.value = true
+    }
+
+    nextTick(() => {
+      scrollThinkingContentToBottom()
+    })
+  },
+  { flush: 'post' },
+)
+
 async function copyReasoning() {
   if (!props.reasoning) return
   try {
@@ -100,6 +145,35 @@ async function copyReasoning() {
     }, 2000)
   } catch {}
 }
+
+onMounted(() => {
+  const el = thinkingContentRef.value
+  if (el) {
+    el.addEventListener('scroll', handleThinkingScroll, { passive: true })
+  }
+
+  if (props.isThinking) {
+    startTimer()
+    nextTick(() => {
+      scrollThinkingContentToBottom()
+    })
+  }
+})
+
+onUpdated(() => {
+  if (props.isThinking) {
+    nextTick(() => {
+      scrollThinkingContentToBottom()
+    })
+  }
+})
+
+onBeforeUnmount(() => {
+  const el = thinkingContentRef.value
+  if (el) {
+    el.removeEventListener('scroll', handleThinkingScroll)
+  }
+})
 </script>
 
 <template>
@@ -126,7 +200,7 @@ async function copyReasoning() {
               </span>...
             </template>
             <template v-else>
-              <span class="font-medium">فرآیند تفکر عمیق</span>
+              <span class="font-medium">فرآیند تفکر</span>
               <span v-if="formattedDuration" class="text-muted-foreground/80 font-mono text-[11px]">
                 ({{ formattedDuration }})
               </span>
@@ -166,7 +240,7 @@ async function copyReasoning() {
           </div>
 
           <!-- Thinking Content with Rich Markdown -->
-          <div class="thinking-markdown max-h-80 overflow-y-auto pr-1 pl-1 text-muted-foreground leading-relaxed">
+          <div ref="thinkingContentRef" class="thinking-markdown max-h-80 overflow-y-auto pr-1 pl-1 text-muted-foreground leading-relaxed">
             <MarkdownContent :content="reasoning" :streaming="isThinking" />
           </div>
 

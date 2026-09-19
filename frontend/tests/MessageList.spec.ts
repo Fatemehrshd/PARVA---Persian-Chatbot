@@ -326,4 +326,123 @@ describe('MessageList streaming scroll behavior', () => {
     expect(thinkingBlock.props('reasoning')).toBe('Analyzing query...')
     expect(thinkingBlock.props('isThinking')).toBe(true)
   })
+
+  it('keeps following while reasoning-only streaming is growing', async () => {
+    const chatStore = useChatStore()
+    chatStore.currentConversationId = TEST_CONV_ID
+    chatStore.convStreamStates.set(TEST_CONV_ID, {
+      ...makeStreamState(),
+      isStreaming: true,
+      isThinking: true,
+      currentStreamingText: '',
+      currentReasoning: 'مرحله اول تفکر',
+      isActivelyThinking: true,
+    } as any)
+
+    const wrapper = mount(MessageList, {
+      global: {
+        stubs: {
+          EmptyState: true,
+          MessageBubble: true,
+          MarkdownContent: true,
+          ThinkingIndicator: true,
+          ThinkingBlock: true,
+        }
+      }
+    })
+    const container = wrapper.find('.message-list-viewport').element as HTMLElement
+
+    Object.defineProperties(container, {
+      clientHeight: { configurable: true, value: 500 },
+      scrollHeight: { configurable: true, writable: true, value: 1200 },
+      scrollTop: { configurable: true, writable: true, value: 600 }
+    })
+
+    chatStore.convStreamStates.set(TEST_CONV_ID, {
+      ...makeStreamState(),
+      isStreaming: true,
+      isThinking: true,
+      currentStreamingText: '',
+      currentReasoning: 'مرحله اول تفکر و مرحله دوم تفکر',
+      isActivelyThinking: true,
+    } as any)
+
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+
+    expect(container.scrollTop).toBe(1200)
+  })
+
+  it('stops auto-scroll when the active reasoning output exceeds the visible viewport', async () => {
+    const chatStore = useChatStore()
+    chatStore.currentConversationId = TEST_CONV_ID
+    chatStore.convStreamStates.set(TEST_CONV_ID, {
+      ...makeStreamState(),
+      isStreaming: true,
+      isThinking: true,
+      currentStreamingText: '',
+      currentReasoning: 'مرحله اول تفکر، مرحله دوم تفکر، مرحله سوم تفکر، مرحله چهارم تفکر، مرحله پنجم تفکر',
+      isActivelyThinking: true,
+    } as any)
+
+    const wrapper = mount(MessageList, {
+      global: {
+        stubs: {
+          EmptyState: true,
+          MessageBubble: true,
+          MarkdownContent: true,
+          ThinkingIndicator: true,
+          ThinkingBlock: true,
+        }
+      }
+    })
+    const container = wrapper.find('.message-list-viewport').element as HTMLElement
+
+    Object.defineProperties(container, {
+      clientHeight: { configurable: true, value: 500 },
+      scrollHeight: { configurable: true, writable: true, value: 2200 },
+      scrollTop: { configurable: true, writable: true, value: 120 }
+    })
+
+    container.dispatchEvent(new Event('scroll'))
+    chatStore.convStreamStates.set(TEST_CONV_ID, {
+      ...makeStreamState(),
+      isStreaming: true,
+      isThinking: true,
+      currentStreamingText: '',
+      currentReasoning: 'مرحله اول تفکر، مرحله دوم تفکر، مرحله سوم تفکر، مرحله چهارم تفکر، مرحله پنجم تفکر، مرحله ششم تفکر',
+      isActivelyThinking: true,
+    } as any)
+
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.vm.shouldAutoScroll).toBe(false)
+  })
+
+  it('shows the waiting text in Persian while the model is still thinking', async () => {
+    const chatStore = useChatStore()
+    chatStore.currentConversationId = TEST_CONV_ID
+    chatStore.convStreamStates.set(TEST_CONV_ID, {
+      ...makeStreamState(),
+      isStreaming: true,
+      isThinking: true,
+      currentStreamingText: '',
+      currentReasoning: '',
+      isActivelyThinking: false,
+    } as any)
+
+    const wrapper = mount(MessageList, {
+      global: {
+        stubs: {
+          EmptyState: true,
+          MessageBubble: true,
+          MarkdownContent: true,
+          ThinkingBlock: true,
+        }
+      }
+    })
+
+    expect(wrapper.text()).toContain('درحال تفکر...')
+  })
 })

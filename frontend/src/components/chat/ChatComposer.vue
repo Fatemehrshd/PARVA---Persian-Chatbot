@@ -19,6 +19,7 @@ const activeModel = computed(() => modelsStore.selectedModel)
 const activeModelSupportsThinking = computed(() => Boolean(activeModel.value?.supportsThinking))
 const activeModelSupportsVision = computed(() => Boolean(activeModel.value?.supportsVision))
 const activeModelSupportsDocument = computed(() => Boolean(activeModel.value?.supportsDocument))
+const activeModelSupportsWebSearch = computed(() => true)
 const activeModelSupportsAttachments = computed(() => activeModelSupportsVision.value || activeModelSupportsDocument.value)
 
 watch(activeModelSupportsThinking, (supported) => {
@@ -114,7 +115,7 @@ function toggleThinking() {
   const cur = chatStore.getConvFlag(activeConvId.value).thinking ?? false
   chatStore.setConvFlag(activeConvId.value, { thinking: !cur })
   if (!cur && !activeModelSupportsThinking.value) {
-    uiStore.showToast('توجه: ممکن است این مدل به طور کامل از تفکر عمیق پشتیبانی نکند', 'info')
+    uiStore.showToast('توجه: ممکن است این مدل به طور کامل از تفکر پشتیبانی نکند', 'info')
   }
   attachmentMenuOpen.value = false
 }
@@ -539,7 +540,7 @@ onUnmounted(() => {
           v-model="inputContent"
           :class="['composer-textarea', inputDirection]"
           :dir="inputDirection"
-          :placeholder="chatStore.isTokenLimitExceeded || authStore.quota?.blocked ? 'توکن مصرفی شما به پایان رسید' : 'پیام خود را بنویسید... (Enter برای ارسال)'"
+          :placeholder="chatStore.isTokenLimitExceeded || authStore.quota?.blocked ? 'توکن مصرفی شما به پایان رسید' : 'پیام خود را بنویسید...'"
           :disabled="chatStore.isTokenLimitExceeded || authStore.quota?.blocked"
           rows="1"
           @focus="isFocused = true; updateDirection()"
@@ -576,6 +577,7 @@ onUnmounted(() => {
                   class="attachment-menu-item"
                   :class="{ 'opacity-50 cursor-not-allowed': !activeModelSupportsVision }"
                   :title="!activeModelSupportsVision ? 'این مدل از پردازش تصویر پشتیبانی نمی‌کند' : ''"
+                  :disabled="!activeModelSupportsVision"
                   @click="pickImages"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -590,6 +592,7 @@ onUnmounted(() => {
                   class="attachment-menu-item"
                   :class="{ 'opacity-50 cursor-not-allowed': !activeModelSupportsDocument }"
                   :title="!activeModelSupportsDocument ? 'این مدل از پردازش اسناد پشتیبانی نمی‌کند' : ''"
+                  :disabled="!activeModelSupportsDocument"
                   @click="pickDocuments"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -599,55 +602,6 @@ onUnmounted(() => {
                     <line x1="16" y1="17" x2="8" y2="17"/>
                   </svg>
                   <span>اسناد</span>
-                </button>
-                <button
-                  type="button"
-                  class="attachment-menu-item"
-                  data-testid="toggle-web-search"
-                  :class="chatStore.getConvFlag(activeConvId).web ? 'bg-primary/10 text-primary' : ''"
-                  @click="toggleWebSearch"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="2" y1="12" x2="22" y2="12"/>
-                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-                  </svg>
-                  <span class="flex-1 text-right">جستجوی وب</span>
-                  <span class="mr-auto flex items-center gap-1.5">
-                    <span class="text-[10px] font-semibold text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded-full">ضریب ۱.۲×</span>
-                    <BaseToggle
-                      size="sm"
-                      :modelValue="chatStore.getConvFlag(activeConvId).web"
-                      @click.stop
-                      @update:modelValue="toggleWebSearch"
-                    />
-                  </span>
-                </button>
-                <button
-                  v-if="activeModelSupportsThinking"
-                  type="button"
-                  class="attachment-menu-item"
-                  data-testid="toggle-thinking"
-                  :class="[
-                    chatStore.getConvFlag(activeConvId).thinking ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400' : ''
-                  ]"
-                  :title="chatStore.getConvFlag(activeConvId).thinking ? 'تفکر عمیق فعال است (ضریب ۱.۳×) — کلیک برای غیرفعال‌سازی' : 'فعال‌سازی تفکر عمیق (ضریب ۱.۳×)'"
-                  @click="toggleThinking"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/>
-                    <line x1="9" y1="21" x2="15" y2="21"/>
-                  </svg>
-                  <span class="flex-1 text-right">تفکر عمیق</span>
-                  <span class="mr-auto flex items-center gap-1.5">
-                    <span class="text-[10px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/40 px-1.5 py-0.5 rounded-full">ضریب ۱.۳×</span>
-                    <BaseToggle
-                      size="sm"
-                      :modelValue="Boolean(chatStore.getConvFlag(activeConvId).thinking)"
-                      @click.stop
-                      @update:modelValue="toggleThinking"
-                    />
-                  </span>
                 </button>
               </div>
             </div>
@@ -662,7 +616,6 @@ onUnmounted(() => {
               >
                 <span class="model-dot"></span>
                 <span class="model-name">{{ modelsStore.selectedModel.name }}</span>
-                <CapabilityBadge v-if="activeModelSupportsThinking" capability="thinking" size="sm" />
                 <svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline :points="modelMenuOpen ? '6 15 12 9 18 15' : '18 15 12 9 6 15'"></polyline>
                 </svg>
@@ -671,7 +624,9 @@ onUnmounted(() => {
                 type="button"
                 data-testid="modelbar-search-toggle"
                 class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors"
-                :class="chatStore.getConvFlag(activeConvId).web ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'"
+                :class="[
+                  chatStore.getConvFlag(activeConvId).web ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                ]"
                 :title="chatStore.getConvFlag(activeConvId).web ? 'جستجوی وب فعال است (ضریب ۱.۲×) — کلیک برای غیرفعال‌سازی' : 'فعال‌سازی جستجوی وب (ضریب ۱.۲×)'"
                 @click="toggleWebSearch"
               >
@@ -693,8 +648,8 @@ onUnmounted(() => {
                 ]"
                 :title="
                   chatStore.getConvFlag(activeConvId).thinking
-                    ? 'تفکر عمیق فعال است (ضریب ۱.۳×) — کلیک برای غیرفعال‌سازی'
-                    : 'فعال‌سازی تفکر عمیق (ضریب ۱.۳×)'
+                    ? 'تفکر فعال است (ضریب ۱.۳×) — کلیک برای غیرفعال‌سازی'
+                    : 'فعال‌سازی تفکر (ضریب ۱.۳×)'
                 "
                 @click="toggleThinking"
               >
@@ -702,8 +657,6 @@ onUnmounted(() => {
                   <path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/>
                   <line x1="9" y1="21" x2="15" y2="21"/>
                 </svg>
-                <span class="hidden sm:inline">تفکر</span>
-                <span v-if="chatStore.getConvFlag(activeConvId).thinking" class="text-[10px] opacity-75">۱.۳×</span>
               </button>
 
               <!-- Dropdown Popover opening upward -->

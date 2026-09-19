@@ -38,6 +38,57 @@ describe('ThinkingBlock', () => {
     expect(wrapper.text()).toContain('گام‌های منطقی مدل برای حل مسئله')
   })
 
+  it('auto-scrolls the inner thinking panel to the bottom while streaming', async () => {
+    const wrapper = mount(ThinkingBlock, {
+      props: {
+        reasoning: 'مرحله اول تفکر',
+        isThinking: true,
+        defaultOpen: true,
+      },
+    })
+
+    const panel = wrapper.find('.thinking-markdown').element as HTMLElement
+    Object.defineProperties(panel, {
+      clientHeight: { configurable: true, value: 120 },
+      scrollHeight: { configurable: true, writable: true, value: 420 },
+      scrollTop: { configurable: true, writable: true, value: 0 },
+    })
+
+    await wrapper.setProps({ reasoning: 'مرحله اول تفکر\nمرحله دوم تفکر\nمرحله سوم تفکر\nمرحله چهارم تفکر' })
+    await wrapper.vm.$nextTick()
+
+    expect(panel.scrollTop).toBe(420)
+  })
+
+  it('stops following the reasoning stream when the user scrolls upward manually', async () => {
+    const wrapper = mount(ThinkingBlock, {
+      props: {
+        reasoning: 'مرحله اول تفکر\nمرحله دوم تفکر\nمرحله سوم تفکر',
+        isThinking: true,
+        defaultOpen: true,
+      },
+    })
+
+    const panel = wrapper.find('.thinking-markdown').element as HTMLElement
+    Object.defineProperties(panel, {
+      clientHeight: { configurable: true, value: 120 },
+      scrollHeight: { configurable: true, writable: true, value: 500 },
+      scrollTop: { configurable: true, writable: true, value: 200 },
+    })
+
+    panel.dispatchEvent(new Event('scroll'))
+    await wrapper.vm.$nextTick()
+
+    Object.defineProperty(panel, 'scrollTop', { configurable: true, writable: true, value: 80 })
+    panel.dispatchEvent(new Event('scroll'))
+    await wrapper.vm.$nextTick()
+
+    await wrapper.setProps({ reasoning: 'مرحله اول تفکر\nمرحله دوم تفکر\nمرحله سوم تفکر\nمرحله چهارم تفکر' })
+    await wrapper.vm.$nextTick()
+
+    expect(panel.scrollTop).not.toBe(500)
+  })
+
   it('toggles collapsible open state when clicking trigger', async () => {
     const wrapper = mount(ThinkingBlock, {
       props: {

@@ -21,6 +21,29 @@ const isSearching = computed(() => {
   if (!id) return false
   return chatStore.convStreamStates.get(id)?.isSearching ?? false
 })
+const currentConversationFlags = computed(() => {
+  const id = chatStore.currentConversationId
+  if (!id) return { web: false, thinking: false }
+  return chatStore.getConvFlag(id)
+})
+const isThinkingActive = computed(() => {
+  return Boolean(chatStore.isActivelyThinking || chatStore.isThinking || chatStore.currentReasoning)
+})
+const hasReasoningPanel = computed(() => {
+  return Boolean(chatStore.currentReasoning || chatStore.isActivelyThinking)
+})
+const isThinkingOnly = computed(() => {
+  return currentConversationFlags.value.thinking === true && currentConversationFlags.value.web !== true && isThinkingActive.value && !hasReasoningPanel.value
+})
+const isSearchOnly = computed(() => {
+  return currentConversationFlags.value.web === true && currentConversationFlags.value.thinking !== true && isSearching.value
+})
+const isThinkingWithSearch = computed(() => {
+  return currentConversationFlags.value.web === true &&
+    currentConversationFlags.value.thinking === true &&
+    isSearching.value &&
+    !hasReasoningPanel.value
+})
 
 let scrollTimeout: ReturnType<typeof setTimeout> | undefined
 let resizeObserver: ResizeObserver | null = null
@@ -38,6 +61,12 @@ function isNearBottom(container: HTMLElement, threshold = 120): boolean {
   return distanceFromBottom <= threshold
 }
 
+function hasReasoningOverflow(container: HTMLElement | null): boolean {
+  if (!container) return false
+  if (!chatStore.isThinking || !chatStore.currentReasoning) return false
+  return container.scrollHeight - container.clientHeight > 220
+}
+
 function handleScroll() {
   const container = containerRef.value
   if (!container) return
@@ -48,7 +77,7 @@ function handleScroll() {
   lastScrollTop = container.scrollTop
 
   const nearBottom = isNearBottom(container, 120)
-  if (scrolledUp) {
+  if (scrolledUp || !nearBottom) {
     shouldAutoScroll.value = false
   } else if (nearBottom) {
     shouldAutoScroll.value = true
@@ -66,15 +95,18 @@ function handleScroll() {
 }
 
 function scrollToBottom(force = false) {
+  const container = containerRef.value
+  if (!container) return
+
   if (force) {
     shouldAutoScroll.value = true
   }
 
   const performScroll = () => {
-    const container = containerRef.value
-    if (!container) return
-    container.scrollTop = container.scrollHeight
-    lastScrollTop = container.scrollTop
+    const currentContainer = containerRef.value
+    if (!currentContainer) return
+    currentContainer.scrollTop = currentContainer.scrollHeight
+    lastScrollTop = currentContainer.scrollTop
   }
 
   // Pass 1: Next microtask (Vue DOM update)
@@ -131,6 +163,7 @@ watch(
   () => [
     chatStore.messages.length,
     chatStore.currentStreamingText,
+    chatStore.currentReasoning,
     chatStore.isStreaming,
     chatStore.isThinking,
     chatStore.currentConversationId
@@ -138,9 +171,10 @@ watch(
   (currentState, previousState) => {
     const messagesChanged = currentState[0] !== previousState?.[0]
     const streamingTextChanged = currentState[1] !== previousState?.[1]
-    const isCurrentlyStreaming = currentState[2]
-    const isThinking = currentState[3]
-    const convChanged = currentState[4] !== previousState?.[4]
+    const reasoningChanged = currentState[2] !== previousState?.[2]
+    const isCurrentlyStreaming = currentState[3]
+    const isThinking = currentState[4]
+    const convChanged = currentState[5] !== previousState?.[5]
 
     // 1. Conversation switched -> always jump to bottom
     if (convChanged) {
@@ -159,13 +193,16 @@ watch(
     }
 
     // 2b. Streaming just started — reset auto-scroll so user sees the response
-    const wasStreaming = previousState?.[2] === true
+    const wasStreaming = previousState?.[3] === true
     if (isCurrentlyStreaming && !wasStreaming) {
       shouldAutoScroll.value = true
     }
 
-    // 3. During streaming / thinking — follow unless the user scrolled away
-    if (isCurrentlyStreaming && (streamingTextChanged || isThinking)) {
+    // 3. During streaming / thinking — follow unless the user scrolled away,
+    // but never force the main chat to chase the thinking panel while the model
+    // is actively streaming its reasoning. The reasoning box itself remains
+    // scrollable and decides its own follow behavior.
+    if (isCurrentlyStreaming && (streamingTextChanged || reasoningChanged || isThinking)) {
       if (shouldAutoScroll.value) {
         scrollToBottom(false)
       }
@@ -226,11 +263,10 @@ onMounted(() => {
   // Observe content wrapper resize to handle dynamic markdown and image loading
   if (typeof ResizeObserver !== 'undefined' && contentRef.value) {
     resizeObserver = new ResizeObserver(() => {
+      const c = containerRef.value
+      if (!c) return
       if (shouldAutoScroll.value) {
-        const c = containerRef.value
-        if (c) {
-          c.scrollTop = c.scrollHeight
-        }
+        c.scrollTop = c.scrollHeight
       }
     })
     resizeObserver.observe(contentRef.value)
@@ -318,12 +354,11 @@ onBeforeUnmount(() => {
 
                 <div v-if="chatStore.currentStreamingText" class="message-text relative">
                   <MarkdownContent :content="chatStore.currentStreamingText" :streaming="true" />
-
                 </div>
-                <div v-else-if="isSearching" class="inline-flex min-h-[28px] items-center gap-2 rounded-full border border-primary/20 bg-primary/[0.07] px-2.5 py-1.5 text-[13px] text-muted-foreground">
-                  <span class="animate-pulse">در حال جستجو ...</span>
-                </div>
-                <ThinkingIndicator v-else-if="!chatStore.currentReasoning && !chatStore.isActivelyThinking" />
+                <ThinkingIndicator v-else-if="isThinkingWithSearch" :show-text="true" text="درحال تفکر و جستجو" />
+                <ThinkingIndicator v-else-if="isSearchOnly" :show-text="true" text="درحال جستجو" />
+                <ThinkingIndicator v-else-if="isThinkingOnly" :show-text="true" text="درحال تفکر" />
+                <ThinkingIndicator v-else :show-text="false" />
               </div>
             </div>
           </div>

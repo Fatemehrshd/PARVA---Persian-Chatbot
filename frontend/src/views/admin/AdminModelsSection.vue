@@ -309,6 +309,8 @@ onMounted(loadModels)
               پیش‌فرض
             </span>
             <CapabilityBadge v-if="model.supportsThinking" capability="thinking" size="sm" />
+            <CapabilityBadge v-if="model.supportsVision" capability="vision" size="sm" />
+            <CapabilityBadge v-if="model.supportsDocument" capability="document" size="sm" />
           </div>
         </td>
         <td data-label="ارائه‌دهنده">

@@ -2,14 +2,13 @@ import { AiModel } from '../src/modules/models-admin/ai-model.entity';
 import { ModelsAdminService } from '../src/modules/models-admin/models-admin.service';
 
 describe('AiModel Capabilities', () => {
-  it('instantiates with default capabilities', () => {
+  it('instantiates with deep thinking defaulted off while other capabilities remain enabled', () => {
     const model = new AiModel();
     model.name = 'Test Model';
     model.provider = 'OpenAI';
     model.apiIdentifier = 'gpt-4o';
-    // When instantiated, defaults should be:
-    // supportsThinking: true, supportsVision: true, supportsDocument: true, thinkingBudgetTokens: null/undefined
-    expect(model.supportsThinking).toBe(true);
+    // Default behavior should be opt-in reasoning: users enable it only when the model explicitly supports it.
+    expect(model.supportsThinking).toBe(false);
     expect(model.supportsVision).toBe(true);
     expect(model.supportsDocument).toBe(true);
     expect(model.thinkingBudgetTokens).toBeUndefined();

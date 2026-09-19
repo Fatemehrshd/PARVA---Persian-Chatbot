@@ -760,6 +760,13 @@ export class ChatService {
             const reasoningDelta = (chunk as any).reasoning;
             if (!reasoningDelta) continue;
 
+            // Respect the user's explicit toggle: if thinking is off, do not
+            // render or persist any model CoT/reasoning output even if the
+            // upstream provider emits reasoning deltas.
+            if (!wantThinking) {
+              continue;
+            }
+
             if (!isThinking) {
               isThinking = true;
               thinkingStartTime = Date.now();

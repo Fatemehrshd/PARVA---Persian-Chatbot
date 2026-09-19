@@ -124,6 +124,22 @@ export const useChatStore = defineStore('chat', () => {
     return convStreamStates.value.get(convId)!
   }
 
+  function ensureConversationVisibleInSidebar(convId: string, fallbackText: string) {
+    if (conversations.value.some((c) => c.id === convId)) return
+
+    const trimmed = (fallbackText || 'گفتگوی جدید').trim()
+    const title = trimmed.slice(0, 30) + (trimmed.length > 30 ? '...' : '') || 'گفتگوی جدید'
+    const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
+    conversations.value.unshift({
+      id: convId,
+      title,
+      modelId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+    sortConversations()
+  }
+
   // ─── Backward-compatible computed aliases (used by ChatComposer, MessageList, etc.) ──
   const isStreaming = computed(() => getState(currentConversationId.value)?.isStreaming ?? false)
   const isThinking = computed(() => getState(currentConversationId.value)?.isThinking ?? false)
@@ -758,19 +774,10 @@ export const useChatStore = defineStore('chat', () => {
         convStreamStates.value.set(convId, { ...s })
         resetWatchdog(convId, 25000)
 
-        // First token from the assistant means the conversation is real now —
-        // add it to the sidebar so the user can find it again later. Until the
-        // model responds, the chat stays off the list (see createNewConversation).
+        // Once the model starts producing either reasoning or final text, the chat
+        // becomes real and should stay visible in the sidebar.
         if (!conversations.value.find((c) => c.id === convId)) {
-          const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
-          conversations.value.unshift({
-            id: convId,
-            title: content.slice(0, 30),
-            modelId,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          })
-          sortConversations()
+          ensureConversationVisibleInSidebar(convId, content)
         }
       },
       (messageId: string) => {
@@ -872,6 +879,9 @@ export const useChatStore = defineStore('chat', () => {
       { useWebSearch, useThinking },
       (thinkingChunk: string) => {
         const s = ensureState(convId)
+        if (!conversations.value.some((c) => c.id === convId) && thinkingChunk.trim()) {
+          ensureConversationVisibleInSidebar(convId, content)
+        }
         s.currentReasoning += thinkingChunk
         s.isActivelyThinking = true
         streamedAny = true
@@ -881,6 +891,9 @@ export const useChatStore = defineStore('chat', () => {
       (status: { state: 'thinking' | 'done'; durationMs?: number }) => {
         const s = ensureState(convId)
         if (status.state === 'thinking') {
+          if (!conversations.value.some((c) => c.id === convId)) {
+            ensureConversationVisibleInSidebar(convId, content)
+          }
           s.isActivelyThinking = true
         } else if (status.state === 'done') {
           s.isActivelyThinking = false
@@ -1001,6 +1014,14 @@ export const useChatStore = defineStore('chat', () => {
       fileIds,
     }
     messages.value.push(userMessage)
+
+    // Optimistically reveal the chat in the sidebar as soon as the user has
+    // actually sent a message. This keeps the empty/new chat hidden until the
+    // first user message exists, but then it stays visible while the model is
+    // still generating the reply.
+    if (!conversations.value.some((c) => c.id === convId)) {
+      ensureConversationVisibleInSidebar(convId, content)
+    }
 
     // Clear any previous transient stream error for this conversation
     {

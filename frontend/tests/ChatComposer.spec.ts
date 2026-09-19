@@ -168,6 +168,24 @@ describe('ChatComposer.vue', () => {
   })
 
   it('renders tariff badges for web search (1.2x) and thinking (1.3x) in attachment menu', async () => {
+    const modelsStore = useModelsStore()
+    modelsStore.selectedModelId = 'm-thinking'
+    modelsStore.models = [
+      {
+        id: 'm-thinking',
+        name: 'Reasoning Pro',
+        provider: 'openai',
+        apiIdentifier: 'reasoning-pro',
+        isActive: true,
+        isDefault: true,
+        supportsThinking: true,
+        supportsVision: true,
+        supportsDocument: true,
+        thinkingBudgetTokens: 8192,
+        createdAt: new Date().toISOString()
+      }
+    ] as any
+
     const wrapper = mount(ChatComposer)
     await wrapper.find('.attachment-btn').trigger('click')
 
@@ -177,6 +195,24 @@ describe('ChatComposer.vue', () => {
   })
 
   it('toggles thinking flag when active model supports thinking', async () => {
+    const modelsStore = useModelsStore()
+    modelsStore.selectedModelId = 'm-thinking'
+    modelsStore.models = [
+      {
+        id: 'm-thinking',
+        name: 'Reasoning Pro',
+        provider: 'openai',
+        apiIdentifier: 'reasoning-pro',
+        isActive: true,
+        isDefault: true,
+        supportsThinking: true,
+        supportsVision: true,
+        supportsDocument: true,
+        thinkingBudgetTokens: 8192,
+        createdAt: new Date().toISOString()
+      }
+    ] as any
+
     const wrapper = mount(ChatComposer)
     const chatStore = useChatStore()
     chatStore.currentConversationId = 'c-test'
@@ -215,6 +251,41 @@ describe('ChatComposer.vue', () => {
 
     const thinkingBtn = wrapper.find('[data-testid="modelbar-thinking-toggle"]')
     expect(thinkingBtn.exists()).toBe(false)
+  })
+
+  it('disables unsupported capability controls and hides badges in the selected model field', async () => {
+    const modelsStore = useModelsStore()
+    modelsStore.selectedModelId = 'm-no-cap'
+    modelsStore.models = [
+      {
+        id: 'm-no-cap',
+        name: 'Basic Model',
+        provider: 'openai',
+        apiIdentifier: 'basic',
+        isActive: true,
+        isDefault: true,
+        supportsThinking: false,
+        supportsVision: false,
+        supportsDocument: false,
+        createdAt: new Date().toISOString()
+      }
+    ] as any
+
+    const wrapper = mount(ChatComposer)
+    await wrapper.vm.$nextTick()
+
+    const selectedModelLabel = wrapper.find('.model-name')
+    expect(selectedModelLabel.text()).toBe('Basic Model')
+    expect(wrapper.find('[data-capability="thinking"]').exists()).toBe(false)
+
+    await wrapper.find('.attachment-btn').trigger('click')
+    const searchBtn = wrapper.find('[data-testid="toggle-web-search"]')
+    const menuItems = wrapper.findAll('.attachment-menu-item')
+
+    expect(searchBtn.attributes('disabled')).toBeDefined()
+    expect(menuItems.length).toBeGreaterThanOrEqual(2)
+    expect(menuItems[0].attributes('disabled')).toBeDefined()
+    expect(menuItems[1].attributes('disabled')).toBeDefined()
   })
 
   it('renders CapabilityBadge in model picker dropdown', async () => {

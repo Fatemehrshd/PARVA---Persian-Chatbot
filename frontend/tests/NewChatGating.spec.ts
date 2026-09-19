@@ -105,18 +105,19 @@ describe('New Chat gating & sidebar visibility', () => {
     wrapper.unmount()
   })
 
-  it('adds a typed-in chat to the sidebar only after the assistant responds', async () => {
+  it('adds a typed-in chat to the sidebar immediately after the user sends it, even while the model is still streaming', async () => {
     const chatStore = useChatStore()
 
-    // User types directly without selecting any conversation; the model is
-    // still thinking (no token released yet).
+    // User types directly without selecting any conversation; the chat should
+    // become visible in the sidebar as soon as the user message exists.
     streamHandler = () => {}
 
     const sendPromise = chatStore.sendMessage('سلام پروا')
     await flushPromises()
 
     expect(chatStore.messages.length).toBe(1)
-    expect(chatStore.conversations.length).toBe(0)
+    expect(chatStore.conversations.length).toBe(1)
+    expect(chatStore.conversations[0].id).toBe(chatStore.currentConversationId)
 
     // Model answers now
     const call = (chatService.sendMessageStream as any).mock.calls.at(-1)

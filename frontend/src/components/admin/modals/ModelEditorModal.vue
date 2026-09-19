@@ -42,7 +42,7 @@ const form = ref({
   isActive: true,
   accessLevel: 'public' as ModelAccessLevel,
   allowedUserIds: [] as string[],
-  supportsThinking: true,
+  supportsThinking: false,
   supportsVision: false,
   supportsDocument: false,
   thinkingBudgetTokens: 4096,
@@ -64,7 +64,7 @@ watch(
         isActive: m.isActive,
         accessLevel: m.accessLevel || 'public',
         allowedUserIds: Array.isArray(m.allowedUserIds) ? [...m.allowedUserIds] : [],
-        supportsThinking: m.supportsThinking ?? true,
+        supportsThinking: m.supportsThinking ?? false,
         supportsVision: m.supportsVision ?? false,
         supportsDocument: m.supportsDocument ?? false,
         thinkingBudgetTokens: m.thinkingBudgetTokens ?? 4096,
@@ -78,7 +78,7 @@ watch(
         isActive: true,
         accessLevel: 'public',
         allowedUserIds: [],
-        supportsThinking: true,
+        supportsThinking: false,
         supportsVision: false,
         supportsDocument: false,
         thinkingBudgetTokens: 4096,
@@ -187,21 +187,21 @@ function handleSubmit() {
               @click="form.supportsThinking = !form.supportsThinking"
             >
               <BaseToggle :model-value="form.supportsThinking" :disabled="isSaving" @click.stop @update:model-value="form.supportsThinking = $event" />
-              <span class="text-xs">تفکر عمیق (Thinking)</span>
+              <span class="text-xs">تفکر</span>
             </div>
             <div
               class="toggle-label border border-border/80 rounded-lg p-2 bg-secondary/20 hover:bg-secondary/40 transition-colors cursor-pointer select-none flex items-center gap-2"
               @click="form.supportsVision = !form.supportsVision"
             >
               <BaseToggle :model-value="form.supportsVision" :disabled="isSaving" @click.stop @update:model-value="form.supportsVision = $event" />
-              <span class="text-xs">بینایی / عکس (Vision)</span>
+              <span class="text-xs">تصویر</span>
             </div>
             <div
               class="toggle-label border border-border/80 rounded-lg p-2 bg-secondary/20 hover:bg-secondary/40 transition-colors cursor-pointer select-none flex items-center gap-2"
               @click="form.supportsDocument = !form.supportsDocument"
             >
               <BaseToggle :model-value="form.supportsDocument" :disabled="isSaving" @click.stop @update:model-value="form.supportsDocument = $event" />
-              <span class="text-xs">تحلیل اسناد (Document)</span>
+              <span class="text-xs">اسناد</span>
             </div>
           </div>
 

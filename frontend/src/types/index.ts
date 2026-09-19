@@ -286,6 +286,7 @@ export interface Model {
   supportsThinking?: boolean
   supportsVision?: boolean
   supportsDocument?: boolean
+  supportsWebSearch?: boolean
   thinkingBudgetTokens?: number | null
 }
 
@@ -302,6 +303,7 @@ export interface CreateModelRequest {
   supportsThinking?: boolean
   supportsVision?: boolean
   supportsDocument?: boolean
+  supportsWebSearch?: boolean
   thinkingBudgetTokens?: number | null
 }
 

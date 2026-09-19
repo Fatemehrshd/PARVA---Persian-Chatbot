@@ -302,7 +302,7 @@ onMounted(loadSettings)
           </div>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-          <label v-for="item in [{ key: 'image', label: 'کار با تصویر' }, { key: 'document', label: 'کار با سند' }, { key: 'thinking', label: 'تفکر عمیق' }]" :key="item.key" class="space-y-1.5">
+          <label v-for="item in [{ key: 'image', label: 'کار با تصویر' }, { key: 'document', label: 'کار با سند' }, { key: 'thinking', label: 'تفکر' }]" :key="item.key" class="space-y-1.5">
             <span class="font-medium text-foreground block">{{ item.label }}</span>
             <input :value="taskMultipliers[item.key] ?? ''" type="text" inputmode="decimal" autocomplete="off" placeholder="۱.۰" class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary" :disabled="isSaving" @input="updateTaskMultiplier(item.key, $event)" />
             <span class="text-[11px] text-muted-foreground block">نرخ مؤثر: ${{ effectiveMultiplierRate(item.key) }} / ۱۰۰۰ توکن</span>
@@ -421,7 +421,7 @@ onMounted(loadSettings)
           </div>
           <div>
             <h4 class="text-sm font-bold text-foreground">تعرفه و ضرایب مصرف توکن (Feature Tariffs)</h4>
-            <span class="text-xs text-muted-foreground">تعیین ضریب محاسبه توکن‌ها هنگام استفاده از جستجوی وب یا تفکر عمیق</span>
+            <span class="text-xs text-muted-foreground">تعیین ضریب محاسبه توکن‌ها هنگام استفاده از جستجوی وب یا تفکر</span>
           </div>
         </div>
 
@@ -442,7 +442,7 @@ onMounted(loadSettings)
           </label>
 
           <label class="space-y-1.5">
-            <span class="font-medium text-foreground block">ضریب مصرف تفکر عمیق (Thinking Multiplier)</span>
+            <span class="font-medium text-foreground block">ضریب مصرف تفکر (Thinking Multiplier)</span>
             <input
               v-model.number="form.thinkingMultiplier"
               type="number"
@@ -453,7 +453,7 @@ onMounted(loadSettings)
               class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary"
               :disabled="isSaving"
             />
-            <span class="text-[11px] text-muted-foreground block">مثال: ۱.۳ یعنی ۳۰٪ توکن بیشتر برای پیام‌های همراه با تفکر عمیق محاسبه می‌شود.</span>
+            <span class="text-[11px] text-muted-foreground block">مثال: ۱.۳ یعنی ۳۰٪ توکن بیشتر برای پیام‌های همراه با تفکر محاسبه می‌شود.</span>
           </label>
         </div>
       </div>

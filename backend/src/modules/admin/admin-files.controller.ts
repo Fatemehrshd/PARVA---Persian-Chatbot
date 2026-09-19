@@ -8,12 +8,14 @@ import {
   UseGuards,
   HttpCode,
   NotFoundException,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { FileAttachment } from '../files/file-attachment.entity';
 import { User } from '../users/user.entity';
-import { FilesService } from '../files/files.service';
+import { FilesService, fixUtf8MangledString } from '../files/files.service';
 import { QueueManagerService } from '../files/queue-manager.service';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { AdminGuard } from '../../shared/admin.guard';
@@ -102,7 +104,7 @@ export class AdminFilesController {
 
     const items = files.map((f) => ({
       id: f.id,
-      originalName: f.originalName,
+      originalName: fixUtf8MangledString(f.originalName),
       mimeType: f.mimeType,
       fileType: f.fileType,
       fileSize: Number(f.fileSize),
@@ -145,7 +147,7 @@ export class AdminFilesController {
 
     return {
       id: file.id,
-      originalName: file.originalName,
+      originalName: fixUtf8MangledString(file.originalName),
       mimeType: file.mimeType,
       fileType: file.fileType,
       fileSize: Number(file.fileSize),
@@ -167,6 +169,32 @@ export class AdminFilesController {
           }
         : null,
     };
+  }
+
+  @Get(':id/content')
+  async getFileContent(
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const file = await this.fileRepo.findOne({
+      where: { id, isDeleted: false },
+    });
+
+    if (!file) {
+      throw new NotFoundException('فایل یافت نشد');
+    }
+
+    const buffer = await this.filesService.getFileBuffer(file);
+    const fixedName = fixUtf8MangledString(file.originalName);
+    const encodedName = encodeURIComponent(fixedName);
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Content-Length', buffer.length);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`,
+    );
+    res.end(buffer);
   }
 
   @Post(':id/retry')

@@ -18,6 +18,7 @@ export class Conversation {
   @Column({ nullable: true }) userId: string;
   @OneToMany(() => Message, (m) => m.conversation) messages: Message[];
   @Column({ default: false }) isDeleted: boolean;
+  @Column({ default: false }) isPinned: boolean;
   @CreateDateColumn() createdAt: Date;
   @UpdateDateColumn() updatedAt: Date;
 }

@@ -17,7 +17,7 @@ import {
 import type { Response } from 'express';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
-import { FilesService } from './files.service';
+import { FilesService, fixUtf8MangledString } from './files.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('files')
@@ -39,7 +39,14 @@ export class FilesController {
     if (!file) {
       throw new BadRequestException('هیچ فایلی ارسال نشده است');
     }
-    return this.filesService.uploadFile(req.user.sub, file, conversationId);
+    let overrideName: string | undefined;
+    const headerName = req.headers['x-original-filename'] as string | undefined;
+    if (headerName) {
+      try {
+        overrideName = decodeURIComponent(headerName);
+      } catch {}
+    }
+    return this.filesService.uploadFile(req.user.sub, file, conversationId, overrideName);
   }
 
   @Post('upload-multiple')
@@ -86,14 +93,19 @@ export class FilesController {
     @Param('id') id: string,
     @Res() res: Response,
   ) {
-    const file = await this.filesService.getFileRecord(req.user.sub, id);
+    const isAdmin = req.user?.role === 'admin';
+    const file = await this.filesService.getFileRecord(req.user.sub, id, isAdmin);
     const buffer = await this.filesService.getFileBuffer(file);
+    const fixedName = fixUtf8MangledString(file.originalName);
+    const encodedName = encodeURIComponent(fixedName);
+    const isDownload = req.query?.download === '1' || req.query?.download === 'true';
+    const dispositionType = isDownload ? 'attachment' : 'inline';
     res.setHeader('Content-Type', file.mimeType);
     res.setHeader('Content-Length', buffer.length);
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.setHeader(
       'Content-Disposition',
-      `inline; filename="${encodeURIComponent(file.originalName)}"`,
+      `${dispositionType}; filename="${encodedName}"; filename*=UTF-8''${encodedName}`,
     );
     res.end(buffer);
   }

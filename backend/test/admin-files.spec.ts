@@ -1,4 +1,4 @@
-﻿import { Test } from '@nestjs/testing';
+import { Test } from '@nestjs/testing';
 import {
   INestApplication,
   ValidationPipe,
@@ -98,6 +98,7 @@ describe('AdminFilesController E2E / Integration', () => {
 
   const mockFilesService = {
     deleteFile: jest.fn().mockResolvedValue(undefined),
+    getFileBuffer: jest.fn().mockResolvedValue(Buffer.from('PDF_DUMMY_BINARY_DATA')),
   };
 
   const mockQueueManager = {
@@ -241,5 +242,38 @@ describe('AdminFilesController E2E / Integration', () => {
 
     expect(res.status).toBe(403);
     expect(res.body.success).toBe(false);
+  });
+
+  it('GET /admin/files/:id/content streams file buffer with proper headers for admin', async () => {
+    currentUserRole = 'admin';
+    const res = await request(app.getHttpServer())
+      .get('/admin/files/file-1/content')
+      .set('Authorization', 'Bearer admin-token');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toBe('application/pdf');
+    expect(res.headers['content-disposition']).toContain('attachment');
+    expect(res.headers['content-disposition']).toContain("filename*=UTF-8''");
+    expect(res.body.toString()).toBe('PDF_DUMMY_BINARY_DATA');
+  });
+
+  it('GET /admin/files/:id/content allows auth via query token for new browser tab downloads', async () => {
+    currentUserRole = 'admin';
+    const res = await request(app.getHttpServer())
+      .get('/admin/files/file-1/content?token=admin-token');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toBe('application/pdf');
+    expect(res.headers['content-disposition']).toContain('attachment');
+    expect(res.body.toString()).toBe('PDF_DUMMY_BINARY_DATA');
+  });
+
+  it('GET /admin/files/:id/content returns 404 for non-existent file', async () => {
+    currentUserRole = 'admin';
+    const res = await request(app.getHttpServer())
+      .get('/admin/files/non-existent-file/content')
+      .set('Authorization', 'Bearer admin-token');
+
+    expect(res.status).toBe(404);
   });
 });

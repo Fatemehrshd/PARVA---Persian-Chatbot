@@ -34,5 +34,12 @@ export class AiModel {
   @Column({ default: 'public' }) accessLevel: ModelAccessLevel;
   /** User ids allowed to see/use this model (only meaningful for private). */
   @Column({ type: 'jsonb', default: [] }) allowedUserIds: string[];
+  /** Per-model capability flags (default: thinking on, vision & document on) */
+  @Column({ default: true }) supportsThinking: boolean = true;
+  @Column({ default: true }) supportsVision: boolean = true;
+  @Column({ default: true }) supportsDocument: boolean = true;
+  /** Optional maximum reasoning/thinking token budget cap (null = unlimited/model default) */
+  @Column({ type: 'int', nullable: true, default: null })
+  thinkingBudgetTokens?: number | null;
   @CreateDateColumn() createdAt: Date;
 }

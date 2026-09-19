@@ -20,6 +20,10 @@ export class UpdateConvDto {
   @IsOptional()
   @IsUUID('4', { message: FA.modelIdUuid })
   modelId?: string;
+
+  @IsOptional()
+  @IsBoolean({ message: 'وضعیت پین باید boolean باشد' })
+  isPinned?: boolean;
 }
 
 export class SendMsgDto {
@@ -35,4 +39,8 @@ export class SendMsgDto {
   @IsOptional()
   @IsBoolean({ message: 'گزینه جستجوی وب باید boolean باشد' })
   useWebSearch?: boolean;
+
+  @IsOptional()
+  @IsBoolean({ message: 'گزینه تفکر عمیق باید boolean باشد' })
+  useThinking?: boolean;
 }

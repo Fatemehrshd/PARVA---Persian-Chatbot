@@ -11,6 +11,7 @@ import { UsersService } from '../users/users.service';
 import { ActiveStreamService, ActiveStreamStatus } from './active-stream.service';
 import { WebSearchService } from '../web-search/web-search.service';
 import { FA } from '../../shared/messages.fa';
+import { fixUtf8MangledString } from '../files/files.service';
 
 export interface ChatChunk {
   token?: string;
@@ -21,6 +22,24 @@ export interface ChatChunk {
   searchStatus?: 'searching';
   sources?: { title: string; url: string; snippet?: string }[];
   searchFailed?: boolean;
+  thinking?: string;
+  thinkingStatus?: 'thinking' | 'done';
+  thinkingDurationMs?: number;
+}
+
+export function calculateEffectiveTokens(
+  baseTokens: number,
+  opts: {
+    usedSearch: boolean;
+    usedThinking: boolean;
+    searchMult: number;
+    thinkingMult: number;
+  },
+): number {
+  let mult = 1.0;
+  if (opts.usedSearch) mult *= (opts.searchMult || 1.0);
+  if (opts.usedThinking) mult *= (opts.thinkingMult || 1.0);
+  return Math.ceil(baseTokens * mult);
 }
 
 export class QuotaExceededException extends BadRequestException {
@@ -76,6 +95,22 @@ export function calculateAttachmentTokens(
   return totalAttachmentTokens;
 }
 
+export function assertModelSupportsAttachments(
+  model: { supportsVision?: boolean; supportsDocument?: boolean } | null | undefined,
+  attachments: Array<{ fileType?: string }>,
+): void {
+  if (!model || !attachments || attachments.length === 0) return;
+  const hasImage = attachments.some((a) => a.fileType === 'image');
+  const hasDoc = attachments.some((a) => a.fileType !== 'image');
+
+  if (hasImage && model.supportsVision === false) {
+    throw new BadRequestException('مدل انتخابی از پردازش تصویر پشتیبانی نمی‌کند');
+  }
+  if (hasDoc && model.supportsDocument === false) {
+    throw new BadRequestException('مدل انتخابی از تحلیل اسناد و فایل‌ها پشتیبانی نمی‌کند');
+  }
+}
+
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
@@ -114,7 +149,8 @@ export class ChatService {
             .andWhere('m.isDeleted = false')
             .getQuery(),
       )
-      .orderBy('conv.updatedAt', 'DESC')
+      .orderBy('conv.isPinned', 'DESC')
+      .addOrderBy('conv.updatedAt', 'DESC')
       .take(take)
       .skip(skip)
       .getMany();
@@ -178,13 +214,31 @@ export class ChatService {
   }
 
   history(userId: string, id: string) {
-    return this.assertOwned(userId, id).then(() =>
-      this.msg.find({
-        where: { conversationId: id, isDeleted: false },
-        relations: ['attachments'],
-        order: { createdAt: 'ASC' },
-      }),
-    );
+    return this.assertOwned(userId, id)
+      .then(() =>
+        this.msg.find({
+          where: { conversationId: id, isDeleted: false },
+          relations: ['attachments'],
+          order: { createdAt: 'ASC' },
+        }),
+      )
+      .then((messages) => {
+        for (const m of messages) {
+          if (m.attachments) {
+            for (const a of m.attachments) {
+              a.originalName = fixUtf8MangledString(a.originalName);
+            }
+          }
+          if (!m.reasoning_content && m.content && m.role === 'assistant') {
+            const thinkMatch = m.content.match(/^<think>([\s\S]*?)<\/think>\s*/);
+            if (thinkMatch) {
+              m.reasoning_content = thinkMatch[1].trim();
+              m.content = m.content.slice(thinkMatch[0].length);
+            }
+          }
+        }
+        return messages;
+      });
   }
 
   async delete(userId: string, id: string): Promise<void> {
@@ -270,6 +324,18 @@ export class ChatService {
         ? await this.users.findById(userId).catch(() => null)
         : null;
     return { id: userId, role: user?.role || 'user' };
+  }
+
+  async setPinned(userId: string, id: string, isPinned: boolean) {
+    const c = await this.assertOwned(userId, id);
+    c.isPinned = isPinned;
+    return this.conv.save(c);
+  }
+
+  async togglePin(userId: string, id: string, isPinned?: boolean) {
+    const c = await this.assertOwned(userId, id);
+    c.isPinned = typeof isPinned === 'boolean' ? isPinned : !c.isPinned;
+    return this.conv.save(c);
   }
 
   /**
@@ -390,7 +456,7 @@ export class ChatService {
     id: string,
     content: string,
     fileIds?: string[],
-    options?: { useWebSearch?: boolean },
+    options?: { useWebSearch?: boolean; useThinking?: boolean },
   ): AsyncGenerator<ChatChunk> {
     const conversation = await this.assertOwned(userId, id);
 
@@ -454,6 +520,7 @@ export class ChatService {
     let webSources: { title: string; url: string; snippet?: string }[] | null = null;
     let webSearchFailed = false;
     const wantSearch = options?.useWebSearch === true;
+    const wantThinking = options?.useThinking === true;
     if (wantSearch) {
       const enabled =
         this.settings && typeof (this.settings as any).getWebSearchEnabled === 'function'
@@ -476,6 +543,14 @@ export class ChatService {
           yield { searchFailed: true };
         }
       }
+    }
+
+    let attachments: FileAttachment[] = [];
+    if (fileIds && fileIds.length > 0 && this.fileRepo) {
+      attachments = await this.fileRepo.find({
+        where: fileIds.map((fid) => ({ id: fid, userId, isDeleted: false })),
+      });
+      assertModelSupportsAttachments(model, attachments);
     }
 
     // If the last message in DB is already an unanswered user message with the exact same content (e.g. from retry),
@@ -501,7 +576,6 @@ export class ChatService {
 
     let effectiveContent = rawContent || (fileIds?.length ? 'لطفاً فایل(های) پیوست‌شده را بررسی و تحلیل کن.' : '');
     const imageAttachments: FileAttachment[] = [];
-    let attachments: FileAttachment[] = [];
 
     if (fileIds && fileIds.length > 0 && this.fileRepo && savedUserMsg) {
       for (const fid of fileIds) {
@@ -510,10 +584,6 @@ export class ChatService {
           { messageId: savedUserMsg.id, conversationId: id },
         );
       }
-
-      attachments = await this.fileRepo.find({
-        where: fileIds.map((fid) => ({ id: fid, userId, isDeleted: false })),
-      });
 
       // If any attachment is still in 'processing' status, wait briefly for background worker to complete
       if (attachments.some((a) => a.status === 'processing') && process.env.NODE_ENV !== 'test') {
@@ -546,6 +616,26 @@ export class ChatService {
       this.logger.warn(
         'No API key configured for the resolved model/provider (and no global OPENAI_API_KEY) — using offline echo fallback.',
       );
+      let reasoningContent: string | null = null;
+      let thinkingDurationMs: number | null = null;
+
+      if (wantThinking) {
+        const thinkingStartTime = Date.now();
+        yield { thinkingStatus: 'thinking' };
+        const mockReasoning = 'در حال تحلیل دقیق و پردازش ابعاد مختلف درخواست...';
+        for (const w of mockReasoning.split(/(\s+)/)) {
+          if (w) {
+            if (!/^\s+$/.test(w)) await paceToken();
+            this.activeStream?.appendReasoning(id, w);
+            yield { thinking: w };
+          }
+        }
+        thinkingDurationMs = Math.max(100, Date.now() - thinkingStartTime);
+        this.activeStream?.completeThinking(id, thinkingDurationMs);
+        yield { thinkingStatus: 'done', thinkingDurationMs };
+        reasoningContent = mockReasoning;
+      }
+
       const full = `Echo: ${effectiveContent}`;
       for (const w of full.split(/(\s+)/)) {
         if (w) {
@@ -562,11 +652,25 @@ export class ChatService {
           isInterrupted: false,
           stoppedByUser: false,
           sources: webSources,
+          reasoning_content: reasoningContent,
+          thinkingDurationMs: thinkingDurationMs,
         }),
       );
-      // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست
+      // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست و ضرایب وب سرچ و تفکر
       const attachmentTokens = calculateAttachmentTokens(attachments);
-      const consumedTokens = Math.ceil((content.length + full.length) / 4) + attachmentTokens;
+      const baseTokens = Math.ceil((content.length + full.length) / 4) + attachmentTokens;
+      const searchMult = typeof this.settings?.getWebSearchMultiplier === 'function'
+        ? await this.settings.getWebSearchMultiplier()
+        : 1.2;
+      const thinkingMult = typeof this.settings?.getThinkingMultiplier === 'function'
+        ? await this.settings.getThinkingMultiplier()
+        : 1.3;
+      const consumedTokens = calculateEffectiveTokens(baseTokens, {
+        usedSearch: wantSearch,
+        usedThinking: wantThinking,
+        searchMult,
+        thinkingMult,
+      });
       await this.recordUsage(userId, consumedTokens, this.detectTaskType(attachments));
 
       if (titlePromise) {
@@ -625,20 +729,62 @@ export class ChatService {
     let failedMidStream = false;
     try {
       try {
-        for await (const token of this.forwarder.stream(target, messages, {
+        let isThinking = false;
+        let thinkingStartTime: number | null = null;
+        let thinkingDurationMs: number | undefined = undefined;
+
+        for await (const chunk of this.forwarder.stream(target, messages, {
           signal: session?.abortController.signal,
+          useThinking: wantThinking,
         })) {
           if (session?.abortController.signal.aborted) break;
+
+          // Reasoning chunk
+          if (chunk && typeof chunk === 'object' && typeof (chunk as any).reasoning === 'string') {
+            const reasoningDelta = (chunk as any).reasoning;
+            if (!reasoningDelta) continue;
+
+            if (!isThinking) {
+              isThinking = true;
+              thinkingStartTime = Date.now();
+              yield { thinkingStatus: 'thinking' };
+            }
+
+            for (const piece of reasoningDelta.split(/(\s+)/)) {
+              if (!piece) continue;
+              if (!/^\s+$/.test(piece)) await paceToken();
+              this.activeStream?.appendReasoning(id, piece);
+              yield { thinking: piece };
+            }
+            continue;
+          }
+
+          // Content chunk
+          const tokenStr = typeof chunk === 'string' ? chunk : ((chunk as any)?.content || '');
+          if (isThinking) {
+            isThinking = false;
+            thinkingDurationMs = thinkingStartTime ? Math.max(0, Date.now() - thinkingStartTime) : 0;
+            this.activeStream?.completeThinking(id, thinkingDurationMs);
+            yield { thinkingStatus: 'done', thinkingDurationMs };
+          }
+
           // Providers often deliver large multi-word chunks. Split them into
           // word/whitespace pieces and pace each piece so the client renders a
           // smooth, word-by-word flow instead of sudden bulk text.
-          for (const piece of token.split(/(\s+)/)) {
+          for (const piece of tokenStr.split(/(\s+)/)) {
             if (!piece) continue;
             if (!/^\s+$/.test(piece)) await paceToken();
             full += piece;
             this.activeStream?.appendToken(id, piece);
             yield { token: piece };
           }
+        }
+
+        if (isThinking) {
+          isThinking = false;
+          thinkingDurationMs = thinkingStartTime ? Math.max(0, Date.now() - thinkingStartTime) : 0;
+          this.activeStream?.completeThinking(id, thinkingDurationMs);
+          yield { thinkingStatus: 'done', thinkingDurationMs };
         }
       } catch (err) {
         if (!full) {
@@ -675,11 +821,25 @@ export class ChatService {
             isInterrupted: failedMidStream || stoppedByUserAbort,
             stoppedByUser: stoppedByUserAbort,
             sources: stoppedByUserAbort ? null : webSources,
+            reasoning_content: session?.reasoningText || null,
+            thinkingDurationMs: session?.thinkingDurationMs ?? null,
           }),
         );
-        // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست
+        // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست و ضرایب وب سرچ و تفکر
         const attachmentTokens = calculateAttachmentTokens(attachments);
-        const consumedTokens = Math.ceil((content.length + full.length) / 4) + attachmentTokens;
+        const baseTokens = Math.ceil((content.length + full.length) / 4) + attachmentTokens;
+        const searchMult = typeof this.settings?.getWebSearchMultiplier === 'function'
+          ? await this.settings.getWebSearchMultiplier()
+          : 1.2;
+        const thinkingMult = typeof this.settings?.getThinkingMultiplier === 'function'
+          ? await this.settings.getThinkingMultiplier()
+          : 1.3;
+        const consumedTokens = calculateEffectiveTokens(baseTokens, {
+          usedSearch: wantSearch,
+          usedThinking: wantThinking,
+          searchMult,
+          thinkingMult,
+        });
         await this.recordUsage(userId, consumedTokens, this.detectTaskType(attachments));
         await this.conv.update(id, {});
         this.activeStream?.completeSession(id, savedAssistant.id);
@@ -850,6 +1010,15 @@ export class ChatService {
     if (session.accumulatedText) {
       yield { sync: session.accumulatedText };
     }
+    if (session.reasoningText) {
+      yield { thinking: session.reasoningText };
+    }
+    if (session.isThinkingComplete !== undefined) {
+      yield {
+        thinkingStatus: session.isThinkingComplete ? 'done' : 'thinking',
+        thinkingDurationMs: session.thinkingDurationMs,
+      };
+    }
     if (session.sources) {
       yield { sources: session.sources };
     }
@@ -868,6 +1037,10 @@ export class ChatService {
     const unsubscribe = this.activeStream?.subscribe(id, (event: any) => {
       if (event.type === 'token') {
         queue.push({ token: event.content });
+      } else if (event.type === 'thinking') {
+        queue.push({ thinking: event.content });
+      } else if (event.type === 'thinking-status') {
+        queue.push({ thinkingStatus: event.state, thinkingDurationMs: event.durationMs });
       } else if (event.type === 'sources') {
         queue.push({ sources: event.sources });
       } else if (event.type === 'title') {

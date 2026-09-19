@@ -7,6 +7,7 @@ import MessageBubble from './MessageBubble.vue'
 import MarkdownContent from './MarkdownContent.vue'
 import EmptyState from './EmptyState.vue'
 import ThinkingIndicator from './ThinkingIndicator.vue'
+import ThinkingBlock from './ThinkingBlock.vue'
 
 const chatStore = useChatStore()
 const { activeLogo } = useThemeLogo()
@@ -306,6 +307,15 @@ onBeforeUnmount(() => {
                 :class="['bubble', 'bubble-assistant', streamingDirection, 'transition-colors w-full p-1']"
                 :dir="streamingDirection"
               >
+                <!-- Thinking Block if reasoning is streaming or complete -->
+                <ThinkingBlock
+                  v-if="chatStore.currentReasoning || chatStore.isActivelyThinking"
+                  :reasoning="chatStore.currentReasoning"
+                  :is-thinking="chatStore.isActivelyThinking"
+                  :duration-ms="chatStore.thinkingDurationMs"
+                  class="mb-3"
+                />
+
                 <div v-if="chatStore.currentStreamingText" class="message-text relative">
                   <MarkdownContent :content="chatStore.currentStreamingText" :streaming="true" />
 
@@ -313,7 +323,7 @@ onBeforeUnmount(() => {
                 <div v-else-if="isSearching" class="inline-flex min-h-[28px] items-center gap-2 rounded-full border border-primary/20 bg-primary/[0.07] px-2.5 py-1.5 text-[13px] text-muted-foreground">
                   <span class="animate-pulse">در حال جستجو ...</span>
                 </div>
-                <ThinkingIndicator v-else />
+                <ThinkingIndicator v-else-if="!chatStore.currentReasoning && !chatStore.isActivelyThinking" />
               </div>
             </div>
           </div>

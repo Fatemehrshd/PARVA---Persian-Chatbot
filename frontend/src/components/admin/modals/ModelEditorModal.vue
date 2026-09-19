@@ -19,7 +19,19 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  save: [data: { name: string; provider: string; providerId?: string; apiIdentifier: string; isActive: boolean; accessLevel: ModelAccessLevel; allowedUserIds: string[] }]
+  save: [data: {
+    name: string
+    provider: string
+    providerId?: string
+    apiIdentifier: string
+    isActive: boolean
+    accessLevel: ModelAccessLevel
+    allowedUserIds: string[]
+    supportsThinking?: boolean
+    supportsVision?: boolean
+    supportsDocument?: boolean
+    thinkingBudgetTokens?: number
+  }]
 }>()
 
 const form = ref({
@@ -30,6 +42,10 @@ const form = ref({
   isActive: true,
   accessLevel: 'public' as ModelAccessLevel,
   allowedUserIds: [] as string[],
+  supportsThinking: true,
+  supportsVision: false,
+  supportsDocument: false,
+  thinkingBudgetTokens: 4096,
 })
 
 const isTesting = ref(false)
@@ -48,6 +64,10 @@ watch(
         isActive: m.isActive,
         accessLevel: m.accessLevel || 'public',
         allowedUserIds: Array.isArray(m.allowedUserIds) ? [...m.allowedUserIds] : [],
+        supportsThinking: m.supportsThinking ?? true,
+        supportsVision: m.supportsVision ?? false,
+        supportsDocument: m.supportsDocument ?? false,
+        thinkingBudgetTokens: m.thinkingBudgetTokens ?? 4096,
       }
     } else {
       form.value = {
@@ -58,6 +78,10 @@ watch(
         isActive: true,
         accessLevel: 'public',
         allowedUserIds: [],
+        supportsThinking: true,
+        supportsVision: false,
+        supportsDocument: false,
+        thinkingBudgetTokens: 4096,
       }
     }
   },
@@ -109,6 +133,10 @@ function handleSubmit() {
     accessLevel: form.value.accessLevel,
     // The whitelist only matters for private models; clearing avoids stale ids.
     allowedUserIds: form.value.accessLevel === 'private' ? form.value.allowedUserIds : [],
+    supportsThinking: form.value.supportsThinking,
+    supportsVision: form.value.supportsVision,
+    supportsDocument: form.value.supportsDocument,
+    thinkingBudgetTokens: form.value.supportsThinking ? Number(form.value.thinkingBudgetTokens) || undefined : undefined,
   })
 }
 </script>
@@ -138,10 +166,10 @@ function handleSubmit() {
           <span class="field-label">{{ labels?.apiId || 'شناسه فنی مدل (API Identifier)' }} <span class="req">*</span></span>
           <input id="apiIdentifier" v-model="form.apiIdentifier" class="mono" required :disabled="isSaving" placeholder="مثال: gpt-4o یا claude-3-5-sonnet-20241022" />
         </label>
-        <label class="toggle-label col-span-full">
-          <BaseToggle v-model="form.isActive" :disabled="isSaving" />
+        <div class="toggle-label col-span-full flex items-center gap-2 cursor-pointer select-none" @click="form.isActive = !form.isActive">
+          <BaseToggle :model-value="form.isActive" :disabled="isSaving" @click.stop @update:model-value="form.isActive = $event" />
           <span>مدل در پلتفرم فعال باشد</span>
-        </label>
+        </div>
 
         <ModelAccessPicker
           v-model:accessLevel="form.accessLevel"
@@ -149,6 +177,49 @@ function handleSubmit() {
           :users="users || []"
           :disabled="isSaving"
         />
+
+        <!-- Capabilities Section -->
+        <div class="col-span-full border-t border-border pt-3 mt-1 flex flex-col gap-2.5">
+          <span class="field-label font-semibold">قابلیت‌های مدل:</span>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div
+              class="toggle-label border border-border/80 rounded-lg p-2 bg-secondary/20 hover:bg-secondary/40 transition-colors cursor-pointer select-none flex items-center gap-2"
+              @click="form.supportsThinking = !form.supportsThinking"
+            >
+              <BaseToggle :model-value="form.supportsThinking" :disabled="isSaving" @click.stop @update:model-value="form.supportsThinking = $event" />
+              <span class="text-xs">تفکر عمیق (Thinking)</span>
+            </div>
+            <div
+              class="toggle-label border border-border/80 rounded-lg p-2 bg-secondary/20 hover:bg-secondary/40 transition-colors cursor-pointer select-none flex items-center gap-2"
+              @click="form.supportsVision = !form.supportsVision"
+            >
+              <BaseToggle :model-value="form.supportsVision" :disabled="isSaving" @click.stop @update:model-value="form.supportsVision = $event" />
+              <span class="text-xs">بینایی / عکس (Vision)</span>
+            </div>
+            <div
+              class="toggle-label border border-border/80 rounded-lg p-2 bg-secondary/20 hover:bg-secondary/40 transition-colors cursor-pointer select-none flex items-center gap-2"
+              @click="form.supportsDocument = !form.supportsDocument"
+            >
+              <BaseToggle :model-value="form.supportsDocument" :disabled="isSaving" @click.stop @update:model-value="form.supportsDocument = $event" />
+              <span class="text-xs">تحلیل اسناد (Document)</span>
+            </div>
+          </div>
+
+          <!-- Thinking Budget Tokens (shown if supportsThinking) -->
+          <label v-if="form.supportsThinking" class="mt-1">
+            <span class="field-label text-xs">سقف توکن تفکر (Thinking Budget Tokens):</span>
+            <input
+              id="thinkingBudgetTokens"
+              v-model.number="form.thinkingBudgetTokens"
+              type="number"
+              min="512"
+              max="65536"
+              step="512"
+              :disabled="isSaving"
+              placeholder="مثال: 4096"
+            />
+          </label>
+        </div>
       </div>
 
       <!-- Test Model Box -->

@@ -12,6 +12,7 @@ import { adminService } from '../../services/admin.service'
 import { useUiStore } from '../../stores/ui'
 import { useModelsStore } from '../../stores/models'
 import { markDefaultModel } from '../../utils/models'
+import CapabilityBadge from '../../components/chat/CapabilityBadge.vue'
 import type { AdminUser, Model, ModelAccessLevel, Provider } from '../../types'
 
 const props = defineProps<{
@@ -208,6 +209,7 @@ async function handleSaveModel(payload: { name: string; provider: string; provid
       uiStore.showToast('مدل جدید با موفقیت اضافه شد.', 'success')
     }
     await loadModels()
+    await modelsStore.fetchModels(true).catch(() => {})
   } catch (err: any) {
     models.value = previous
     uiStore.showToast(err?.message || 'ذخیره مدل با خطا مواجه شد', 'error')
@@ -306,6 +308,7 @@ onMounted(loadModels)
             >
               پیش‌فرض
             </span>
+            <CapabilityBadge v-if="model.supportsThinking" capability="thinking" size="sm" />
           </div>
         </td>
         <td data-label="ارائه‌دهنده">

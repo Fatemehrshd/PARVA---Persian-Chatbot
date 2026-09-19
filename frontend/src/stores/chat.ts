@@ -24,11 +24,11 @@ interface ConvStreamState {
   pendingSources: WebSource[] | null
   isSearching: boolean
   searchFailed: boolean
+  currentReasoning: string
+  isActivelyThinking: boolean
+  thinkingDurationMs: number | null
 }
 
-// Delay between rendered characters during streaming — small enough to feel
-// real-time but visible enough to give a smooth typing effect.
-const STREAM_CHAR_DELAY_MS = 8
 
 function makeDefaultState(): ConvStreamState {
   return {
@@ -44,6 +44,9 @@ function makeDefaultState(): ConvStreamState {
     pendingSources: null,
     isSearching: false,
     searchFailed: false,
+    currentReasoning: '',
+    isActivelyThinking: false,
+    thinkingDurationMs: null,
   }
 }
 
@@ -89,14 +92,14 @@ export const useChatStore = defineStore('chat', () => {
 
   // ─── Per-conversation feature flags (web search / thinking) ───────────────
   // Survives refresh via localStorage; a new conversation starts with both off.
-  const convFlags = ref<Record<string, { web: boolean }>>({})
+  const convFlags = ref<Record<string, { web: boolean; thinking?: boolean }>>({})
   function persistConvFlags() {
     try { localStorage.setItem('chat_conv_flags', JSON.stringify(convFlags.value)) } catch {}
   }
   function getConvFlag(convId: string) {
-    return convFlags.value[convId] ?? { web: false }
+    return convFlags.value[convId] ?? { web: false, thinking: false }
   }
-  function setConvFlag(convId: string, patch: Partial<{ web: boolean }>) {
+  function setConvFlag(convId: string, patch: Partial<{ web: boolean; thinking?: boolean }>) {
     convFlags.value[convId] = { ...getConvFlag(convId), ...patch }
     persistConvFlags()
   }
@@ -132,6 +135,9 @@ export const useChatStore = defineStore('chat', () => {
     return false
   })
   const currentStreamingText = computed(() => getState(currentConversationId.value)?.currentStreamingText ?? '')
+  const currentReasoning = computed(() => getState(currentConversationId.value)?.currentReasoning ?? '')
+  const isActivelyThinking = computed(() => getState(currentConversationId.value)?.isActivelyThinking ?? false)
+  const thinkingDurationMs = computed(() => getState(currentConversationId.value)?.thinkingDurationMs ?? null)
 
   function loadDismissedErrors(): Set<string> {
     try {
@@ -216,6 +222,7 @@ export const useChatStore = defineStore('chat', () => {
       const data = await chatService.listConversations(1, 50)
       if (Array.isArray(data)) {
         conversations.value = data
+        sortConversations()
         hasMoreConversations.value = data.length >= 50
 
         if (data.length === 0) {
@@ -269,6 +276,7 @@ export const useChatStore = defineStore('chat', () => {
         const existingIds = new Set(conversations.value.map((c) => c.id))
         const newItems = data.filter((c) => !existingIds.has(c.id))
         conversations.value.push(...newItems)
+        sortConversations()
         conversationPage.value = nextPage
         hasMoreConversations.value = data.length >= 50
       } else {
@@ -362,11 +370,20 @@ export const useChatStore = defineStore('chat', () => {
           if (streamStatus && streamStatus.active) {
             const s = ensureState(id)
             s.isStreaming = true
+            const reasoning = streamStatus.reasoningText || streamStatus.accumulatedReasoning
+            if (reasoning) {
+              s.currentReasoning = reasoning
+            }
+            if (streamStatus.thinkingDurationMs) {
+              s.thinkingDurationMs = streamStatus.thinkingDurationMs
+            }
             if (streamStatus.status === 'thinking' && !streamStatus.accumulatedText) {
               s.isThinking = true
+              s.isActivelyThinking = true
               s.currentStreamingText = ''
             } else {
               s.isThinking = false
+              s.isActivelyThinking = false
               s.currentStreamingText = streamStatus.accumulatedText || ''
             }
             convStreamStates.value.set(id, { ...s })
@@ -426,6 +443,7 @@ export const useChatStore = defineStore('chat', () => {
       (accumulated: string) => {
         const s = ensureState(convId)
         s.isThinking = false
+        s.isActivelyThinking = false
         s.currentStreamingText = accumulated
         convStreamStates.value.set(convId, { ...s })
         resetWatchdog(convId, 25000)
@@ -433,6 +451,7 @@ export const useChatStore = defineStore('chat', () => {
       (token: string) => {
         const s = ensureState(convId)
         s.isThinking = false
+        s.isActivelyThinking = false
         s.currentStreamingText += token
         convStreamStates.value.set(convId, { ...s })
         resetWatchdog(convId, 25000)
@@ -450,6 +469,7 @@ export const useChatStore = defineStore('chat', () => {
         s.abortController = null
         s.isStreaming = false
         s.isThinking = false
+        s.isActivelyThinking = false
         sessionStorage.removeItem('active_streaming_conv')
         const rawMsg = typeof err === 'string' ? err : err?.message
         const errorMessage = rawMsg || 'زمان انتظار برای دریافت پاسخ به پایان رسید '
@@ -466,6 +486,29 @@ export const useChatStore = defineStore('chat', () => {
         if (conv) {
           conv.title = newTitle
         }
+      },
+      undefined,
+      undefined,
+      undefined,
+      (thinkingChunk: string) => {
+        const s = ensureState(convId)
+        s.currentReasoning += thinkingChunk
+        s.isActivelyThinking = true
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 25000)
+      },
+      (status: { state: 'thinking' | 'done'; durationMs?: number }) => {
+        const s = ensureState(convId)
+        if (status.state === 'thinking') {
+          s.isActivelyThinking = true
+        } else if (status.state === 'done') {
+          s.isActivelyThinking = false
+          if (status.durationMs !== undefined) {
+            s.thinkingDurationMs = status.durationMs
+          }
+        }
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 25000)
       }
     )
   }
@@ -583,6 +626,37 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  // ─── Pin / Unpin conversation ──────────────────────────────────────────────
+  function sortConversations() {
+    conversations.value.sort((a, b) => {
+      const aPinned = a.isPinned ? 1 : 0
+      const bPinned = b.isPinned ? 1 : 0
+      if (aPinned !== bPinned) {
+        return bPinned - aPinned
+      }
+      return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+    })
+  }
+
+  async function togglePinConversation(id: string, explicitState?: boolean): Promise<boolean> {
+    const conv = conversations.value.find((c) => c.id === id)
+    if (!conv) return false
+    const targetState = typeof explicitState === 'boolean' ? explicitState : !conv.isPinned
+    conv.isPinned = targetState
+
+    sortConversations()
+
+    try {
+      await chatService.togglePinConversation(id, targetState)
+      return targetState
+    } catch (err: any) {
+      console.warn('Backend togglePinConversation failed:', err)
+      conv.isPinned = !targetState
+      sortConversations()
+      throw err
+    }
+  }
+
   // ─── Update title ──────────────────────────────────────────────────────────
   async function updateConversationTitle(id: string, newTitle: string) {
     const trimmed = newTitle.trim()
@@ -618,7 +692,7 @@ export const useChatStore = defineStore('chat', () => {
     content: string,
     userMessage: Message,
     fileIds?: string[],
-    opts?: { useWebSearch?: boolean }
+    opts?: { useWebSearch?: boolean; useThinking?: boolean }
   ) {
     // Prepare streaming state
     {
@@ -626,6 +700,9 @@ export const useChatStore = defineStore('chat', () => {
       s.isThinking = true
       s.isStreaming = true
       s.currentStreamingText = ''
+      s.currentReasoning = ''
+      s.isActivelyThinking = false
+      s.thinkingDurationMs = null
       convStreamStates.value.set(convId, { ...s })
     }
     sessionStorage.setItem('active_streaming_conv', convId)
@@ -658,6 +735,7 @@ export const useChatStore = defineStore('chat', () => {
     // Explicit opts win (composer passes the toggled value); every other path
     // (queue, files, resume/retry) inherits the stored per-conversation flag.
     const useWebSearch = opts?.useWebSearch ?? getConvFlag(convId).web
+    const useThinking = opts?.useThinking ?? getConvFlag(convId).thinking
 
     await chatService.sendMessageStream(
       convId,
@@ -665,28 +743,17 @@ export const useChatStore = defineStore('chat', () => {
       (token: string) => {
         const s = ensureState(convId)
         s.isThinking = false
+        s.isActivelyThinking = false
         s.isSearching = false
         streamedAny = true
         userMessage.status = 'sent'
         s.streamError = null
-        // Buffer the characters and release them slowly so the response
-        // streams in like a human is typing rather than dumping instantly.
+        // Append streamed tokens directly as they arrive from SSE.
+        // The backend already paces chunks by words (25ms), keeping the frontend
+        // 100% in sync with the backend stream and preventing character queue lag
+        // or abrupt dumps at the end of long responses.
         if (token) {
-          s.charBuffer.push(...token.split(''))
-          if (!s.releaseTimer) {
-            const release = () => {
-              const cur = ensureState(convId)
-              if (cur.charBuffer.length > 0) {
-                cur.currentStreamingText += cur.charBuffer.shift()!
-                convStreamStates.value.set(convId, { ...cur })
-                cur.releaseTimer = setTimeout(release, STREAM_CHAR_DELAY_MS)
-              } else {
-                cur.releaseTimer = null
-                convStreamStates.value.set(convId, { ...cur })
-              }
-            }
-            s.releaseTimer = setTimeout(release, STREAM_CHAR_DELAY_MS)
-          }
+          s.currentStreamingText += token
         }
         convStreamStates.value.set(convId, { ...s })
         resetWatchdog(convId, 25000)
@@ -703,6 +770,7 @@ export const useChatStore = defineStore('chat', () => {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           })
+          sortConversations()
         }
       },
       (messageId: string) => {
@@ -719,6 +787,7 @@ export const useChatStore = defineStore('chat', () => {
         const s = ensureState(convId)
         s.abortController = null
         s.isThinking = false
+        s.isActivelyThinking = false
         s.isSearching = false
         s.isStreaming = false
         sessionStorage.removeItem('active_streaming_conv')
@@ -730,7 +799,7 @@ export const useChatStore = defineStore('chat', () => {
 
         if (isLimit) {
           isTokenLimitExceeded.value = true
-          uiStore.showToast('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است). لطفاً جهت افزایش اعتبار با مدیر سامانه تماس بگیرید.', 'error')
+          uiStore.showToast('توکن مصرفی شما به پایان رسید', 'error')
         }
 
         const errorMessage =
@@ -768,6 +837,7 @@ export const useChatStore = defineStore('chat', () => {
       (syncText: string) => {
         const s = ensureState(convId)
         s.isThinking = false
+        s.isActivelyThinking = false
         s.isSearching = false
         streamedAny = true
         userMessage.status = 'sent'
@@ -799,7 +869,28 @@ export const useChatStore = defineStore('chat', () => {
         convStreamStates.value.set(convId, { ...s })
         resetWatchdog(convId, 25000)
       },
-      { useWebSearch }
+      { useWebSearch, useThinking },
+      (thinkingChunk: string) => {
+        const s = ensureState(convId)
+        s.currentReasoning += thinkingChunk
+        s.isActivelyThinking = true
+        streamedAny = true
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 25000)
+      },
+      (status: { state: 'thinking' | 'done'; durationMs?: number }) => {
+        const s = ensureState(convId)
+        if (status.state === 'thinking') {
+          s.isActivelyThinking = true
+        } else if (status.state === 'done') {
+          s.isActivelyThinking = false
+          if (status.durationMs !== undefined) {
+            s.thinkingDurationMs = status.durationMs
+          }
+        }
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 25000)
+      }
     )
   }
 
@@ -866,9 +957,9 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   // ─── Send message ──────────────────────────────────────────────────────────
-  async function sendMessage(content: string, files?: FileAttachmentItem[], opts?: { useWebSearch?: boolean }) {
+  async function sendMessage(content: string, files?: FileAttachmentItem[], opts?: { useWebSearch?: boolean; useThinking?: boolean }) {
     if (isTokenLimitExceeded.value) {
-      uiStore.showToast('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است). امکان ارسال پیام جدید وجود ندارد.', 'error')
+      uiStore.showToast('توکن مصرفی شما به پایان رسید', 'error')
       return
     }
 
@@ -1110,21 +1201,22 @@ export const useChatStore = defineStore('chat', () => {
           isInterrupted,
           // فقط پیام کامل (غیرمتوقف) باید منابع داشته باشد - پیام متوقف‌شده ناقص است
           sources: isInterrupted ? null : s.pendingSources,
-          searchFailed: isInterrupted ? undefined : (s.searchFailed || undefined)
+          searchFailed: isInterrupted ? undefined : (s.searchFailed || undefined),
+          reasoning_content: s.currentReasoning || undefined,
+          thinkingDurationMs: s.thinkingDurationMs ?? undefined,
         })
       }
     }
-    // Live sidebar reorder (mirrors backend updatedAt DESC): the conversation
-    // that just got activity jumps to the top without needing a refresh.
-    const convIdx = conversations.value.findIndex((c) => c.id === convId)
-    if (convIdx > 0) {
-      const [bumped] = conversations.value.splice(convIdx, 1)
-      bumped.updatedAt = new Date().toISOString()
-      conversations.value.unshift(bumped)
-    } else if (convIdx === 0) {
-      conversations.value[0].updatedAt = new Date().toISOString()
+    // Live sidebar reorder (mirrors backend isPinned DESC, updatedAt DESC):
+    const targetConv = conversations.value.find((c) => c.id === convId)
+    if (targetConv) {
+      targetConv.updatedAt = new Date().toISOString()
+      sortConversations()
     }
     s.currentStreamingText = ''
+    s.currentReasoning = ''
+    s.isActivelyThinking = false
+    s.thinkingDurationMs = null
     s.isStreaming = false
     s.isThinking = false
     s.pendingSources = null
@@ -1318,6 +1410,9 @@ export const useChatStore = defineStore('chat', () => {
     isThinking,
     isAnyStreaming,
     currentStreamingText,
+    currentReasoning,
+    isActivelyThinking,
+    thinkingDurationMs,
     lastUserPrompt,
     streamError,
     // Per-conv streaming state (for sidebar indicators)
@@ -1331,6 +1426,8 @@ export const useChatStore = defineStore('chat', () => {
     loadConversations,
     loadMoreConversations,
     selectConversation,
+    sortConversations,
+    togglePinConversation,
     reconnectToActiveStream,
     createNewConversation,
     deleteConversation,

@@ -16,6 +16,12 @@ export class Message {
   /** Web-search sources attached to this assistant reply (null when unused). */
   @Column({ type: 'jsonb', nullable: true, default: null })
   sources?: { title: string; url: string; snippet?: string }[] | null;
+  /** Extended reasoning/thinking content for reasoning models (null when unused). */
+  @Column({ type: 'text', nullable: true, default: null, name: 'reasoning_content' })
+  reasoning_content?: string | null;
+  /** Time in milliseconds spent in reasoning state. */
+  @Column({ type: 'int', nullable: true, default: null, name: 'thinking_duration_ms' })
+  thinkingDurationMs?: number | null;
   /** User feedback on assistant responses: 'like' | 'dislike' | null */
   @Column({ type: 'varchar', length: 20, nullable: true, default: null })
   feedback?: 'like' | 'dislike' | null;

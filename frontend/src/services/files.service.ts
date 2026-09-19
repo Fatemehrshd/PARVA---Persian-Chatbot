@@ -47,6 +47,7 @@ export const filesService = {
       if (token) {
         xhr.setRequestHeader('Authorization', `Bearer ${token}`)
       }
+      xhr.setRequestHeader('X-Original-Filename', encodeURIComponent(file.name))
 
       if (abortSignal) {
         abortSignal.addEventListener('abort', () => {

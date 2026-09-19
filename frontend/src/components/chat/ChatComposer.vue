@@ -8,11 +8,24 @@ import { getActiveTypingDirection } from '../../utils/textDirection'
 import { useFileUpload } from '../../composables/useFileUpload'
 import FilePreviewCard from './FilePreviewCard.vue'
 import BaseToggle from '../ui/BaseToggle.vue'
+import CapabilityBadge from './CapabilityBadge.vue'
 
 const chatStore = useChatStore()
 const modelsStore = useModelsStore()
 const uiStore = useUiStore()
 const authStore = useAuthStore()
+
+const activeModel = computed(() => modelsStore.selectedModel)
+const activeModelSupportsThinking = computed(() => Boolean(activeModel.value?.supportsThinking))
+const activeModelSupportsVision = computed(() => Boolean(activeModel.value?.supportsVision))
+const activeModelSupportsDocument = computed(() => Boolean(activeModel.value?.supportsDocument))
+const activeModelSupportsAttachments = computed(() => activeModelSupportsVision.value || activeModelSupportsDocument.value)
+
+watch(activeModelSupportsThinking, (supported) => {
+  if (!supported && chatStore.getConvFlag(activeConvId.value).thinking) {
+    chatStore.setConvFlag(activeConvId.value, { thinking: false })
+  }
+})
 
 const inputContent = ref('')
 const inputDirection = ref<'rtl' | 'ltr'>('rtl')
@@ -67,6 +80,10 @@ function pickImages() {
     uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
     return
   }
+  if (!activeModelSupportsVision.value) {
+    uiStore.showToast('این مدل از پردازش تصویر پشتیبانی نمی‌کند', 'warning')
+    return
+  }
   attachmentMenuOpen.value = false
   imageInputRef.value?.click()
 }
@@ -74,6 +91,10 @@ function pickImages() {
 function pickDocuments() {
   if (isGenerating.value) {
     uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
+    return
+  }
+  if (!activeModelSupportsDocument.value) {
+    uiStore.showToast('این مدل از پردازش اسناد پشتیبانی نمی‌کند', 'warning')
     return
   }
   attachmentMenuOpen.value = false
@@ -89,10 +110,24 @@ function toggleWebSearch() {
   attachmentMenuOpen.value = false
 }
 
+function toggleThinking() {
+  const cur = chatStore.getConvFlag(activeConvId.value).thinking ?? false
+  chatStore.setConvFlag(activeConvId.value, { thinking: !cur })
+  if (!cur && !activeModelSupportsThinking.value) {
+    uiStore.showToast('توجه: ممکن است این مدل به طور کامل از تفکر عمیق پشتیبانی نکند', 'info')
+  }
+  attachmentMenuOpen.value = false
+}
+
 function handleImageChange(e: Event) {
   const target = e.target as HTMLInputElement
   if (isGenerating.value) {
     uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
+    target.value = ''
+    return
+  }
+  if (!activeModelSupportsVision.value) {
+    uiStore.showToast('این مدل از پردازش تصویر پشتیبانی نمی‌کند', 'error')
     target.value = ''
     return
   }
@@ -122,6 +157,11 @@ function handleDocChange(e: Event) {
   const target = e.target as HTMLInputElement
   if (isGenerating.value) {
     uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
+    target.value = ''
+    return
+  }
+  if (!activeModelSupportsDocument.value) {
+    uiStore.showToast('این مدل از پردازش اسناد پشتیبانی نمی‌کند', 'error')
     target.value = ''
     return
   }
@@ -160,6 +200,11 @@ function handlePaste(e: ClipboardEvent) {
       uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
       return
     }
+    if (!activeModelSupportsAttachments.value) {
+      e.preventDefault()
+      uiStore.showToast('این مدل از فایل پیوست پشتیبانی نمی‌کند', 'warning')
+      return
+    }
     const files = Array.from(e.clipboardData.files)
     addFiles(files)
   }
@@ -174,6 +219,11 @@ function onDrop(e: DragEvent) {
   if (isGenerating.value) {
     e.preventDefault()
     uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
+    return
+  }
+  if (!activeModelSupportsAttachments.value) {
+    e.preventDefault()
+    uiStore.showToast('این مدل از فایل پیوست پشتیبانی نمی‌کند', 'warning')
     return
   }
   handleDrop(e)
@@ -259,8 +309,8 @@ function handleCursorMove() {
 function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
-    if (chatStore.isTokenLimitExceeded || authStore.quota.blocked) {
-      uiStore.showToast('سقف مجاز مصرف توکن به پایان رسیده است. لطفاً جهت افزایش اعتبار با مدیر سامانه تماس بگیرید.', 'error')
+    if (chatStore.isTokenLimitExceeded || authStore.quota?.blocked) {
+      uiStore.showToast('توکن مصرفی شما به پایان رسید', 'error')
       return
     }
     if (isGenerating.value) return
@@ -269,8 +319,8 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 async function handleSubmit() {
-  if (chatStore.isTokenLimitExceeded || authStore.quota.blocked) {
-    uiStore.showToast('سقف مجاز مصرف توکن به پایان رسیده است. امکان ارسال پیام وجود ندارد.', 'error')
+  if (chatStore.isTokenLimitExceeded || authStore.quota?.blocked) {
+    uiStore.showToast('توکن مصرفی شما به پایان رسید', 'error')
     return
   }
   if (!canSend.value || isGenerating.value) return
@@ -295,7 +345,10 @@ async function handleSubmit() {
   if (textareaRef.value) {
     textareaRef.value.style.height = 'auto'
   }
-  chatStore.sendMessage(text, files, { useWebSearch: chatStore.getConvFlag(activeConvId.value).web })
+  chatStore.sendMessage(text, files, {
+    useWebSearch: chatStore.getConvFlag(activeConvId.value).web,
+    useThinking: Boolean(chatStore.getConvFlag(activeConvId.value).thinking),
+  })
 }
 
 const selectableModels = computed(() => {
@@ -370,7 +423,7 @@ onUnmounted(() => {
             <line x1="12" y1="8" x2="12" y2="12"/>
             <line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
-          <span class="stream-error-text">سقف مجاز مصرف توکن به پایان رسیده است. امکان ارسال پیام جدید وجود ندارد. لطفاً با مدیر سامانه تماس بگیرید.</span>
+          <span class="stream-error-text">توکن مصرفی شما به پایان رسید</span>
         </div>
         <div class="stream-error-actions">
           <button
@@ -470,8 +523,8 @@ onUnmounted(() => {
           v-model="inputContent"
           :class="['composer-textarea', inputDirection]"
           :dir="inputDirection"
-          :placeholder="chatStore.isTokenLimitExceeded ? 'سقف مجاز مصرف توکن شما به پایان رسیده است' : 'پیام خود را بنویسید... (Enter برای ارسال)'"
-          :disabled="chatStore.isTokenLimitExceeded || authStore.quota.blocked"
+          :placeholder="chatStore.isTokenLimitExceeded || authStore.quota?.blocked ? 'توکن مصرفی شما به پایان رسید' : 'پیام خود را بنویسید... (Enter برای ارسال)'"
+          :disabled="chatStore.isTokenLimitExceeded || authStore.quota?.blocked"
           rows="1"
           @focus="isFocused = true; updateDirection()"
           @blur="isFocused = false"
@@ -491,8 +544,8 @@ onUnmounted(() => {
                 type="button"
                 class="attachment-btn"
                 @click="toggleAttachmentMenu"
-                title="پیوست فایل"
-                :disabled="isGenerating || authStore.quota.blocked || attachedFiles.length >= limits.maxFileCount"
+                title="پیوست فایل و قابلیت‌ها"
+                :disabled="isGenerating || authStore.quota?.blocked || attachedFiles.length >= limits.maxFileCount"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -502,7 +555,13 @@ onUnmounted(() => {
 
               <!-- Attachment Dropdown Popover -->
               <div v-if="attachmentMenuOpen" class="attachment-dropdown">
-                <button type="button" class="attachment-menu-item" @click="pickImages">
+                <button
+                  type="button"
+                  class="attachment-menu-item"
+                  :class="{ 'opacity-50 cursor-not-allowed': !activeModelSupportsVision }"
+                  :title="!activeModelSupportsVision ? 'این مدل از پردازش تصویر پشتیبانی نمی‌کند' : ''"
+                  @click="pickImages"
+                >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
                     <circle cx="8.5" cy="8.5" r="1.5"/>
@@ -510,7 +569,13 @@ onUnmounted(() => {
                   </svg>
                   <span>عکس</span>
                 </button>
-                <button type="button" class="attachment-menu-item" @click="pickDocuments">
+                <button
+                  type="button"
+                  class="attachment-menu-item"
+                  :class="{ 'opacity-50 cursor-not-allowed': !activeModelSupportsDocument }"
+                  :title="!activeModelSupportsDocument ? 'این مدل از پردازش اسناد پشتیبانی نمی‌کند' : ''"
+                  @click="pickDocuments"
+                >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                     <polyline points="14 2 14 8 20 8"/>
@@ -531,13 +596,42 @@ onUnmounted(() => {
                     <line x1="2" y1="12" x2="22" y2="12"/>
                     <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
                   </svg>
-                  <span>جستجوی وب</span>
-                  <BaseToggle
-                    size="sm"
-                    :modelValue="chatStore.getConvFlag(activeConvId).web"
-                    @click.stop
-                    @update:modelValue="toggleWebSearch"
-                  />
+                  <span class="flex-1 text-right">جستجوی وب</span>
+                  <span class="mr-auto flex items-center gap-1.5">
+                    <span class="text-[10px] font-semibold text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded-full">ضریب ۱.۲×</span>
+                    <BaseToggle
+                      size="sm"
+                      :modelValue="chatStore.getConvFlag(activeConvId).web"
+                      @click.stop
+                      @update:modelValue="toggleWebSearch"
+                    />
+                  </span>
+                </button>
+                <button
+                  v-if="activeModelSupportsThinking"
+                  type="button"
+                  class="attachment-menu-item"
+                  data-testid="toggle-thinking"
+                  :class="[
+                    chatStore.getConvFlag(activeConvId).thinking ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400' : ''
+                  ]"
+                  :title="chatStore.getConvFlag(activeConvId).thinking ? 'تفکر عمیق فعال است (ضریب ۱.۳×) — کلیک برای غیرفعال‌سازی' : 'فعال‌سازی تفکر عمیق (ضریب ۱.۳×)'"
+                  @click="toggleThinking"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/>
+                    <line x1="9" y1="21" x2="15" y2="21"/>
+                  </svg>
+                  <span class="flex-1 text-right">تفکر عمیق</span>
+                  <span class="mr-auto flex items-center gap-1.5">
+                    <span class="text-[10px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/40 px-1.5 py-0.5 rounded-full">ضریب ۱.۳×</span>
+                    <BaseToggle
+                      size="sm"
+                      :modelValue="Boolean(chatStore.getConvFlag(activeConvId).thinking)"
+                      @click.stop
+                      @update:modelValue="toggleThinking"
+                    />
+                  </span>
                 </button>
               </div>
             </div>
@@ -552,6 +646,7 @@ onUnmounted(() => {
               >
                 <span class="model-dot"></span>
                 <span class="model-name">{{ modelsStore.selectedModel.name }}</span>
+                <CapabilityBadge v-if="activeModelSupportsThinking" capability="thinking" size="sm" />
                 <svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline :points="modelMenuOpen ? '6 15 12 9 18 15' : '18 15 12 9 6 15'"></polyline>
                 </svg>
@@ -561,7 +656,7 @@ onUnmounted(() => {
                 data-testid="modelbar-search-toggle"
                 class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors"
                 :class="chatStore.getConvFlag(activeConvId).web ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'"
-                :title="chatStore.getConvFlag(activeConvId).web ? 'جستجوی وب فعال است — کلیک برای غیرفعال‌سازی' : 'فعال‌سازی جستجوی وب'"
+                :title="chatStore.getConvFlag(activeConvId).web ? 'جستجوی وب فعال است (ضریب ۱.۲×) — کلیک برای غیرفعال‌سازی' : 'فعال‌سازی جستجوی وب (ضریب ۱.۲×)'"
                 @click="toggleWebSearch"
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -569,6 +664,30 @@ onUnmounted(() => {
                   <line x1="2" y1="12" x2="22" y2="12"/>
                   <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
                 </svg>
+              </button>
+              <button
+                v-if="activeModelSupportsThinking"
+                type="button"
+                data-testid="modelbar-thinking-toggle"
+                class="flex h-7 items-center gap-1 rounded-full px-2 text-xs transition-colors"
+                :class="[
+                  chatStore.getConvFlag(activeConvId).thinking
+                    ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 font-medium'
+                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                ]"
+                :title="
+                  chatStore.getConvFlag(activeConvId).thinking
+                    ? 'تفکر عمیق فعال است (ضریب ۱.۳×) — کلیک برای غیرفعال‌سازی'
+                    : 'فعال‌سازی تفکر عمیق (ضریب ۱.۳×)'
+                "
+                @click="toggleThinking"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/>
+                  <line x1="9" y1="21" x2="15" y2="21"/>
+                </svg>
+                <span class="hidden sm:inline">تفکر</span>
+                <span v-if="chatStore.getConvFlag(activeConvId).thinking" class="text-[10px] opacity-75">۱.۳×</span>
               </button>
 
               <!-- Dropdown Popover opening upward -->
@@ -585,12 +704,15 @@ onUnmounted(() => {
                     @click="selectModel(model.id)"
                   >
                     <div class="model-option-info">
-                      <span class="flex items-center gap-1.5">
+                      <span class="flex items-center gap-1.5 flex-wrap">
                         <span class="model-option-name">{{ model.name }}</span>
                         <span
                           v-if="model.isDefault"
                           class="rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
                         >پیش‌فرض</span>
+                        <CapabilityBadge v-if="model.supportsThinking" capability="thinking" size="sm" />
+                        <CapabilityBadge v-if="model.supportsVision" capability="vision" size="sm" />
+                        <CapabilityBadge v-if="model.supportsDocument" capability="document" size="sm" />
                       </span>
                       <span class="model-option-meta font-mono">{{ model.provider }} • {{ model.apiIdentifier }}</span>
                     </div>

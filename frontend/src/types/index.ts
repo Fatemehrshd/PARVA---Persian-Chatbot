@@ -67,6 +67,7 @@ export interface Conversation {
   id: string
   title: string
   modelId?: string
+  isPinned?: boolean
   createdAt: string
   updatedAt: string
 }
@@ -79,6 +80,7 @@ export interface CreateConversationRequest {
 export interface UpdateConversationRequest {
   title?: string
   modelId?: string
+  isPinned?: boolean
 }
 
 export interface FileAttachmentItem {
@@ -95,6 +97,7 @@ export interface FileAttachmentItem {
   abortController?: AbortController
   rawFile?: File
   metadata?: Record<string, any>
+  extractedText?: string
 }
 
 export interface WebSource {
@@ -118,6 +121,8 @@ export interface Message {
   sources?: WebSource[] | null
   searchFailed?: boolean
   feedback?: 'like' | 'dislike' | null
+  reasoning_content?: string | null
+  thinkingDurationMs?: number | null
 }
 
 export interface ActiveStreamStatus {
@@ -126,12 +131,18 @@ export interface ActiveStreamStatus {
   accumulatedText: string
   title?: string
   messageId?: string
+  sources?: WebSource[]
+  reasoningText?: string
+  accumulatedReasoning?: string
+  thinkingDurationMs?: number
+  isThinkingComplete?: boolean
 }
 
 export interface SendMessageRequest {
   content: string
   fileIds?: string[]
   useWebSearch?: boolean
+  useThinking?: boolean
 }
 
 export interface SearchResult {
@@ -270,6 +281,10 @@ export interface Model {
   /** کاربران مجاز مدل اختصاصی. */
   allowedUserIds?: string[]
   createdAt?: string
+  supportsThinking?: boolean
+  supportsVision?: boolean
+  supportsDocument?: boolean
+  thinkingBudgetTokens?: number | null
 }
 
 export interface CreateModelRequest {
@@ -282,6 +297,10 @@ export interface CreateModelRequest {
   isActive?: boolean
   accessLevel?: ModelAccessLevel
   allowedUserIds?: string[]
+  supportsThinking?: boolean
+  supportsVision?: boolean
+  supportsDocument?: boolean
+  thinkingBudgetTokens?: number | null
 }
 
 export interface UpdateModelStatusRequest {

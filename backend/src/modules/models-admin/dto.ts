@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, IsUUID, IsIn, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsUUID, IsIn, IsArray, IsInt, Min } from 'class-validator';
 import { FA } from '../../shared/messages.fa';
 
 export class CreateModelDto {
@@ -35,6 +35,23 @@ export class CreateModelDto {
   @IsArray({ message: 'لیست کاربران مجاز باید آرایه باشد' })
   @IsUUID('4', { each: true, message: FA.uuid('allowedUserIds') })
   allowedUserIds?: string[];
+
+  @IsOptional()
+  @IsBoolean({ message: FA.boolean('supportsThinking') })
+  supportsThinking?: boolean;
+
+  @IsOptional()
+  @IsBoolean({ message: FA.boolean('supportsVision') })
+  supportsVision?: boolean;
+
+  @IsOptional()
+  @IsBoolean({ message: FA.boolean('supportsDocument') })
+  supportsDocument?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  thinkingBudgetTokens?: number | null;
 }
 
 export class UpdateModelStatusDto {
@@ -79,5 +96,22 @@ export class UpdateModelDto {
   @IsArray({ message: 'لیست کاربران مجاز باید آرایه باشد' })
   @IsUUID('4', { each: true, message: FA.uuid('allowedUserIds') })
   allowedUserIds?: string[];
+
+  @IsOptional()
+  @IsBoolean({ message: FA.boolean('supportsThinking') })
+  supportsThinking?: boolean;
+
+  @IsOptional()
+  @IsBoolean({ message: FA.boolean('supportsVision') })
+  supportsVision?: boolean;
+
+  @IsOptional()
+  @IsBoolean({ message: FA.boolean('supportsDocument') })
+  supportsDocument?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  thinkingBudgetTokens?: number | null;
 }
 

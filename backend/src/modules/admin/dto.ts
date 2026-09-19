@@ -1,4 +1,4 @@
-import { IsOptional, IsInt, Min, IsString, MinLength, IsIn, IsEmail, IsBoolean, ValidateIf, IsObject } from 'class-validator';
+import { IsOptional, IsInt, Min, IsString, MinLength, IsIn, IsEmail, IsBoolean, ValidateIf, IsObject, IsNumber } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { normalizeNumericValue } from '../../shared/number-input';
 
@@ -88,6 +88,16 @@ export class UpdateSettingsDto {
   @IsOptional()
   @IsObject({ message: 'دسترسی مدل نقش‌ها باید شیء معتبر باشد' })
   modelAccess?: Record<string, string[] | null>;
+
+  @IsOptional()
+  @IsNumber({}, { message: 'ضریب توکن جستجوی وب باید عدد باشد' })
+  @Min(1, { message: 'ضریب توکن جستجوی وب باید حداقل ۱ باشد' })
+  webSearchMultiplier?: number;
+
+  @IsOptional()
+  @IsNumber({}, { message: 'ضریب توکن تفکر عمیق باید عدد باشد' })
+  @Min(1, { message: 'ضریب توکن تفکر عمیق باید حداقل ۱ باشد' })
+  thinkingMultiplier?: number;
 }
 
 export class UpdateUserAdminDto {

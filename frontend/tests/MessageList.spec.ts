@@ -298,4 +298,32 @@ describe('MessageList streaming scroll behavior', () => {
 
     expect(container.scrollTop).toBe(1200)
   })
+
+  it('renders ThinkingBlock during streaming when reasoning is present', async () => {
+    const chatStore = useChatStore()
+    chatStore.currentConversationId = TEST_CONV_ID
+    chatStore.convStreamStates.set(TEST_CONV_ID, {
+      ...makeStreamState(),
+      currentReasoning: 'Analyzing query...',
+      isActivelyThinking: true,
+      thinkingDurationMs: 1200,
+    } as any)
+
+    const wrapper = mount(MessageList, {
+      global: {
+        stubs: {
+          EmptyState: true,
+          MessageBubble: true,
+          MarkdownContent: true,
+          ThinkingIndicator: true,
+          ThinkingBlock: true,
+        }
+      }
+    })
+
+    const thinkingBlock = wrapper.findComponent({ name: 'ThinkingBlock' })
+    expect(thinkingBlock.exists()).toBe(true)
+    expect(thinkingBlock.props('reasoning')).toBe('Analyzing query...')
+    expect(thinkingBlock.props('isThinking')).toBe(true)
+  })
 })

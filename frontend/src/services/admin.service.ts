@@ -75,6 +75,8 @@ export const adminService = {
     /** نقش → سطوح دسترسی مدل مجاز (public/commercial/private). */
     modelAccess?: ModelAccessMap
     roles?: string[]
+    webSearchMultiplier?: number
+    thinkingMultiplier?: number
   }> {
     return request('/admin/settings')
   },
@@ -95,6 +97,8 @@ export const adminService = {
     roleQuotas?: Record<string, { tokenLimit: number | null; messageLimit: number | null; resetHours: number | null } | null>
     /** نقش → سطوح دسترسی مدل مجاز؛ null یعنی بازگشت به پیش‌فرض. */
     modelAccess?: Record<string, ModelAccessLevel[] | null>
+    webSearchMultiplier?: number
+    thinkingMultiplier?: number
   }): Promise<any> {
     return request('/admin/settings', {
       method: 'PUT',

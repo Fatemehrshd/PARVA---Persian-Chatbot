@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { AiModel } from '../models-admin/ai-model.entity';
 import { AiProvider } from '../models-admin/ai-provider.entity';
+import { OpenAiCompatAdapter, ThinkTagStreamParser } from './adapters/openai-compat.adapter';
 
 export interface ChatMessage {
   role: string;
@@ -16,12 +17,14 @@ export interface ResolvedTarget {
   apiIdentifier: string;
   apiKey: string;
   baseUrl: string;
+  thinkingBudgetTokens?: number | null;
 }
 
 export interface StreamOptions {
   signal?: AbortSignal;
   connectTimeoutMs?: number;
   stallTimeoutMs?: number;
+  useThinking?: boolean;
 }
 
 /**
@@ -35,6 +38,7 @@ export interface StreamOptions {
 @Injectable()
 export class OpenAiCompatForwarder {
   private readonly logger = new Logger(OpenAiCompatForwarder.name);
+  private readonly adapter = new OpenAiCompatAdapter();
 
   resolveTarget(model: AiModel | null, provider: AiProvider | null): ResolvedTarget | null {
     const apiKey = model?.apiKey || provider?.apiKey || process.env.OPENAI_API_KEY || '';
@@ -45,18 +49,25 @@ export class OpenAiCompatForwarder {
       process.env.OPENAI_BASE_URL ||
       'https://api.openai.com/v1'
     ).replace(/\/+$/, '');
-    return { apiIdentifier: model?.apiIdentifier || 'gpt-4o', apiKey, baseUrl };
+    return {
+      apiIdentifier: model?.apiIdentifier || 'gpt-4o',
+      apiKey,
+      baseUrl,
+      thinkingBudgetTokens: model?.thinkingBudgetTokens ?? null,
+    };
   }
 
-  /** Streams assistant deltas token-by-token from the upstream SSE response. */
+  /**
+   * Streams assistant deltas token-by-token from the upstream SSE response.
+   * Yields string (for content deltas) or { reasoning: string } (for reasoning deltas).
+   */
   async *stream(
     target: ResolvedTarget,
     messages: ChatMessage[],
     options?: StreamOptions,
-  ): AsyncGenerator<string> {
-    const url = target.baseUrl.endsWith('/chat/completions')
-      ? target.baseUrl
-      : `${target.baseUrl}/chat/completions`;
+  ): AsyncGenerator<any> {
+    const req = this.adapter.buildRequest({ target, messages, options });
+    const url = req.url;
 
     const connectTimeoutMs = options?.connectTimeoutMs ?? 35000;
     const stallTimeoutMs = options?.stallTimeoutMs ?? 25000;
@@ -78,16 +89,7 @@ export class OpenAiCompatForwarder {
     let res: Response;
     try {
       res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${target.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: target.apiIdentifier,
-          messages,
-          stream: true,
-        }),
+        ...req.init,
         signal: connectAbortCtrl.signal,
       });
     } catch (err: any) {
@@ -130,6 +132,7 @@ export class OpenAiCompatForwarder {
     let buf = '';
     let emitted = false;
 
+    const parser = new ThinkTagStreamParser();
     try {
       while (true) {
         if (options?.signal?.aborted) {
@@ -163,17 +166,46 @@ export class OpenAiCompatForwarder {
           buf = buf.slice(idx + 1);
           if (!line.startsWith('data:')) continue;
           const payload = line.slice(5).trim();
-          if (payload === '[DONE]') return;
-          let delta: unknown;
+          if (payload === '[DONE]') {
+            const flushed = parser.flush();
+            for (const chunk of flushed) {
+              if (chunk.type === 'reasoning') {
+                emitted = true;
+                yield { reasoning: chunk.text };
+              } else if (chunk.type === 'content') {
+                emitted = true;
+                yield chunk.text;
+              }
+            }
+            return;
+          }
+          let parsed: unknown;
           try {
-            delta = JSON.parse(payload)?.choices?.[0]?.delta?.content;
+            parsed = JSON.parse(payload);
           } catch {
             continue; // keep-alives / partial frames from the upstream
           }
-          if (typeof delta === 'string' && delta) {
-            emitted = true;
-            yield delta;
+          const chunks = this.adapter.parseStreamChunk(parsed, parser);
+          for (const chunk of chunks) {
+            if (chunk.type === 'reasoning') {
+              emitted = true;
+              yield { reasoning: chunk.text };
+            } else if (chunk.type === 'content') {
+              emitted = true;
+              yield chunk.text;
+            }
           }
+        }
+      }
+
+      const flushed = parser.flush();
+      for (const chunk of flushed) {
+        if (chunk.type === 'reasoning') {
+          emitted = true;
+          yield { reasoning: chunk.text };
+        } else if (chunk.type === 'content') {
+          emitted = true;
+          yield chunk.text;
         }
       }
     } finally {

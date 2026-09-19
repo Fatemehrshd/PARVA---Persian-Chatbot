@@ -82,4 +82,77 @@ describe('ChatComposer web-search toggle', () => {
     await btn.trigger('click')
     expect(chatStore.getConvFlag('c1').web).toBe(true)
   })
+
+  it('hides thinking toggles when active model does not support thinking', async () => {
+    const modelsStore = useModelsStore()
+    modelsStore.models = [
+      {
+        id: 'no-think',
+        name: 'Fast Non-Thinking Model',
+        provider: 'openai',
+        apiIdentifier: 'gpt-4o-mini',
+        isActive: true,
+        isDefault: true,
+        supportsThinking: false,
+        supportsVision: true,
+        supportsDocument: true,
+      } as any,
+    ]
+    modelsStore.selectedModelId = 'no-think'
+
+    const wrapper = mount(ChatComposer, {
+      global: {
+        stubs: {
+          FilePreviewCard: true,
+          BaseToggle: true,
+        },
+      },
+    })
+
+    // Modelbar thinking toggle must NOT exist
+    expect(wrapper.find('[data-testid="modelbar-thinking-toggle"]').exists()).toBe(false)
+
+    // Open attachment dropdown
+    await wrapper.find('.attachment-btn').trigger('click')
+    // Dropdown thinking toggle must NOT exist
+    expect(wrapper.find('[data-testid="toggle-thinking"]').exists()).toBe(false)
+  })
+
+  it('shows thinking toggles and capability badge when active model supports thinking', async () => {
+    const modelsStore = useModelsStore()
+    modelsStore.models = [
+      {
+        id: 'think-model',
+        name: 'Deep Thinking Model',
+        provider: 'openai',
+        apiIdentifier: 'o3-mini',
+        isActive: true,
+        isDefault: true,
+        supportsThinking: true,
+        supportsVision: true,
+        supportsDocument: true,
+      } as any,
+    ]
+    modelsStore.selectedModelId = 'think-model'
+
+    const wrapper = mount(ChatComposer, {
+      global: {
+        stubs: {
+          FilePreviewCard: true,
+          BaseToggle: true,
+        },
+      },
+    })
+
+    // Modelbar thinking toggle must exist
+    expect(wrapper.find('[data-testid="modelbar-thinking-toggle"]').exists()).toBe(true)
+
+    // Model button must show capability badge for thinking
+    const badge = wrapper.find('.model-badge-btn [data-test="capability-badge"][data-capability="thinking"]')
+    expect(badge.exists()).toBe(true)
+
+    // Open attachment dropdown
+    await wrapper.find('.attachment-btn').trigger('click')
+    expect(wrapper.find('[data-testid="toggle-thinking"]').exists()).toBe(true)
+  })
 })

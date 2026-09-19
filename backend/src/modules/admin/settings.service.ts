@@ -81,6 +81,11 @@ export function resolveModelAccess(
   return !!user.id && Array.isArray(model.allowedUserIds) && model.allowedUserIds.includes(user.id);
 }
 
+export const WEB_SEARCH_TOKEN_MULTIPLIER_KEY = 'web_search_multiplier';
+export const THINKING_TOKEN_MULTIPLIER_KEY = 'thinking_multiplier';
+export const DEFAULT_WEB_SEARCH_MULTIPLIER = 1.2;
+export const DEFAULT_THINKING_MULTIPLIER = 1.3;
+
 @Injectable()
 export class SettingsService {
   constructor(
@@ -142,6 +147,7 @@ export class SettingsService {
     return { used, total, remaining: Math.max(0, total - used) };
   }
 
+<<<<<<< HEAD
   /**
    * سقف توکن به ازای هر نقش (مثلاً user/admin و نقش‌های آینده). فقط مقادیر
    * صحیح غیرمنفی نگه داشته می‌شوند؛ ورودی خراب نادیده گرفته می‌شود تا هرگز
@@ -297,6 +303,18 @@ export class SettingsService {
     return current;
   }
 
+  async getWebSearchMultiplier(): Promise<number> {
+    const val = await this.get(WEB_SEARCH_TOKEN_MULTIPLIER_KEY, String(DEFAULT_WEB_SEARCH_MULTIPLIER));
+    const parsed = parseFloat(val);
+    return isNaN(parsed) || parsed <= 0 ? DEFAULT_WEB_SEARCH_MULTIPLIER : parsed;
+  }
+
+  async getThinkingMultiplier(): Promise<number> {
+    const val = await this.get(THINKING_TOKEN_MULTIPLIER_KEY, String(DEFAULT_THINKING_MULTIPLIER));
+    const parsed = parseFloat(val);
+    return isNaN(parsed) || parsed <= 0 ? DEFAULT_THINKING_MULTIPLIER : parsed;
+  }
+
   async getAll(): Promise<{
     globalTokenLimit: number;
     tokenRatePer1000: number;
@@ -312,6 +330,8 @@ export class SettingsService {
     taskMultipliers: Record<string, number>;
     roleQuotas: Record<string, RoleQuota>;
     modelAccess: Record<string, ModelAccessLevelName[]>;
+    webSearchMultiplier: number;
+    thinkingMultiplier: number;
   }> {
     const [
       globalTokenLimit,
@@ -356,6 +376,8 @@ export class SettingsService {
       taskMultipliers,
       roleQuotas,
       modelAccess,
+      webSearchMultiplier: await this.getWebSearchMultiplier(),
+      thinkingMultiplier: await this.getThinkingMultiplier(),
     };
   }
 
@@ -431,6 +453,12 @@ export class SettingsService {
           levels === null ? null : (levels as ModelAccessLevelName[]),
         );
       }
+    }
+    if (dto.webSearchMultiplier !== undefined) {
+      await this.set(WEB_SEARCH_TOKEN_MULTIPLIER_KEY, String(dto.webSearchMultiplier));
+    }
+    if (dto.thinkingMultiplier !== undefined) {
+      await this.set(THINKING_TOKEN_MULTIPLIER_KEY, String(dto.thinkingMultiplier));
     }
     return this.getAll();
   }

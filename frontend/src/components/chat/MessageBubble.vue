@@ -7,7 +7,9 @@ import { useUiStore } from '../../stores/ui'
 import { getTextDirection, getLineDirection } from '../../utils/textDirection'
 import MarkdownContent from './MarkdownContent.vue'
 import FilePreviewCard from './FilePreviewCard.vue'
+import ImageGallery from './ImageGallery.vue'
 import SourcesBlock from './SourcesBlock.vue'
+import ThinkingBlock from './ThinkingBlock.vue'
 import { stripTrailingSourcesLine } from '../../utils/citations'
 
 const props = defineProps<{
@@ -47,9 +49,32 @@ const formattedTime = computed(() => {
   return `${toPersianDigits(hours)}:${minutesStr} ${period}`
 })
 
-const displayContent = computed(() =>
-  stripTrailingSourcesLine(props.message.content, props.message.sources ?? null),
-)
+const effectiveReasoning = computed(() => {
+  if (props.message.reasoning_content) return props.message.reasoning_content
+  if (props.message.content?.startsWith('<think>')) {
+    const match = props.message.content.match(/^<think>([\s\S]*?)<\/think>/)
+    if (match) return match[1].trim()
+  }
+  return ''
+})
+
+const displayContent = computed(() => {
+  let text = stripTrailingSourcesLine(props.message.content, props.message.sources ?? null)
+  if (text.startsWith('<think>')) {
+    text = text.replace(/^<think>[\s\S]*?<\/think>\s*/, '')
+  }
+  return text
+})
+
+const imageAttachments = computed(() => {
+  if (!props.message.attachments) return []
+  return props.message.attachments.filter((f) => f.fileType === 'image')
+})
+
+const nonImageAttachments = computed(() => {
+  if (!props.message.attachments) return []
+  return props.message.attachments.filter((f) => f.fileType !== 'image')
+})
 
 const userInitial = computed(() => {
   if (authStore.user?.displayName) return authStore.user.displayName.charAt(0).toUpperCase()
@@ -123,14 +148,21 @@ async function handleFeedback(type: 'like' | 'dislike') {
         ]"
         :dir="textDirection"
       >
-        <!-- Attachments if any -->
+        <!-- Sent Images Gallery (only for sent user messages) -->
+        <ImageGallery
+          v-if="isUser && imageAttachments.length > 0"
+          :images="imageAttachments"
+          :class="{ 'mb-3': !!props.message.content?.trim() || nonImageAttachments.length > 0 }"
+        />
+
+        <!-- Non-Image Attachments (PDF, Excel, Text, etc.) -->
         <div
-          v-if="isUser && message.attachments && message.attachments.length > 0"
+          v-if="isUser && nonImageAttachments.length > 0"
           class="message-attachments flex flex-wrap gap-2.5"
           :class="{ 'mb-3': !!props.message.content?.trim() }"
         >
           <FilePreviewCard
-            v-for="file in message.attachments"
+            v-for="file in nonImageAttachments"
             :key="file.id"
             :file="file"
             read-only
@@ -152,6 +184,14 @@ async function handleFeedback(type: 'like' | 'dislike') {
 
         <!-- Assistant: Rich Markdown -->
         <div v-else class="message-text">
+          <ThinkingBlock
+            v-if="!isUser && effectiveReasoning"
+            :reasoning="effectiveReasoning"
+            :duration-ms="message.thinkingDurationMs"
+            :is-thinking="false"
+            :default-open="false"
+            class="mb-3"
+          />
           <MarkdownContent :content="displayContent" :sources="message.sources ?? null" />
         </div>
 

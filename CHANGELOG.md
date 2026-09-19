@@ -10,34 +10,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Model access management (public / commercial / private)**: every model now carries an `accessLevel` plus an `allowedUserIds` whitelist for private models (migration `1761700000000-ModelAccessLevels`, existing models default to `public`). Role access is stored in `system_settings` under `model_access` (`user` → public only, `admin` → all levels; admins always see everything) and edited from the admin role modal. The pure `resolveModelAccess` helper is the single decision point and is enforced in `GET /models`, `GET /models/default` (falls back to the first allowed model) and chat (`create`/`setModel`/`generate` → structured Persian error «به این مدل دسترسی ندارید»). Adding a future `premium` role requires no code: grant it commercial access in the admin panel.
-- **Reusable admin UI**: `ModelAccessBadge` (access badge), `ModelAccessPicker` (level select + searchable multi-user whitelist), `AdminTableSkeleton` (shadcn `Skeleton`-based table placeholder) — used across the models table, model editor, role table/modal and admin loading states.
-- **Optimistic updates in the admin panel**: model save/toggle and role-settings save apply immediately and roll back with an error toast if the API fails.
-- **Final provider-toggle rule**: provider-level `isActive` is no longer a product feature. The admin UI/API no longer expose provider enable/disable toggles, and chat/model selection no longer depend on provider activity. The only remaining safeguard is a model rule: a default model cannot be disabled until another default model is selected first, and only one platform default is allowed at a time.
+- **Merge feature branch `feat/thinking-adaptors` into `develop`**:
+  - **Thinking Stream Parsing & Chain of Thought (CoT)**: Extracted reasoning content from upstream providers via `<think>...</think>` tags using `ThinkTagStreamParser` and structured deltas. Enhanced `ThinkingBlock.vue` with rich Markdown formatting, copy reasoning action, and pulsing progress indicator.
+  - **Model Capabilities & Capability Badges**: Persisted `supportsThinking`, `supportsVision`, `supportsDocument`, and `thinkingBudgetTokens` in `AiModel` entity, migrations, and admin modal. Conditioned deep thinking toggles in `ChatComposer.vue` on `activeModel.supportsThinking` and displayed `CapabilityBadge` on the model picker button.
+  - **Sent Images Gallery & Centered Lightbox Counter**: `ImageGallery.vue` with responsive thumbnail layouts, interactive lightbox, and an absolutely centered counter (`.lightbox-counter`) that stays anchored regardless of filename lengths.
+  - **Model access management (public / commercial / private)**: every model now carries an `accessLevel` plus an `allowedUserIds` whitelist for private models (migration `1761700000000-ModelAccessLevels`, existing models default to `public`). Role access is stored in `system_settings` under `model_access` (`user` → public only, `admin` → all levels; admins always see everything) and edited from the admin role modal. The pure `resolveModelAccess` helper is the single decision point and is enforced in `GET /models`, `GET /models/default` (falls back to the first allowed model) and chat (`create`/`setModel`/`generate` → structured Persian error «به این مدل دسترسی ندارید»). Adding a future `premium` role requires no code: grant it commercial access in the admin panel.
+  - **Reusable admin UI**: `ModelAccessBadge` (access badge), `ModelAccessPicker` (level select + searchable multi-user whitelist), `AdminTableSkeleton` (shadcn `Skeleton`-based table placeholder) — used across the models table, model editor, role table/modal and admin loading states.
+  - **Optimistic updates in the admin panel**: model save/toggle and role-settings save apply immediately and roll back with an error toast if the API fails.
+  - **Final provider-toggle rule**: provider-level `isActive` is no longer a product feature. The admin UI/API no longer expose provider enable/disable toggles, and chat/model selection no longer depend on provider activity. The only remaining safeguard is a model rule: a default model cannot be disabled until another default model is selected first, and only one platform default is allowed at a time.
+  - **Conversation Pinning & 3-Dots Action Dropdown Menu**: Replaced direct edit/delete buttons in `AppSidebar.vue` with a 3-dots action menu with Pin/Unpin, Edit Title, and Delete options. Persisted `isPinned` in database with `isPinned DESC, updatedAt DESC` sorting.
+  - **Sent File Content Viewer in User Chat**: Clickable attachment cards (`FilePreviewCard.vue`) for PDF, Text, Markdown, Excel, and Image with dedicated tabs and copy features.
+  - **Per-Role Global Token Limits (Admin Panel)**: Admins can define token consumption limits per role, with dual dollar/token inputs in `RoleTokenLimitModal`.
+  - **Live Effective Limit on Users Table**: `GET /admin/users` returns `effectiveTokenLimit` per user.
+  - **Periodic Token/Message Quotas**: Periodic quotas with lazy hourly reset, role/user precedence, and structured `QUOTA_EXCEEDED` errors.
 
 ### Changed
-- **All deletions are now soft-delete (production-ready)**: `users`, `ai_models`, and `ai_providers` gained an `isDeleted` flag; `DELETE /admin/users/:id`, `DELETE /admin/models/:id`, and `DELETE /admin/providers/:id` now flag rows instead of physically removing them (provider deletion soft-cascades to its models). Soft-deleted rows are hidden from every listing/lookup, and a soft-deleted user can no longer log in or use existing tokens (auth lookups filter `isDeleted: false`). Migration `1761600000000-SoftDeleteUsersModelsProviders` also converts the physical FK cascades `conversations.userId` and `file_attachments.userId` from `ON DELETE CASCADE` to `ON DELETE SET NULL` so a future hard purge can never destroy historical conversations or files. Deleting a model still nulls any provider `defaultModelId` pointing at it. Conversations, messages, and file attachments were already soft-deleted and are unchanged.
+- **All deletions are now soft-delete (production-ready)**: `users`, `ai_models`, and `ai_providers` gained an `isDeleted` flag; `DELETE /admin/users/:id`, `DELETE /admin/models/:id`, and `DELETE /admin/providers/:id` now flag rows instead of physically removing them.
 
 ### Fixed
-- **DB-authoritative user role and quota state**: user role access for model listings and admin routing is now re-read from the database instead of trusting stale JWT/localStorage claims. This fixes the case where a normal user is promoted to admin or demoted back to user while the old token is still valid, and ensures the sidebar quota reflects the current session user rather than stale cached state.
-- **Streaming auto-scroll freeze after scrolling back down**: While a model response was streaming, if the user scrolled up and then back down, the follow mode locked and the page no longer scrolled with the stream (manual scrolling required). Root cause: the `isUserScrolling` flag was cleared by an 80ms debounce timer armed during the *upward* gesture, which could fire *after* the user had already returned to the bottom — canceling follow at exactly the wrong moment.
-- **Streaming auto-scroll resistance on slow upward scrolls**: Scrolling up slowly during a stream used to snap back and fight the user inside the 120px bottom threshold. Follow state is now driven purely by scroll direction observed in the single `scroll` listener: any upward movement is user intent (programmatic scrolls only go down) and disengages follow instantly and smoothly, while landing near the bottom (120px) re-engages it. The `wheel`/`touchstart` listeners and the debounced user-scrolling flag were removed entirely. Regression coverage updated in `frontend/tests/MessageList.spec.ts` (slow upward scroll inside threshold releases follow; returning to the bottom resumes it).
-
-## [1.4.0] - 2026-09-18
-
-### Added
-- Periodic token/message quotas with lazy hourly reset, role/user precedence, structured `QUOTA_EXCEEDED` errors, and `GET /chat/quota`.
-- Per-task usage buckets and admin-configurable task multipliers with recomputable `usedCostUsd`.
-- Quota snapshot synchronization via `X-User-Quota`, profile remaining percentage, and chat composer/new-chat blocking.
-
-## [1.3.3] - 2026-09-18
-
-### Added
-- **Per-Role Global Token Limits (Admin Panel)**: Admins can now define a token consumption limit per user role. A new card in the admin "System Policies" section shows a dynamic table of all roles (auto-includes future roles via distinct roles from the users table) with their limit and an edit button. Clicking edit opens a responsive modal (`RoleTokenLimitModal`) with dual dollar/token inputs following the existing `UserEditorModal` pattern. Limits are stored in `system_settings` (`role_token_limits` JSON, merged per-role updates). Enforcement priority in `ChatService.generate`: user-specific limit → role limit → global limit. Role limit `0` or absent falls through to the global limit.
-- **Live Effective Limit on Users Table**: `GET /admin/users` now resolves and returns `effectiveTokenLimit` per user (personal → role → global, via the pure `resolveEffectiveTokenLimit` helper). The admin users table (usage percentage, progress bar, quota-exhausted badge) is computed from this effective limit, tagging inherited limits with «سقف نقش» or «سقف سراسری». Changing a role's limit in the settings section applies to all members of that role on the next users-table load — no per-user edits needed.
-
-### Fixed
-- **Sources hidden for user-stopped messages**: When a user stops a streaming answer mid-generation (via the stop button), the `SourcesBlock` is no longer shown for that interrupted message. Backend now correctly sets `isInterrupted=true` and `stoppedByUser=true` on user-aborted messages and stores `sources=null`. Frontend gates `SourcesBlock` rendering on `!isInterrupted && !stoppedByUser`. Existing test `chat-stop-sources.spec.ts` validates this behavior.
+- **DB-authoritative user role and quota state**: user role access for model listings and admin routing is re-read from the database instead of trusting stale claims.
+- **Streaming auto-scroll fixes**: Smooth follow and disengage on scroll gestures.
+- **Sources hidden for user-stopped messages**: `SourcesBlock` is not displayed for stopped/interrupted messages.
+- **Persian/Arabic File Name Encoding (Mojibake Fix)**: Full CP1252 / ISO-8859-1 decoding in `fixUtf8MangledString`, client-side `X-Original-Filename` header, and migration `1761300000006-FixMangledFilenames.ts`.
+- **Admin File Content Download**: Authenticated endpoint `GET /admin/files/:id/content` allowing admin inspection and download of user files.
+- **Real-Time Streaming Synchronization**: Direct synchronous token appending in `frontend/src/stores/chat.ts`, eliminating queue backlog and sudden end jumps.
+- **Token Exhaustion Message**: Clear message «توکن مصرفی شما به پایان رسید» displayed in composer and toasts when token quota is depleted.
 
 ## [1.3.2] - 2026-09-18
 

@@ -146,6 +146,10 @@ export class ModelsAdminService {
     if (d.isActive !== undefined) m.isActive = d.isActive;
     if (d.accessLevel !== undefined) m.accessLevel = d.accessLevel;
     if (d.allowedUserIds !== undefined) m.allowedUserIds = Array.isArray(d.allowedUserIds) ? d.allowedUserIds : [];
+    if (d.supportsThinking !== undefined) m.supportsThinking = d.supportsThinking;
+    if (d.supportsVision !== undefined) m.supportsVision = d.supportsVision;
+    if (d.supportsDocument !== undefined) m.supportsDocument = d.supportsDocument;
+    if (d.thinkingBudgetTokens !== undefined) m.thinkingBudgetTokens = d.thinkingBudgetTokens;
 
     const saved = await this.repo.save(m);
     return this.maskApiKey(saved);

@@ -27,9 +27,11 @@ export class ResponseEnvelopeInterceptor<T> implements NestInterceptor<
     if (
       accept.includes('text/event-stream') ||
       contentType.includes('text/event-stream') ||
+      contentType.includes('audio/') ||
       res.headersSent ||
       req.url?.includes('/v1/models') ||
-      req.url?.includes('/v1/chat/completions')
+      req.url?.includes('/v1/chat/completions') ||
+      req.url?.includes('/tts/synthesize')
     ) {
       return next.handle();
     }

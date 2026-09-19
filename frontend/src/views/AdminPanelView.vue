@@ -18,6 +18,7 @@ import {
   UserCheck,
   Receipt,
   Tag,
+  Activity,
 } from '@lucide/vue'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
@@ -38,6 +39,7 @@ import AdminPlansSection from './admin/AdminPlansSection.vue'
 import AdminSubscriptionsSection from './admin/AdminSubscriptionsSection.vue'
 import AdminPaymentsSection from './admin/AdminPaymentsSection.vue'
 import AdminCouponsSection from './admin/AdminCouponsSection.vue'
+import AdminAuditLogsSection from './admin/AdminAuditLogsSection.vue'
 
 import type { AdminUser } from '../types'
 
@@ -119,6 +121,7 @@ const navItems = computed(() => [
   { id: 'chats', label: labels.chats, icon: MessageSquare },
   { id: 'files', label: labels.files, icon: FileText },
   { id: 'file-settings', label: labels.fileSettings, icon: Sliders },
+  { id: 'audit-logs', label: labels.auditLogs, icon: Activity },
 ])
 
 const currentSectionTitle = computed(() => {
@@ -153,6 +156,11 @@ const currentSearchScope = computed(() => {
       return {
         placeholder: 'جستجو در فایل‌ها بر اساس: نام فایل، نوع، کاربر...',
         fields: ['نام فایل', 'نوع فایل', 'کاربر'],
+      }
+    case 'audit-logs':
+      return {
+        placeholder: 'جستجو در لاگ‌ها بر اساس: شناسه تریس، مسیر، عملیات، خطا...',
+        fields: ['شناسه تریس', 'مسیر/آدرس', 'عملیات', 'خطا'],
       }
     default:
       return {
@@ -412,6 +420,12 @@ async function confirmDelete() {
         <!-- 12. System Prompts & Global Quota -->
         <AdminPromptsSection
           v-else-if="activeSection === 'prompts'"
+        />
+
+        <!-- 13. Audit & System Logs -->
+        <AdminAuditLogsSection
+          v-else-if="activeSection === 'audit-logs'"
+          :search-query="debouncedSearchQuery"
         />
       </section>
     </main>

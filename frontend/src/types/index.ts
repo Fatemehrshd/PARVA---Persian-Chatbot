@@ -503,11 +503,18 @@ export interface VerifyPaymentResponse {
 
 export interface AuditLogItem {
   id: string
+  traceId?: string | null
+  spanId?: string | null
   actorId?: string | null
   actorType: 'admin' | 'user' | 'system'
   action: string
   entityType: string
   entityId?: string | null
+  method?: string | null
+  path?: string | null
+  statusCode?: number | null
+  durationMs?: number | null
+  errorMessage?: string | null
   changes?: { before?: any; after?: any } | null
   metadata?: Record<string, any>
   ip?: string | null

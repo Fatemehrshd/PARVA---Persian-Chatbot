@@ -28,6 +28,7 @@ import { ChatShare } from './modules/chat/chat-share.entity';
 import { AuditModule } from './modules/audit/audit.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { TtsModule } from './modules/tts/tts.module';
 import { ResponseEnvelopeInterceptor } from './shared/response-envelope.interceptor';
 import { HttpLoggingInterceptor } from './shared/http-logging.interceptor';
 import { TraceContextMiddleware } from './shared/trace-context.service';
@@ -71,6 +72,7 @@ import { TraceContextMiddleware } from './shared/trace-context.service';
     AuditModule,
     SubscriptionsModule,
     PaymentsModule,
+    TtsModule,
   ],
   controllers: [AppController],
   providers: [

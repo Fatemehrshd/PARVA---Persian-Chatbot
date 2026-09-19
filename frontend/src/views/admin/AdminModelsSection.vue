@@ -2,14 +2,17 @@
 import { ref, watch, onMounted } from 'vue'
 import { Plus, Edit, Trash2, Star } from '@lucide/vue'
 import AdminTable, { type TableColumn } from '../../components/admin/AdminTable.vue'
+import AdminTableSkeleton from '../../components/admin/AdminTableSkeleton.vue'
+import ModelAccessBadge from '../../components/admin/ModelAccessBadge.vue'
 import BaseButton from '../../components/ui/BaseButton.vue'
 import BaseToggle from '../../components/ui/BaseToggle.vue'
 import ModelEditorModal from '../../components/admin/modals/ModelEditorModal.vue'
 import { modelsService } from '../../services/models.service'
+import { adminService } from '../../services/admin.service'
 import { useUiStore } from '../../stores/ui'
 import { useModelsStore } from '../../stores/models'
 import { markDefaultModel } from '../../utils/models'
-import type { Model, Provider } from '../../types'
+import type { AdminUser, Model, ModelAccessLevel, Provider } from '../../types'
 
 const props = defineProps<{
   searchQuery?: string
@@ -23,6 +26,7 @@ const uiStore = useUiStore()
 const modelsStore = useModelsStore()
 const models = ref<Model[]>(modelsStore.models)
 const providers = ref<Provider[]>([])
+const users = ref<AdminUser[]>([])
 const isLoading = ref(false)
 const isSaving = ref(false)
 const errorMessage = ref('')
@@ -41,7 +45,8 @@ const editingModel = ref<Model | null>(null)
 const modelColumns: TableColumn[] = [
   { key: 'name', label: 'نام مدل', width: '220px', sortable: true },
   { key: 'provider', label: 'ارائه‌دهنده', width: '150px', sortable: true },
-  { key: 'apiIdentifier', label: 'شناسه API', width: '220px', sortable: true },
+  { key: 'apiIdentifier', label: 'شناسه API', width: '200px', sortable: true },
+  { key: 'accessLevel', label: 'دسترسی', width: '110px' },
   { key: 'isActive', label: 'وضعیت', width: '110px' },
   { key: 'actions', label: 'عملیات', align: 'center', width: '100px', sortable: false },
 ]
@@ -64,9 +69,11 @@ async function loadModels() {
       if (v) params[k] = v
     }
 
-    const [mRes, pRes] = await Promise.allSettled([
+    const [mRes, pRes, uRes] = await Promise.allSettled([
       modelsService.listModels(params),
       modelsService.listProviders(),
+      // The private-model whitelist picker needs the user directory (admin-only).
+      adminService.listUsers(),
     ])
 
     if (mRes.status === 'fulfilled') {
@@ -95,6 +102,10 @@ async function loadModels() {
     }
     if (pRes.status === 'fulfilled') {
       providers.value = Array.isArray(pRes.value) ? pRes.value : (pRes.value as any)?.items || []
+    }
+    if (uRes.status === 'fulfilled') {
+      const val = uRes.value as any
+      users.value = Array.isArray(val) ? val : val?.items || []
     }
   } catch (err: any) {
     errorMessage.value = err?.message || 'خطا در بارگذاری مدل‌ها'
@@ -168,8 +179,26 @@ function openEditModel(model: Model) {
   isEditorModalOpen.value = true
 }
 
-async function handleSaveModel(payload: { name: string; provider: string; providerId?: string; apiIdentifier: string; isActive: boolean }) {
+async function handleSaveModel(payload: { name: string; provider: string; providerId?: string; apiIdentifier: string; isActive: boolean; accessLevel: ModelAccessLevel; allowedUserIds: string[] }) {
   isSaving.value = true
+  const previous = [...models.value]
+  if (editingModel.value) {
+    // Optimistic update: reflect the edit immediately, roll back if the API fails.
+    const target = models.value.find((m) => m.id === editingModel.value!.id)
+    if (target) Object.assign(target, payload)
+  } else {
+    // Optimistic insert with a temporary id until the server assigns one.
+    models.value = [
+      ...models.value,
+      {
+        id: `temp-${Date.now()}`,
+        isDefault: false,
+        createdAt: new Date().toISOString(),
+        ...payload,
+      } as Model,
+    ]
+  }
+  isEditorModalOpen.value = false
   try {
     if (editingModel.value) {
       await modelsService.updateModel(editingModel.value.id, payload)
@@ -178,9 +207,9 @@ async function handleSaveModel(payload: { name: string; provider: string; provid
       await modelsStore.addModel(payload)
       uiStore.showToast('مدل جدید با موفقیت اضافه شد.', 'success')
     }
-    isEditorModalOpen.value = false
     await loadModels()
   } catch (err: any) {
+    models.value = previous
     uiStore.showToast(err?.message || 'ذخیره مدل با خطا مواجه شد', 'error')
   } finally {
     isSaving.value = false
@@ -188,11 +217,14 @@ async function handleSaveModel(payload: { name: string; provider: string; provid
 }
 
 async function toggleModel(model: Model) {
+  // Optimistic: flip the switch now, revert on failure.
+  const next = !model.isActive
+  model.isActive = next
   try {
-    await modelsService.updateModelStatus(model.id, !model.isActive)
-    model.isActive = !model.isActive
+    await modelsService.updateModelStatus(model.id, next)
     uiStore.showToast(`وضعیت مدل «${model.name}» تغییر کرد.`, 'info')
   } catch (err: any) {
+    model.isActive = !next
     uiStore.showToast(err?.message || 'خطا در تغییر وضعیت مدل', 'error')
   }
 }
@@ -232,7 +264,6 @@ onMounted(loadModels)
     <div class="section-toolbar flex items-center justify-between">
       <div>
         <h3 class="text-base font-bold text-foreground">مدل‌های هوش مصنوعی (AI Models)</h3>
-        <p class="text-xs text-muted-foreground mt-0.5">مدیریت، پیکربندی و فعال‌سازی مدل‌های مورد استفاده کاربران</p>
       </div>
       <BaseButton variant="primary" size="md" @click="openCreateModel">
         <Plus :size="16" />
@@ -244,7 +275,10 @@ onMounted(loadModels)
       {{ errorMessage }}
     </div>
 
+    <AdminTableSkeleton v-if="isLoading" :rows="pageSize" :columns="modelColumns.length" />
+
     <AdminTable
+      v-else
       :columns="modelColumns"
       :items="models"
       tableClass="dashboard-table"
@@ -282,6 +316,9 @@ onMounted(loadModels)
         <td data-label="شناسه API" class="mono text-xs text-muted-foreground">
           {{ model.apiIdentifier }}
         </td>
+        <td data-label="دسترسی">
+          <ModelAccessBadge :level="model.accessLevel" />
+        </td>
         <td data-label="وضعیت">
           <BaseToggle
             :model-value="model.isActive"
@@ -317,6 +354,7 @@ onMounted(loadModels)
       :open="isEditorModalOpen"
       :model="editingModel"
       :providers="providers"
+      :users="users"
       :isSaving="isSaving"
       @close="isEditorModalOpen = false"
       @save="handleSaveModel"

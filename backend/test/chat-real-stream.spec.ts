@@ -4,7 +4,8 @@ import { ChatService } from '../src/modules/chat/chat.service';
 /**
  * Real-provider chat semantics:
  *  - resolution order conversation-model -> platform default (unchanged);
- *  - a disabled model OR a disabled provider is a 400 BEFORE anything is saved;
+ *  - a disabled model is a 400 BEFORE anything is saved; provider status is no
+ *    longer a blocking rule in the app contract;
  *  - with a credential: the reply comes from the forwarder stream, and the
  *    assistant message persists exactly what was streamed;
  *  - no credential anywhere: offline echo only (dev/test convenience);
@@ -91,15 +92,20 @@ it('streams from the real forwarder when a target resolves; persists exactly the
   });
 });
 
-it('a disabled provider is a 400 before the first chunk', async () => {
+it('a disabled provider is tolerated and still streams when the model itself is usable', async () => {
   const { svc, savedMsgs } = svcWith({
     convRow: conv,
     model: activeModel,
     provider: { id: 'p1', name: 'openai', isActive: false },
     target,
+    streamImpl: async function* () {
+      yield 'ok';
+    },
   });
-  await expect(svc.generate('u1', 'c1', 'hi').next()).rejects.toBeInstanceOf(BadRequestException);
-  expect(savedMsgs).toHaveLength(0);
+  const { text, saved } = await drain(svc.generate('u1', 'c1', 'hi'));
+  expect(text).toBe('ok');
+  expect(saved.content).toBe('ok');
+  expect(savedMsgs.map((m) => m.role)).toEqual(['user', 'assistant']);
 });
 
 it('an inactive model is still a 400 (unchanged behavior)', async () => {
@@ -164,12 +170,13 @@ describe('setModel (mid-conversation switch)', () => {
     const { svc } = svcWith({ convRow: { ...conv }, model: { ...activeModel, isActive: false } });
     await expect(svc.setModel('u1', 'c1', 'm1')).rejects.toBeInstanceOf(BadRequestException);
   });
-  it('model whose provider is disabled -> 400', async () => {
+  it('model whose provider has a legacy disabled flag still switches normally', async () => {
     const { svc } = svcWith({
       convRow: { ...conv },
       model: activeModel,
       provider: { id: 'p1', name: 'openai', isActive: false },
     });
-    await expect(svc.setModel('u1', 'c1', 'm1')).rejects.toBeInstanceOf(BadRequestException);
+    const c = await svc.setModel('u1', 'c1', 'm1');
+    expect(c.modelId).toBe('m1');
   });
 });

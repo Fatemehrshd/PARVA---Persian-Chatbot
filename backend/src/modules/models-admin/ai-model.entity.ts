@@ -7,6 +7,10 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { AiProvider } from './ai-provider.entity';
+
+/** Visibility tier of a model, resolved against the caller's role/whitelist. */
+export type ModelAccessLevel = 'public' | 'commercial' | 'private';
+
 @Entity('ai_models')
 export class AiModel {
   @PrimaryGeneratedColumn('uuid') id: string;
@@ -24,5 +28,11 @@ export class AiModel {
   providerRef?: AiProvider;
   @Column({ default: true }) isActive: boolean;
   @Column({ default: false }) isDefault: boolean;
+  /** Soft-delete flag; row is kept for audit, hidden from listings. */
+  @Column({ default: false }) isDeleted: boolean;
+  /** public = everyone, commercial = allowed roles, private = whitelisted users. */
+  @Column({ default: 'public' }) accessLevel: ModelAccessLevel;
+  /** User ids allowed to see/use this model (only meaningful for private). */
+  @Column({ type: 'jsonb', default: [] }) allowedUserIds: string[];
   @CreateDateColumn() createdAt: Date;
 }

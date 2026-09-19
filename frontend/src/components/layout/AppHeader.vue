@@ -46,8 +46,8 @@ const authStore = useAuthStore()
       <button
         v-if="authStore.isAdmin"
         class="icon-text-btn px-2 sm:px-3"
-        @click="router.push('/admin/models')"
-        title="پنل ادمین (مدیریت مدل‌ها)"
+        @click="router.push('/admin/dashboard')"
+        title="پنل ادمین (داشبورد)"
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>

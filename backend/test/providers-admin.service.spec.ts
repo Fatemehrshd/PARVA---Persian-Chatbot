@@ -16,8 +16,13 @@ function fakeStores() {
       return p;
     },
     findOne: async ({ where }: any) =>
-      providers.find((p) => (where.id ? p.id === where.id : p.name === where.name)) ?? null,
-    find: async () => [...providers],
+      providers.find(
+        (p) =>
+          (where.id ? p.id === where.id : p.name === where.name) &&
+          (where.isDeleted === undefined || (p.isDeleted ?? false) === where.isDeleted),
+      ) ?? null,
+    find: async ({ where }: any = {}) =>
+      providers.filter((p) => where?.isDeleted === undefined || (p.isDeleted ?? false) === where.isDeleted),
     update: async (where: any, patch: any) => {
       providers.forEach((p) => {
         if (
@@ -33,19 +38,30 @@ function fakeStores() {
     },
   };
   const mRepo: any = {
-    findOne: async ({ where }: any) => models.find((m) => m.id === where.id) ?? null,
-    find: async ({ where }: any) =>
-      models.filter((m) => (where.providerId ? m.providerId === where.providerId : true)),
-    delete: async (where: any) => {
-      const ids: string[] = where.id.value ?? [where.id];
-      for (let i = models.length - 1; i >= 0; i--)
-        if (ids.includes(models[i].id)) models.splice(i, 1);
+    findOne: async ({ where }: any) =>
+      models.find(
+        (m) => m.id === where.id && (where.isDeleted === undefined || (m.isDeleted ?? false) === where.isDeleted),
+      ) ?? null,
+    find: async ({ where, order }: any = {}) => {
+      const out = models.filter(
+        (m) =>
+          (where?.providerId ? m.providerId === where.providerId : true) &&
+          (where?.isActive === undefined || m.isActive === where.isActive) &&
+          (where?.isDeleted === undefined || (m.isDeleted ?? false) === where.isDeleted),
+      );
+      if (order?.createdAt === 'ASC') out.sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+      return out;
     },
     update: async (where: any, patch: any) => {
+      // TypeORM `In(ids)` arrives as a FindOperator with a `.value` array.
+      const idList: string[] | undefined = Array.isArray(where?.id?.value)
+        ? where.id.value
+        : undefined;
       models.forEach((m) => {
-        if (where.id === undefined || m.id === where.id)
-          if (where.isDefault === undefined || m.isDefault === where.isDefault)
-            Object.assign(m, patch);
+        const idOk =
+          where.id === undefined ? true : idList ? idList.includes(m.id) : m.id === where.id;
+        if (idOk && (where.isDefault === undefined || m.isDefault === where.isDefault))
+          Object.assign(m, patch);
       });
     },
   };
@@ -114,11 +130,32 @@ describe('ProvidersAdminService', () => {
     );
     const res = await svc.remove(doomed.id);
     expect(res.deletedModelIds.sort()).toEqual(['d1', 'd2']);
-    expect(providers.find((p) => p.id === doomed.id)).toBeUndefined();
-    expect(models.find((m) => m.id === 'd1')).toBeUndefined();
+    // soft delete: rows stay in storage, flagged and hidden from listings
+    expect(providers.find((p) => p.id === doomed.id).isDeleted).toBe(true);
+    expect(models.find((m) => m.id === 'd1').isDeleted).toBe(true);
+    expect(models.find((m) => m.id === 'd2').isDeleted).toBe(true);
     // platform default moved to the oldest remaining usable model
     expect(models.find((m) => m.id === 'k1').isDefault).toBe(true);
-    expect(models.find((m) => m.id === 'd2')).toBeUndefined();
+  });
+
+  it('provider status is a legacy data flag and does not cascade into model activity', async () => {
+    const { pRepo, mRepo, providers, models } = fakeStores();
+    const svc = new ProvidersAdminService(pRepo, mRepo);
+    const provider: any = await svc.create({ name: 'openai' });
+    models.push(
+      { id: 'm1', providerId: provider.id, provider: 'openai', isActive: true, isDefault: true },
+      { id: 'm2', providerId: provider.id, provider: 'openai', isActive: true, isDefault: false },
+      { id: 'm3', providerId: 'other', provider: 'other', isActive: true, isDefault: false },
+    );
+
+    const updated = await svc.updateStatus(provider.id, false);
+
+    expect(updated.isActive).toBe(false);
+    expect(providers.find((x) => x.id === provider.id).isActive).toBe(false);
+    expect(models.find((m) => m.id === 'm1').isActive).toBe(true);
+    expect(models.find((m) => m.id === 'm2').isActive).toBe(true);
+    expect(models.filter((m) => m.isDefault).length).toBe(1);
+    expect(models.find((m) => m.id === 'm3').isDefault).toBe(false);
   });
 });
 

@@ -10,6 +10,7 @@ import { DEFAULT_RESET_HOURS, SettingsService } from '../admin/settings.service'
 import { UsersService } from '../users/users.service';
 import { ActiveStreamService, ActiveStreamStatus } from './active-stream.service';
 import { WebSearchService } from '../web-search/web-search.service';
+import { FA } from '../../shared/messages.fa';
 
 export interface ChatChunk {
   token?: string;
@@ -149,10 +150,12 @@ export class ChatService {
       if (targetModel && targetModel.isActive === false) {
         throw new BadRequestException('Selected AI model is currently disabled');
       }
+      await this.assertModelAllowed(targetModel, userId);
     } else {
       // Resolution chain: platform default, then the legacy sentinel
       // (offline echo path).
-      mid = (await this.models.getDefault())?.id ?? 'default-model';
+      const preferred = await this.preferredDefault(userId);
+      mid = preferred?.id ?? 'default-model';
     }
     const c = await this.conv.save(
       this.conv.create({ userId, modelId: mid, title: title ?? 'New conversation' }),
@@ -231,12 +234,42 @@ export class ChatService {
     if (!m) throw new BadRequestException('Selected AI model does not exist');
     if (m.isActive === false)
       throw new BadRequestException('Selected AI model is currently disabled');
-    const provider = await this.models.resolveProvider(m);
-    if (provider && provider.isActive === false) {
-      throw new BadRequestException(`Provider "${provider.name}" is disabled`);
-    }
+    await this.assertModelAllowed(m, userId);
     c.modelId = m.id;
     return this.conv.save(c);
+  }
+
+  /** Model-access guard shared by create/setModel/generate (server-side authority). */
+  private async assertModelAllowed(model: any, userId: string) {
+    if (!model) return;
+    if (typeof this.models?.isModelAllowedForUser !== 'function') return;
+    const user = await this.accessUser(userId);
+    if (!(await this.models.isModelAllowedForUser(model, user))) {
+      throw new BadRequestException(FA.modelAccessDenied);
+    }
+  }
+
+  /** True when `model` is visible/usable for this caller (defensive against fakes). */
+  private async isModelAllowed(model: any, userId: string): Promise<boolean> {
+    if (!model || typeof this.models?.isModelAllowedForUser !== 'function') return true;
+    return this.models.isModelAllowedForUser(model, await this.accessUser(userId));
+  }
+
+  /** Platform default resolved for this caller's access rights. */
+  private async preferredDefault(userId: string) {
+    if (typeof this.models?.getUsableDefault === 'function') {
+      return this.models.getUsableDefault(await this.accessUser(userId));
+    }
+    return this.models.getDefault();
+  }
+
+  /** Caller identity for access checks; falls back to a plain user when unknown. */
+  private async accessUser(userId: string): Promise<{ id: string; role: string }> {
+    const user =
+      typeof this.users?.findById === 'function'
+        ? await this.users.findById(userId).catch(() => null)
+        : null;
+    return { id: userId, role: user?.role || 'user' };
   }
 
   /**
@@ -389,9 +422,13 @@ export class ChatService {
     if (model && model.isActive === false) {
       throw new BadRequestException('Selected AI model is currently disabled');
     }
-    const provider = await this.models.resolveProvider(model);
-    if (provider && provider.isActive === false) {
-      throw new BadRequestException(`Provider "${provider.name}" is disabled`);
+    // Access control: a conversation pinned to a model the user may no longer
+    // use must not answer. Fall back to the user's usable default when there is
+    // one, otherwise block with the structured Persian error.
+    if (model && !(await this.isModelAllowed(model, userId))) {
+      const fallback = await this.preferredDefault(userId);
+      if (!fallback) throw new BadRequestException(FA.modelAccessDenied);
+      model = await this.models.getRawById(fallback.id);
     }
 
     const isDefaultTitle =
@@ -501,6 +538,7 @@ export class ChatService {
       }
     }
 
+    const provider = await this.models.resolveProvider(model);
     const target = this.forwarder.resolveTarget(model, provider);
     const titlePromise = shouldGenerateTitle ? this.generateTitle(target, rawContent || 'تحلیل فایل پیوست') : null;
 
@@ -709,11 +747,8 @@ export class ChatService {
     if (model && model.isActive === false) {
       throw new BadRequestException('Selected AI model is currently disabled');
     }
-    const provider = await this.models.resolveProvider(model);
-    if (provider && provider.isActive === false) {
-      throw new BadRequestException(`Provider "${provider.name}" is disabled`);
-    }
 
+    const provider = await this.models.resolveProvider(model);
     const target = this.forwarder.resolveTarget(model, provider);
     if (!target) {
       this.logger.warn('No API key configured — using offline echo fallback for resume.');

@@ -14,11 +14,12 @@ import { useUiStore } from '../../stores/ui'
 const authStore = useAuthStore()
 const uiStore = useUiStore()
 
-function refreshQuota() {
+function refreshUserState() {
+  void authStore.refreshIdentity()
   void authStore.refreshQuota()
 }
 
-onMounted(refreshQuota)
+onMounted(refreshUserState)
 
 const emit = defineEmits<{
   close: []

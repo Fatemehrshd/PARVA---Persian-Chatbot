@@ -6,6 +6,7 @@ import { ModelsAdminController } from '../src/modules/models-admin/models-admin.
 import { ModelsAdminService } from '../src/modules/models-admin/models-admin.service';
 import { JwtAuthGuard } from '../src/shared/jwt-auth.guard';
 import { AdminGuard } from '../src/shared/admin.guard';
+import { testAdminGuard } from './test-utils';
 import { HttpExceptionFilter } from '../src/shared/http-exception.filter';
 import { ResponseEnvelopeInterceptor } from '../src/shared/response-envelope.interceptor';
 
@@ -77,7 +78,7 @@ async function makeApp(role: 'admin' | 'user' | null) {
     providers: [
       { provide: ModelsAdminService, useValue: svc },
       JwtAuthGuard,
-      AdminGuard,
+      { provide: AdminGuard, useValue: testAdminGuard },
       {
         provide: JwtService,
         useValue: {

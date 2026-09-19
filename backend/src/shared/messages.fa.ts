@@ -39,4 +39,7 @@ export const FA = {
   apiIdentifierRequired: 'شناسه API مدل الزامی است',
   apiIdentifierString: 'شناسه API مدل باید متن باشد',
   modelIdParamUuid: 'شناسه مدل در URL باید یک UUID معتبر باشد',
+
+  // ---- model access ----
+  modelAccessDenied: 'به این مدل دسترسی ندارید',
 };

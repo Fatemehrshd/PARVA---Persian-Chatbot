@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import ChatView from '../views/ChatView.vue'
 
 import { isTokenExpired } from '../lib/jwt'
+import { useAuthStore } from '../stores/auth'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -89,7 +90,7 @@ const router = createRouter({
   ]
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const rawToken = localStorage.getItem('token')
 
   // Check proactive token expiry
@@ -100,25 +101,23 @@ router.beforeEach((to, _from, next) => {
   }
 
   const token = localStorage.getItem('token')
-  const savedUser = localStorage.getItem('user')
-  let role = 'user'
-  if (savedUser) {
-    try {
-      role = JSON.parse(savedUser).role
-    } catch {
-      // invalid user JSON
-    }
-  }
-
   const isAuthenticated = !!token
-  const isAdmin = role === 'admin'
 
   if (to.meta.requiresAuth && !isAuthenticated) {
     return next({ path: '/login', query: { redirect: to.fullPath } })
   }
 
-  if (to.meta.requiresAdmin && !isAdmin) {
-    return next({ path: '/' })
+  if (to.meta.requiresAdmin) {
+    const authStore = useAuthStore()
+    try {
+      await authStore.refreshIdentity()
+    } catch {
+      // keep the access check conservative when the identity re-sync fails
+    }
+    const isAdmin = authStore.identity?.role === 'admin'
+    if (!isAdmin) {
+      return next({ path: '/' })
+    }
   }
 
   if (to.meta.guestOnly && isAuthenticated) {

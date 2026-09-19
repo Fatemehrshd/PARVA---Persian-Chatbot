@@ -25,7 +25,7 @@ export class ProvidersAdminService {
   private async byId(id: string): Promise<AiProvider> {
     let p: AiProvider;
     try {
-      p = await this.repo.findOne({ where: { id } });
+      p = await this.repo.findOne({ where: { id, isDeleted: false } });
     } catch (err: any) {
       if (err?.code === '22P02') throw new NotFoundException('Resource not found');
       throw err;
@@ -35,7 +35,7 @@ export class ProvidersAdminService {
   }
 
   findByName(name: string): Promise<AiProvider | null> {
-    return this.repo.findOne({ where: { name } }).catch(() => null);
+    return this.repo.findOne({ where: { name, isDeleted: false } }).catch(() => null);
   }
 
   /** Creates the provider if missing, returns the (existing or new) row. */
@@ -46,12 +46,12 @@ export class ProvidersAdminService {
   }
 
   async list() {
-    const all = await this.repo.find({ order: { createdAt: 'ASC' } });
+    const all = await this.repo.find({ where: { isDeleted: false }, order: { createdAt: 'ASC' } });
     return all.map((p) => this.mask(p));
   }
 
   async create(d: { name: string; baseUrl?: string; apiKey?: string; isActive?: boolean }) {
-    const dup = await this.repo.findOne({ where: { name: d.name } }).catch(() => null);
+    const dup = await this.repo.findOne({ where: { name: d.name, isDeleted: false } }).catch(() => null);
     if (dup) throw new ConflictException(`Provider "${d.name}" already exists`);
     const p = await this.repo.save(
       this.repo.create({ isActive: true, baseUrl: undefined, apiKey: undefined, ...d }),
@@ -66,7 +66,7 @@ export class ProvidersAdminService {
   ) {
     const p = await this.byId(id);
     if (d.name !== undefined && d.name !== p.name) {
-      const dup = await this.repo.findOne({ where: { name: d.name } }).catch(() => null);
+      const dup = await this.repo.findOne({ where: { name: d.name, isDeleted: false } }).catch(() => null);
       if (dup) throw new ConflictException(`Provider "${d.name}" already exists`);
       p.name = d.name;
     }
@@ -80,22 +80,25 @@ export class ProvidersAdminService {
   async updateStatus(id: string, isActive: boolean) {
     const p = await this.byId(id);
     p.isActive = isActive;
+    // Provider-level enable/disable is intentionally kept only as a legacy data flag.
+    // The product no longer treats provider status as a cascade control over models.
     return this.mask(await this.repo.save(p));
   }
 
   /**
-   * Delete a provider and CASCADE-delete its models.
+   * Soft-delete a provider and its models (rows are kept for audit/history).
    * If the platform-wide default model lived inside, promote the oldest
    * remaining active model (of an active provider) so the platform never
    * ends up silently default-less.
    */
   async remove(id: string): Promise<{ deletedModelIds: string[] }> {
     const p = await this.byId(id);
-    const models = await this.models.find({ where: { providerId: p.id } });
+    const models = await this.models.find({ where: { providerId: p.id, isDeleted: false } });
     const ids = models.map((m) => m.id);
     const swallowedPlatformDefault = models.some((m) => m.isDefault);
-    if (ids.length) await this.models.delete({ id: In(ids) });
-    await this.repo.remove(p);
+    if (ids.length) await this.models.update({ id: In(ids) }, { isDeleted: true });
+    p.isDeleted = true;
+    await this.repo.save(p);
     if (swallowedPlatformDefault) await this.reassignPlatformDefault();
     return { deletedModelIds: ids };
   }
@@ -103,12 +106,12 @@ export class ProvidersAdminService {
   private async reassignPlatformDefault(): Promise<void> {
     await this.models.update({ isDefault: true }, { isDefault: false });
     const remaining = await this.models.find({
-      where: { isActive: true },
+      where: { isActive: true, isDeleted: false },
       order: { createdAt: 'ASC' },
     });
     for (const candidate of remaining) {
       const prov = candidate.providerId
-        ? await this.repo.findOne({ where: { id: candidate.providerId } })
+        ? await this.repo.findOne({ where: { id: candidate.providerId, isDeleted: false } })
         : null;
       if (!candidate.providerId || prov?.isActive) {
         await this.models.update({ id: candidate.id }, { isDefault: true });
@@ -122,7 +125,7 @@ export class ProvidersAdminService {
     const p = await this.byId(id);
     let m: AiModel | undefined;
     try {
-      m = (await this.models.findOne({ where: { id: modelId } })) ?? undefined;
+      m = (await this.models.findOne({ where: { id: modelId, isDeleted: false } })) ?? undefined;
     } catch (err: any) {
       if (err?.code !== '22P02') throw err;
     }

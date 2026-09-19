@@ -12,6 +12,7 @@ import { ChatService } from '../src/modules/chat/chat.service';
 import { OpenAiCompatForwarder } from '../src/modules/ai/openai-compat.forwarder';
 import { JwtAuthGuard } from '../src/shared/jwt-auth.guard';
 import { AdminGuard } from '../src/shared/admin.guard';
+import { testAdminGuard } from './test-utils';
 import { HttpExceptionFilter } from '../src/shared/http-exception.filter';
 
 function baseApp(controllers: any[], providers: any[], role: 'admin' | 'user' | null) {
@@ -20,7 +21,7 @@ function baseApp(controllers: any[], providers: any[], role: 'admin' | 'user' | 
     providers: [
       ...providers,
       JwtAuthGuard,
-      AdminGuard,
+      { provide: AdminGuard, useValue: testAdminGuard },
       {
         provide: JwtService,
         useValue: {
@@ -84,7 +85,7 @@ describe('/admin/providers — guards & wiring', () => {
     await app.close();
   });
 
-  it('create missing name -> 400; toggle status & set default route correctly', async () => {
+  it('create missing name -> 400 and default assignment still works without a provider status route', async () => {
     const app = await baseApp(
       [ProvidersAdminController],
       [{ provide: ProvidersAdminService, useValue: svc() }],
@@ -98,8 +99,7 @@ describe('/admin/providers — guards & wiring', () => {
       .patch('/admin/providers/p1/status')
       .set(AUTH)
       .send({ isActive: false });
-    expect(status.status).toBe(200);
-    expect(status.body).toHaveProperty('isActive', false);
+    expect(status.status).toBe(404);
     const def = await request(app.getHttpServer())
       .patch('/admin/providers/p1/default')
       .set(AUTH)

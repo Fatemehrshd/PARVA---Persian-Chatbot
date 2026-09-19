@@ -2,6 +2,7 @@
 import { ref, watch, onMounted } from 'vue'
 import { MessageSquare, Eye, Trash2 } from '@lucide/vue'
 import AdminTable, { type TableColumn } from '../../components/admin/AdminTable.vue'
+import AdminTableSkeleton from '../../components/admin/AdminTableSkeleton.vue'
 import BaseButton from '../../components/ui/BaseButton.vue'
 import ChatViewerModal from '../../components/admin/modals/ChatViewerModal.vue'
 import { adminService } from '../../services/admin.service'
@@ -143,7 +144,10 @@ onMounted(loadConversations)
       {{ errorMessage }}
     </div>
 
+    <AdminTableSkeleton v-if="isLoading && !conversations.length" :rows="pageSize || 8" :columns="chatColumns.length" />
+
     <AdminTable
+      v-else
       :columns="chatColumns"
       :items="conversations"
       serverSide

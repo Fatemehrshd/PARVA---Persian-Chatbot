@@ -28,6 +28,8 @@ describe('authStore: immediate avatar availability', () => {
   it('populates avatarUrl right after login without opening the profile modal', async () => {
     vi.spyOn(authService, 'login').mockResolvedValue(loginResponse as any)
     vi.spyOn(profileService, 'getProfile').mockResolvedValue(fullProfile as any)
+    // Admin identity re-sync hits /admin/users; not part of this scenario.
+    vi.spyOn((await import('../src/services/admin.service')).adminService, 'listUsers').mockResolvedValue([] as any)
 
     const auth = useAuthStore()
     await expect(auth.login('admin@parva.co', 'Passw0rd!123')).resolves.toBe(true)

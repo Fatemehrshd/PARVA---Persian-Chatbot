@@ -217,22 +217,31 @@ export const useChatStore = defineStore('chat', () => {
       if (Array.isArray(data)) {
         conversations.value = data
         hasMoreConversations.value = data.length >= 50
-        if (data.length > 0) {
-          let idToSelect: string = data[0].id
-          if (targetId && data.some((c) => c.id === targetId)) {
-            idToSelect = targetId
-          } else if (!targetId && currentConversationId.value && data.some((c) => c.id === currentConversationId.value)) {
-            idToSelect = currentConversationId.value
-          }
-          // اگر targetId در لیست نبود (مثلاً conversation خالی که backend فیلتر کرده)،
-          // به اولین conversation موجود برو
-          await selectConversation(idToSelect)
-        } else {
+
+        if (data.length === 0) {
           conversations.value = []
           currentConversationId.value = null
           messages.value = []
           isLoadingMessages.value = false
+          return
         }
+
+        if (targetId && data.some((c) => c.id === targetId)) {
+          await selectConversation(targetId)
+          return
+        }
+
+        if (currentConversationId.value && data.some((c) => c.id === currentConversationId.value)) {
+          await selectConversation(currentConversationId.value)
+          return
+        }
+
+        // For all users, visiting the main chat page opens a blank, fresh chat
+        // instead of auto-opening the most recent conversation. The user can
+        // explicitly select any existing chat from the sidebar when desired.
+        currentConversationId.value = null
+        messages.value = []
+        isLoadingMessages.value = false
         return
       }
     } catch (err) {

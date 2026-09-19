@@ -3,10 +3,12 @@ import { ref, computed, onMounted } from 'vue'
 import { Sparkles, Save, Coins, Globe, Users, Edit } from '@lucide/vue'
 import BaseButton from '../../components/ui/BaseButton.vue'
 import AdminTable from '../../components/admin/AdminTable.vue'
+import ModelAccessBadge from '../../components/admin/ModelAccessBadge.vue'
 import RoleTokenLimitModal from '../../components/admin/modals/RoleTokenLimitModal.vue'
 import { adminService } from '../../services/admin.service'
 import { useUiStore } from '../../stores/ui'
 import { normalizeNumericInput, numericInputValue } from '../../utils/numberInput'
+import type { ModelAccessLevel, ModelAccessMap } from '../../types'
 
 const uiStore = useUiStore()
 const isLoading = ref(false)
@@ -26,15 +28,19 @@ const roles = ref<string[]>([])
 const roleTokenLimits = ref<Record<string, number>>({})
 const roleQuotas = ref<Record<string, { tokenLimit: number | null; messageLimit: number | null; resetHours: number | null }>>({})
 const taskMultipliers = ref<Record<string, number>>({})
+/** نقش → سطوح دسترسی مدل مجاز؛ admin همیشه همه سطوح را دارد. */
+const modelAccess = ref<ModelAccessMap>({})
+
 const isRoleModalOpen = ref(false)
 const isSavingRole = ref(false)
-const editingRole = ref<{ role: string; label: string; limit: number | null; messageLimit: number | null; resetHours: number | null } | null>(null)
+const editingRole = ref<{ role: string; label: string; limit: number | null; messageLimit: number | null; resetHours: number | null; commercialAccess: boolean } | null>(null)
 
 const roleColumns = [
   { key: 'role', label: 'نقش' },
   { key: 'limit', label: 'سقف توکن', align: 'center' as const },
   { key: 'messageLimit', label: 'حداکثر پیام در دوره', align: 'center' as const },
   { key: 'resetHours', label: 'دوره ریست', align: 'center' as const },
+  { key: 'modelAccess', label: 'دسترسی مدل تجاری', align: 'center' as const },
   { key: 'actions', label: 'عملیات', align: 'center' as const },
 ]
 
@@ -111,22 +117,49 @@ function updateTaskMultiplier(type: string, event: Event) {
 }
 
 function openRoleModal(row: RoleRow) {
-  editingRole.value = { ...row }
+  editingRole.value = {
+    ...row,
+    commercialAccess: (modelAccess.value[row.role] || []).includes('commercial'),
+  }
   isRoleModalOpen.value = true
 }
 
-async function handleSaveRoleLimit(data: { role: string; quota: { tokenLimit: number | null; messageLimit: number | null; resetHours: number | null } }) {
+/** نمایش سطح دسترسی نقش در جدول: admin همه، بقیه بر اساس تنظیمات. */
+function formatModelAccess(role: string): string {
+  if (role === 'admin') return 'کامل'
+  return (modelAccess.value[role] || []).includes('commercial') ? 'عمومی + تجاری' : 'عمومی'
+}
+
+async function handleSaveRoleLimit(data: {
+  role: string
+  quota: { tokenLimit: number | null; messageLimit: number | null; resetHours: number | null }
+  commercialAccess?: boolean
+}) {
   if (!editingRole.value) return
   isSavingRole.value = true
+  const role = data.role
+  const nextAccess: ModelAccessLevel[] = data.commercialAccess
+    ? ['public', 'commercial']
+    : ['public']
+  // Optimistic: update the table before the request resolves, revert on failure.
+  const previousAccess = modelAccess.value[role]
+  const previousQuota = roleQuotas.value[role]
+  modelAccess.value = { ...modelAccess.value, [role]: nextAccess }
+  roleQuotas.value = { ...roleQuotas.value, [role]: { ...data.quota } }
   try {
     await adminService.updateSettings({
-      roleQuotas: { [data.role]: data.quota },
+      roleQuotas: { [role]: data.quota },
+      modelAccess: { [role]: nextAccess },
     })
-    uiStore.showToast(`سقف توکن نقش «${editingRole.value.label}» با موفقیت به‌روزرسانی شد.`, 'success')
+    uiStore.showToast(`تنظیمات نقش «${editingRole.value.label}» با موفقیت بهروزرسانی شد.`, 'success')
     isRoleModalOpen.value = false
     await loadSettings()
   } catch (err: any) {
-    uiStore.showToast(err?.message || 'خطا در ذخیره سقف نقش', 'error')
+    if (previousAccess === undefined) delete modelAccess.value[role]
+    else modelAccess.value = { ...modelAccess.value, [role]: previousAccess }
+    if (previousQuota === undefined) delete roleQuotas.value[role]
+    else roleQuotas.value = { ...roleQuotas.value, [role]: previousQuota }
+    uiStore.showToast(err?.message || 'خطا در ذخیره تنظیمات نقش', 'error')
   } finally {
     isSavingRole.value = false
   }
@@ -159,6 +192,7 @@ async function loadSettings() {
       roleTokenLimits.value = ((data as any).roleTokenLimits as Record<string, number>) || {}
       roleQuotas.value = ((data as any).roleQuotas as typeof roleQuotas.value) || {}
       taskMultipliers.value = ((data as any).taskMultipliers as Record<string, number>) || {}
+      modelAccess.value = ((data as any).modelAccess as ModelAccessMap) || {}
     }
   } catch (err: any) {
     errorMessage.value = err?.message || 'خطا در بارگذاری تنظیمات سیستم'
@@ -306,6 +340,13 @@ onMounted(loadSettings)
               {{ formatResetHours(item.resetHours) }}
             </td>
 
+            <!-- دسترسی مدل تجاری -->
+            <td data-label="دسترسی مدل تجاری" class="text-center">
+              <ModelAccessBadge :level="item.role === 'admin' ? 'private' : (modelAccess[item.role] || []).includes('commercial') ? 'commercial' : 'public'">
+                {{ formatModelAccess(item.role) }}
+              </ModelAccessBadge>
+            </td>
+
             <!-- عملیات -->
             <td data-label="عملیات" class="text-center">
               <BaseButton variant="ghost" size="sm" @click="openRoleModal(item)" title="ویرایش سقف توکن">
@@ -409,6 +450,8 @@ onMounted(loadSettings)
       :currentLimit="editingRole?.limit ?? null"
       :currentMessageLimit="editingRole?.messageLimit ?? null"
       :currentResetHours="editingRole?.resetHours ?? 6"
+      :commercialAccess="editingRole?.commercialAccess ?? false"
+      :isCommercialAccessLocked="editingRole?.role === 'admin'"
       :tokenRatePer1000="Number(form.tokenRatePer1000) || 10"
       :isSaving="isSavingRole"
       @close="isRoleModalOpen = false"

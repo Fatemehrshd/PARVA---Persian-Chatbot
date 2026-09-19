@@ -18,10 +18,10 @@ export class FileAttachment {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
-  userId: string;
+  @Column({ nullable: true })
+  userId?: string;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE', nullable: true })
+  @ManyToOne(() => User, { onDelete: 'SET NULL', nullable: true })
   user?: User;
 
   @Column({ nullable: true })

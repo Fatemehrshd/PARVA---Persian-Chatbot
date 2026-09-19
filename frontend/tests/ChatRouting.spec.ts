@@ -14,24 +14,22 @@ vi.mock('../src/services/models.service', () => ({
 
 vi.mock('../src/services/chat.service', () => ({
   chatService: {
-    listConversations: vi.fn().mockResolvedValue({
-      conversations: [
-        {
-          id: 'conv-1',
-          title: 'Conversation 1',
-          modelId: 'm1',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        },
-        {
-          id: 'conv-2',
-          title: 'Conversation 2',
-          modelId: 'm1',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }
-      ]
-    }),
+    listConversations: vi.fn().mockResolvedValue([
+      {
+        id: 'conv-1',
+        title: 'Conversation 1',
+        modelId: 'm1',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: 'conv-2',
+        title: 'Conversation 2',
+        modelId: 'm1',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]),
     getMessages: vi.fn().mockResolvedValue({ messages: [] }),
     createConversation: vi.fn().mockResolvedValue({
       id: 'conv-mock-new',
@@ -69,6 +67,26 @@ describe('Chat Routing and Refresh Persistence', () => {
     })
   })
 
+  it('starts on an empty chat when the user opens the chat page without a selected conversation', async () => {
+    const chatStore = useChatStore()
+
+    await router.push('/')
+    await router.isReady()
+
+    const wrapper = mount(ChatView, {
+      global: {
+        plugins: [router]
+      }
+    })
+
+    await flushPromises()
+
+    expect(chatStore.currentConversationId).toBeNull()
+    expect(chatStore.messages).toEqual([])
+    expect(router.currentRoute.value.path).toBe('/')
+    wrapper.unmount()
+  })
+
   it('happy path: loads and activates specific conversation on page refresh / direct hit at /chat/:id', async () => {
     const chatStore = useChatStore()
 
@@ -86,6 +104,26 @@ describe('Chat Routing and Refresh Persistence', () => {
 
     expect(chatStore.currentConversationId).toBe('conv-2')
     expect(router.currentRoute.value.path).toBe('/chat/conv-2')
+    wrapper.unmount()
+  })
+
+  it('shows an empty chat on the first visit instead of auto-opening the newest conversation', async () => {
+    const chatStore = useChatStore()
+
+    await router.push('/')
+    await router.isReady()
+
+    const wrapper = mount(ChatView, {
+      global: {
+        plugins: [router]
+      }
+    })
+
+    await flushPromises()
+
+    expect(chatStore.currentConversationId).toBeNull()
+    expect(chatStore.messages).toEqual([])
+    expect(router.currentRoute.value.path).toBe('/')
     wrapper.unmount()
   })
 

@@ -12,4 +12,23 @@ describe('ProfileMenu', () => {
 
     expect(wrapper.emitted('openProfile')).toHaveLength(1)
   })
+
+  it('shows the quota snapshot for the current session user', async () => {
+    setActivePinia(createPinia())
+    const { useAuthStore } = await import('../src/stores/auth')
+    const authStore = useAuthStore()
+    authStore.quotaLoaded = true
+    authStore.quota = {
+      blocked: false,
+      reason: null,
+      remainingTokens: 420,
+      remainingMessages: null,
+      remainingPercent: 42,
+      resetAt: null,
+    }
+
+    const wrapper = mount(ProfileMenu)
+
+    expect(wrapper.get('[data-testid="quota-summary"]').text()).toContain('۴۲٪')
+  })
 })

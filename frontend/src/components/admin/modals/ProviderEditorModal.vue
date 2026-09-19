@@ -2,7 +2,6 @@
 import { ref, watch } from 'vue'
 import AdminModal from '../AdminModal.vue'
 import BaseButton from '../../ui/BaseButton.vue'
-import BaseToggle from '../../ui/BaseToggle.vue'
 import type { Provider } from '../../../types'
 
 const props = defineProps<{
@@ -14,14 +13,13 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  save: [data: { name: string; baseUrl: string; apiKey?: string; isActive: boolean }]
+  save: [data: { name: string; baseUrl: string; apiKey?: string }]
 }>()
 
 const form = ref({
   name: '',
   baseUrl: '',
   apiKey: '',
-  isActive: true,
 })
 
 watch(
@@ -32,14 +30,12 @@ watch(
         name: p.name,
         baseUrl: p.baseUrl || '',
         apiKey: '',
-        isActive: p.isActive,
       }
     } else {
       form.value = {
         name: '',
         baseUrl: '',
         apiKey: '',
-        isActive: true,
       }
     }
   },
@@ -52,7 +48,6 @@ function handleSubmit() {
     name: form.value.name.trim(),
     baseUrl: form.value.baseUrl.trim(),
     apiKey: form.value.apiKey ? form.value.apiKey.trim() : undefined,
-    isActive: form.value.isActive,
   })
 }
 </script>
@@ -83,10 +78,6 @@ function handleSubmit() {
             :placeholder="provider ? 'در صورت عدم تغییر، خالی بگذارید' : 'sk-...'"
             :disabled="isSaving"
           />
-        </label>
-        <label class="toggle-label col-span-full">
-          <BaseToggle v-model="form.isActive" :disabled="isSaving" />
-          <span>ارائه‌دهنده در سامانه فعال باشد</span>
         </label>
       </div>
       <div class="modal-actions">

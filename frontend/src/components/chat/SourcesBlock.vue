@@ -8,12 +8,21 @@ const props = defineProps<{
   failed?: boolean
 }>()
 
+const emit = defineEmits<{
+  toggle: [isOpen: boolean]
+}>()
+
 const open = ref(false)
 const showAll = ref(false)
 const visibleSources = computed(() => {
   const list = props.sources ?? []
   return showAll.value ? list : list.slice(0, 3)
 })
+
+function handleToggle() {
+  open.value = !open.value
+  emit('toggle', open.value)
+}
 </script>
 
 <template>
@@ -26,7 +35,7 @@ const visibleSources = computed(() => {
       <span class="text-xs font-medium text-muted-foreground">
         منابع{{ sources && sources.length > 0 ? ` (${sources.length})` : '' }}
       </span>
-      <Button variant="ghost" size="sm" data-testid="sources-toggle" @click="open = !open">
+      <Button variant="ghost" size="sm" data-testid="sources-toggle" @click="handleToggle">
         {{ open ? 'بستن' : 'نمایش' }}
       </Button>
     </div>

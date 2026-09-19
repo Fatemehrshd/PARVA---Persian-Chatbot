@@ -56,6 +56,12 @@
   4. An animated, modern Grok-style cosmic fluid gradient was requested for login flow and chat entrance.
 - **Decision**:
   - **OpenAI-Compatible Architecture**:
+
+### Amendment: provider enable/disable removed from product rules
+- This product decision was later tightened by requirement: the provider-level active/inactive toggle is intentionally removed from the product, because it created stale UI/API behavior and unnecessary cascading rules.
+- Final rule: only model-level default protection remains. A default model cannot be disabled until another default is chosen, and exactly one platform default must exist at any time.
+- Provider status is retained only as a legacy data flag for compatibility, but it no longer controls model availability, chat routing, or admin actions.
+
     - `AiModel` entity now persists optional `baseUrl` and `apiKey`.
     - Sensitive API keys are never leaked to the client; `ModelsAdminService` masks them (`sk-...${last4}`) when serving the admin panel.
     - Outbound: `ChatService` routes LLM calls to `${baseUrl}/chat/completions` using the provided bearer token if configured.

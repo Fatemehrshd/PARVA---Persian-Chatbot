@@ -151,7 +151,6 @@ export interface Provider {
   name: string
   baseUrl?: string | null
   apiKey?: string | null
-  isActive: boolean
   defaultModelId?: string | null
   createdAt?: string
 }
@@ -160,14 +159,12 @@ export interface CreateProviderRequest {
   name: string
   baseUrl?: string
   apiKey?: string
-  isActive?: boolean
 }
 
 export interface UpdateProviderRequest {
   name?: string
   baseUrl?: string
   apiKey?: string
-  isActive?: boolean
 }
 
 export interface WebSearchUsage {
@@ -256,6 +253,8 @@ export interface AdminConversationDetail extends AdminConversationSummary {
 // Model Schemas (Admin & Chat)
 // ========================
 
+export type ModelAccessLevel = 'public' | 'commercial' | 'private'
+
 export interface Model {
   id: string
   name: string
@@ -266,6 +265,10 @@ export interface Model {
   baseUrl?: string | null
   isActive: boolean
   isDefault: boolean
+  /** سطح دسترسی: عمومی برای همه، تجاری برای نقش‌های مجاز، اختصاصی برای کاربران وایت‌لیست. */
+  accessLevel?: ModelAccessLevel
+  /** کاربران مجاز مدل اختصاصی. */
+  allowedUserIds?: string[]
   createdAt?: string
 }
 
@@ -277,11 +280,16 @@ export interface CreateModelRequest {
   apiKey?: string
   baseUrl?: string
   isActive?: boolean
+  accessLevel?: ModelAccessLevel
+  allowedUserIds?: string[]
 }
 
 export interface UpdateModelStatusRequest {
   isActive: boolean
 }
+
+/** نقش → سطوح دسترسی مدل مجاز (پنل ادمین). */
+export type ModelAccessMap = Record<string, ModelAccessLevel[]>
 
 // ========================
 // API Envelope & Error Schemas

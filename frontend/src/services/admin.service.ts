@@ -10,6 +10,8 @@ import type {
   AdminFileListResponse,
   AdminFileStats,
   AdminFileDetail,
+  ModelAccessLevel,
+  ModelAccessMap,
 } from '../types'
 
 export const adminService = {
@@ -70,6 +72,8 @@ export const adminService = {
     roleTokenLimits?: Record<string, number>
     taskMultipliers?: Record<string, number>
     roleQuotas?: Record<string, { tokenLimit: number | null; messageLimit: number | null; resetHours: number | null }>
+    /** نقش → سطوح دسترسی مدل مجاز (public/commercial/private). */
+    modelAccess?: ModelAccessMap
     roles?: string[]
   }> {
     return request('/admin/settings')
@@ -89,6 +93,8 @@ export const adminService = {
     roleTokenLimits?: Record<string, number | null>
     taskMultipliers?: Record<string, number | null>
     roleQuotas?: Record<string, { tokenLimit: number | null; messageLimit: number | null; resetHours: number | null } | null>
+    /** نقش → سطوح دسترسی مدل مجاز؛ null یعنی بازگشت به پیش‌فرض. */
+    modelAccess?: Record<string, ModelAccessLevel[] | null>
   }): Promise<any> {
     return request('/admin/settings', {
       method: 'PUT',

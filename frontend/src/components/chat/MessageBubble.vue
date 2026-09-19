@@ -15,6 +15,10 @@ const props = defineProps<{
   isLast?: boolean
 }>()
 
+const emit = defineEmits<{
+  'source-toggle': [isOpen: boolean]
+}>()
+
 const authStore = useAuthStore()
 const chatStore = useChatStore()
 const uiStore = useUiStore()
@@ -156,6 +160,7 @@ async function handleFeedback(type: 'like' | 'dislike') {
           v-if="!isUser && !message.isInterrupted && !message.stoppedByUser && (message.sources?.length || message.searchFailed)"
           :sources="message.sources ?? null"
           :failed="!!message.searchFailed"
+          @toggle="emit('source-toggle', $event)"
         />
       </div>
 

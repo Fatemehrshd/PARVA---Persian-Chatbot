@@ -16,6 +16,8 @@ const form = ref({
   systemPrompt: '',
   webSearchQuotaTotal: 2500,
   webSearchUsedCredits: 0,
+  webSearchMultiplier: 1.2,
+  thinkingMultiplier: 1.3,
 })
 
 const webSearchQuota = computed(() => Number(form.value.webSearchQuotaTotal) || 2500)
@@ -40,6 +42,8 @@ async function loadSettings() {
         systemPrompt: data.systemPrompt || '',
         webSearchQuotaTotal: (data as any).webSearchUsage?.total ?? 2500,
         webSearchUsedCredits: (data as any).webSearchUsage?.used ?? 0,
+        webSearchMultiplier: data.webSearchMultiplier ?? 1.2,
+        thinkingMultiplier: data.thinkingMultiplier ?? 1.3,
       }
     }
   } catch (err: any) {
@@ -59,6 +63,8 @@ async function handleSave() {
       systemPrompt: form.value.systemPrompt.trim(),
       webSearchQuotaTotal: Number(form.value.webSearchQuotaTotal) || 2500,
       webSearchUsedCredits: Math.max(0, Number(form.value.webSearchUsedCredits) || 0),
+      webSearchMultiplier: Number(form.value.webSearchMultiplier) || 1.2,
+      thinkingMultiplier: Number(form.value.thinkingMultiplier) || 1.3,
     })
     uiStore.showToast('تنظیمات پرامپت، وب‌سرچ و سقف سراسری با موفقیت به‌روزرسانی شد.', 'success')
   } catch (err: any) {
@@ -170,6 +176,51 @@ onMounted(loadSettings)
               />
             </label>
           </div>
+        </div>
+      </div>
+
+      <!-- Card: Feature Tariffs & Multipliers -->
+      <div class="settings-card p-5 rounded-2xl border border-border bg-card shadow-sm space-y-4">
+        <div class="flex items-center gap-2.5 pb-3 border-b border-border">
+          <div class="p-2 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+            <Coins :size="18" />
+          </div>
+          <div>
+            <h4 class="text-sm font-bold text-foreground">تعرفه و ضرایب مصرف توکن (Feature Tariffs)</h4>
+            <span class="text-xs text-muted-foreground">تعیین ضریب محاسبه توکن‌ها هنگام استفاده از جستجوی وب یا تفکر عمیق</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          <label class="space-y-1.5">
+            <span class="font-medium text-foreground block">ضریب مصرف جستجوی وب (Web Search Multiplier)</span>
+            <input
+              v-model.number="form.webSearchMultiplier"
+              type="number"
+              min="1.0"
+              max="10.0"
+              step="0.1"
+              required
+              class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary"
+              :disabled="isSaving"
+            />
+            <span class="text-[11px] text-muted-foreground block">مثال: ۱.۲ یعنی ۲۰٪ توکن بیشتر برای هر پیام با جستجوی وب محاسبه می‌شود.</span>
+          </label>
+
+          <label class="space-y-1.5">
+            <span class="font-medium text-foreground block">ضریب مصرف تفکر عمیق (Thinking Multiplier)</span>
+            <input
+              v-model.number="form.thinkingMultiplier"
+              type="number"
+              min="1.0"
+              max="10.0"
+              step="0.1"
+              required
+              class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary"
+              :disabled="isSaving"
+            />
+            <span class="text-[11px] text-muted-foreground block">مثال: ۱.۳ یعنی ۳۰٪ توکن بیشتر برای پیام‌های همراه با تفکر عمیق محاسبه می‌شود.</span>
+          </label>
         </div>
       </div>
 

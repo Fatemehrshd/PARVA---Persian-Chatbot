@@ -17,7 +17,17 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  save: [data: { name: string; provider: string; providerId?: string; apiIdentifier: string; isActive: boolean }]
+  save: [data: {
+    name: string
+    provider: string
+    providerId?: string
+    apiIdentifier: string
+    isActive: boolean
+    supportsThinking?: boolean
+    supportsVision?: boolean
+    supportsDocument?: boolean
+    thinkingBudgetTokens?: number
+  }]
 }>()
 
 const form = ref({
@@ -26,6 +36,10 @@ const form = ref({
   providerId: '',
   apiIdentifier: '',
   isActive: true,
+  supportsThinking: false,
+  supportsVision: false,
+  supportsDocument: false,
+  thinkingBudgetTokens: 4096,
 })
 
 const isTesting = ref(false)
@@ -42,6 +56,10 @@ watch(
         providerId: m.providerId || '',
         apiIdentifier: m.apiIdentifier,
         isActive: m.isActive,
+        supportsThinking: m.supportsThinking ?? false,
+        supportsVision: m.supportsVision ?? false,
+        supportsDocument: m.supportsDocument ?? false,
+        thinkingBudgetTokens: m.thinkingBudgetTokens ?? 4096,
       }
     } else {
       form.value = {
@@ -50,6 +68,10 @@ watch(
         providerId: props.providers[0]?.id || '',
         apiIdentifier: '',
         isActive: true,
+        supportsThinking: false,
+        supportsVision: false,
+        supportsDocument: false,
+        thinkingBudgetTokens: 4096,
       }
     }
   },
@@ -98,6 +120,10 @@ function handleSubmit() {
     providerId: provider?.id || undefined,
     apiIdentifier: form.value.apiIdentifier.trim(),
     isActive: form.value.isActive,
+    supportsThinking: form.value.supportsThinking,
+    supportsVision: form.value.supportsVision,
+    supportsDocument: form.value.supportsDocument,
+    thinkingBudgetTokens: form.value.supportsThinking ? Number(form.value.thinkingBudgetTokens) || undefined : undefined,
   })
 }
 </script>
@@ -131,6 +157,40 @@ function handleSubmit() {
           <BaseToggle v-model="form.isActive" :disabled="isSaving" />
           <span>مدل در پلتفرم فعال باشد</span>
         </label>
+
+        <!-- Capabilities Section -->
+        <div class="col-span-full border-t border-border pt-3 mt-1 flex flex-col gap-2.5">
+          <span class="field-label font-semibold">قابلیت‌های مدل:</span>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <label class="toggle-label border border-border/80 rounded-lg p-2 bg-secondary/20 hover:bg-secondary/40 transition-colors">
+              <BaseToggle v-model="form.supportsThinking" :disabled="isSaving" />
+              <span class="text-xs">تفکر عمیق (Thinking)</span>
+            </label>
+            <label class="toggle-label border border-border/80 rounded-lg p-2 bg-secondary/20 hover:bg-secondary/40 transition-colors">
+              <BaseToggle v-model="form.supportsVision" :disabled="isSaving" />
+              <span class="text-xs">بینایی / عکس (Vision)</span>
+            </label>
+            <label class="toggle-label border border-border/80 rounded-lg p-2 bg-secondary/20 hover:bg-secondary/40 transition-colors">
+              <BaseToggle v-model="form.supportsDocument" :disabled="isSaving" />
+              <span class="text-xs">تحلیل اسناد (Document)</span>
+            </label>
+          </div>
+
+          <!-- Thinking Budget Tokens (shown if supportsThinking) -->
+          <label v-if="form.supportsThinking" class="mt-1">
+            <span class="field-label text-xs">سقف توکن تفکر (Thinking Budget Tokens):</span>
+            <input
+              id="thinkingBudgetTokens"
+              v-model.number="form.thinkingBudgetTokens"
+              type="number"
+              min="512"
+              max="65536"
+              step="512"
+              :disabled="isSaving"
+              placeholder="مثال: 4096"
+            />
+          </label>
+        </div>
       </div>
 
       <!-- Test Model Box -->

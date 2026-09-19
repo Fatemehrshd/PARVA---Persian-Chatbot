@@ -130,6 +130,7 @@ export interface ActiveStreamStatus {
   messageId?: string
   sources?: WebSource[]
   reasoningText?: string
+  accumulatedReasoning?: string
   thinkingDurationMs?: number
   isThinkingComplete?: boolean
 }

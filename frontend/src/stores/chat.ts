@@ -360,8 +360,9 @@ export const useChatStore = defineStore('chat', () => {
           if (streamStatus && streamStatus.active) {
             const s = ensureState(id)
             s.isStreaming = true
-            if (streamStatus.accumulatedReasoning) {
-              s.currentReasoning = streamStatus.accumulatedReasoning
+            const reasoning = streamStatus.reasoningText || streamStatus.accumulatedReasoning
+            if (reasoning) {
+              s.currentReasoning = reasoning
             }
             if (streamStatus.thinkingDurationMs) {
               s.thinkingDurationMs = streamStatus.thinkingDurationMs

@@ -493,8 +493,12 @@ export class ChatService {
       // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست و ضرایب وب سرچ و تفکر
       const attachmentTokens = calculateAttachmentTokens(attachments);
       const baseTokens = Math.ceil((content.length + full.length) / 4) + attachmentTokens;
-      const searchMult = this.settings ? await this.settings.getWebSearchMultiplier() : 1.2;
-      const thinkingMult = this.settings ? await this.settings.getThinkingMultiplier() : 1.3;
+      const searchMult = typeof this.settings?.getWebSearchMultiplier === 'function'
+        ? await this.settings.getWebSearchMultiplier()
+        : 1.2;
+      const thinkingMult = typeof this.settings?.getThinkingMultiplier === 'function'
+        ? await this.settings.getThinkingMultiplier()
+        : 1.3;
       const consumedTokens = calculateEffectiveTokens(baseTokens, {
         usedSearch: wantSearch,
         usedThinking: wantThinking,
@@ -660,8 +664,12 @@ export class ChatService {
         // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست و ضرایب وب سرچ و تفکر
         const attachmentTokens = calculateAttachmentTokens(attachments);
         const baseTokens = Math.ceil((content.length + full.length) / 4) + attachmentTokens;
-        const searchMult = this.settings ? await this.settings.getWebSearchMultiplier() : 1.2;
-        const thinkingMult = this.settings ? await this.settings.getThinkingMultiplier() : 1.3;
+        const searchMult = typeof this.settings?.getWebSearchMultiplier === 'function'
+          ? await this.settings.getWebSearchMultiplier()
+          : 1.2;
+        const thinkingMult = typeof this.settings?.getThinkingMultiplier === 'function'
+          ? await this.settings.getThinkingMultiplier()
+          : 1.3;
         const consumedTokens = calculateEffectiveTokens(baseTokens, {
           usedSearch: wantSearch,
           usedThinking: wantThinking,

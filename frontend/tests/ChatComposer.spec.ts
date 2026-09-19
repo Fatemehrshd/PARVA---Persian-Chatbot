@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ChatComposer from '../src/components/chat/ChatComposer.vue'
@@ -192,10 +192,11 @@ describe('ChatComposer.vue', () => {
     expect(chatStore.getConvFlag('c-test').thinking).toBe(false)
   })
 
-  it('disables thinking toggle and warns when active model does not support thinking', async () => {
+  it('allows toggling thinking and warns when model has supportsThinking false', async () => {
     const wrapper = mount(ChatComposer)
     const modelsStore = useModelsStore()
     const uiStore = useUiStore()
+    const toastSpy = vi.spyOn(uiStore, 'showToast')
     modelsStore.selectedModelId = 'm-no-think'
     modelsStore.models = [
       {
@@ -215,11 +216,10 @@ describe('ChatComposer.vue', () => {
     await wrapper.vm.$nextTick()
 
     const thinkingBtn = wrapper.find('[data-testid="modelbar-thinking-toggle"]')
-    expect(thinkingBtn.attributes('disabled')).toBeDefined()
+    expect(thinkingBtn.attributes('disabled')).toBeUndefined()
 
-    await wrapper.find('.attachment-btn').trigger('click')
-    const menuThinkingBtn = wrapper.find('[data-testid="toggle-thinking"]')
-    expect(menuThinkingBtn.attributes('disabled')).toBeDefined()
+    await thinkingBtn.trigger('click')
+    expect(toastSpy).toHaveBeenCalledWith('توجه: ممکن است این مدل به طور کامل از تفکر عمیق پشتیبانی نکند', 'info')
   })
 
   it('renders CapabilityBadge in model picker dropdown', async () => {

@@ -1,5 +1,23 @@
 # Features
 
+## Task 37: Deep Thinking / Reasoning, Model Capabilities Matrix & Feature Tariffs (v1.4.0)
+- **پشتیبانی کامل از تفکر عمیق و استدلال (`Deep Thinking / Reasoning`)**:
+  - استریم تفکیک‌شده محتوای استدلال مدل از طریق لایه `StreamAdapter` و `OpenAICompatAdapter`.
+  - کامپوننت باز و بسته شونده `ThinkingBlock.vue` با کورنومتر زنده فارسی (`در حال فکر کردن (۳ ثانیه)...`)، انیمیشن نبض بنفش و زمان سپری‌شده.
+  - ماندگاری کامل متن استدلال در دیتابیس (`reasoning_content` و `thinking_duration_ms`).
+- **ماتریس قابلیت‌های مدل (`Model Capabilities Matrix`)**:
+  - ثبت قابلیت‌های چهارگانه هر مدل (`supportsThinking`, `supportsVision`, `supportsDocument`, `thinkingBudgetTokens`) در دیتابیس و پنل ادمین.
+  - گارد و اعتبارسنجی ارسال فایل‌های دیداری (عکس) و اسناد متناسب با قابلیت مدل انتخابی با پیام‌های خطای راهنما به زبان فارسی.
+  - تنظیم مقدار پیش‌فرض فعال بودن تفکر عمیق برای تمامی مدل‌ها در دیتابیس (`1761300000004-EnableThinkingDefault.ts`).
+  - رفع محدودیت و قفل انتخاب تفکر عمیق در چت و بهبود رویداد کلیک تاگل‌ها در مدال مدیریت مدل.
+- **تعرفه‌گذاری و محاسبه ضرایب مصرف توکن (`Feature Tariffs`)**:
+  - تعیین ضریب مصرف توکن برای جستجوی زنده وب (پیش‌فرض ۱.۲×) و تفکر عمیق (پیش‌فرض ۱.۳×).
+  - محاسبه مصرف مرکب توکن در `ChatService` بر اساس استفاده همزمان از قابلیت‌ها.
+  - کارت تنظیمات اختصاصی ضرایب در بخش پرامپت‌های پنل مدیریت جهت تغییر بلادرنگ توسط ادمین.
+  - نمایش شفاف نشانگرهای ضریب در نوار ابزار و منوی ارسال پیام چت.
+- **مستندات اختصاصی و تفصیلی**:
+  - فایل گزارش جامع فاز ۴ در [`docs/PHASE_4_THINKING_AND_TARIFFS_REPORT.md`](file:///d:/codeless_final/docs/PHASE_4_THINKING_AND_TARIFFS_REPORT.md) و [`docs/گزارش_فاز_۴_تفکر_عمیق_و_تعرفه‌ها.md`](file:///d:/codeless_final/docs/%DA%AF%D8%B2%D8%A7%D8%B1%D8%B4_%D9%81%D8%A7%D8%B2_%DB%B4_%D8%AA%D9%81%DA%A9%D8%B1_%D8%B9%D9%85%DB%8C%D9%82_%D9%88_%D8%AA%D8%B9%D8%B1%D9%81%D9%87%E2%80%8C%D9%87%D8%A7.md).
+
 ## Task 36: Show-Once Error Messages, Draft & Upload Persistence, Admin Model Connectivity Ping & Message Likes/UX Dashboard (v1.3.2)
 - **نمایش تک‌باره پیام‌های خطا در چت (`Show-Once Dismissible Errors`)**:
   - پیام‌های خطای استریمینگ چت پس از بسته شدن توسط کاربر (کلیک روی ✕) در `sessionStorage` ثبت شده و مجدداً با رفرش صفحه یا اتصال‌های بعدی نمایش داده نمی‌شوند.

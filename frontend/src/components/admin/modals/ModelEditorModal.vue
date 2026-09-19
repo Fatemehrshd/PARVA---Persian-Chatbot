@@ -36,7 +36,7 @@ const form = ref({
   providerId: '',
   apiIdentifier: '',
   isActive: true,
-  supportsThinking: false,
+  supportsThinking: true,
   supportsVision: false,
   supportsDocument: false,
   thinkingBudgetTokens: 4096,
@@ -56,7 +56,7 @@ watch(
         providerId: m.providerId || '',
         apiIdentifier: m.apiIdentifier,
         isActive: m.isActive,
-        supportsThinking: m.supportsThinking ?? false,
+        supportsThinking: m.supportsThinking ?? true,
         supportsVision: m.supportsVision ?? false,
         supportsDocument: m.supportsDocument ?? false,
         thinkingBudgetTokens: m.thinkingBudgetTokens ?? 4096,
@@ -68,7 +68,7 @@ watch(
         providerId: props.providers[0]?.id || '',
         apiIdentifier: '',
         isActive: true,
-        supportsThinking: false,
+        supportsThinking: true,
         supportsVision: false,
         supportsDocument: false,
         thinkingBudgetTokens: 4096,
@@ -153,27 +153,36 @@ function handleSubmit() {
           <span class="field-label">{{ labels?.apiId || 'شناسه فنی مدل (API Identifier)' }} <span class="req">*</span></span>
           <input id="apiIdentifier" v-model="form.apiIdentifier" class="mono" required :disabled="isSaving" placeholder="مثال: gpt-4o یا claude-3-5-sonnet-20241022" />
         </label>
-        <label class="toggle-label col-span-full">
-          <BaseToggle v-model="form.isActive" :disabled="isSaving" />
+        <div class="toggle-label col-span-full flex items-center gap-2 cursor-pointer select-none" @click="form.isActive = !form.isActive">
+          <BaseToggle :model-value="form.isActive" :disabled="isSaving" @click.stop @update:model-value="form.isActive = $event" />
           <span>مدل در پلتفرم فعال باشد</span>
-        </label>
+        </div>
 
         <!-- Capabilities Section -->
         <div class="col-span-full border-t border-border pt-3 mt-1 flex flex-col gap-2.5">
           <span class="field-label font-semibold">قابلیت‌های مدل:</span>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <label class="toggle-label border border-border/80 rounded-lg p-2 bg-secondary/20 hover:bg-secondary/40 transition-colors">
-              <BaseToggle v-model="form.supportsThinking" :disabled="isSaving" />
+            <div
+              class="toggle-label border border-border/80 rounded-lg p-2 bg-secondary/20 hover:bg-secondary/40 transition-colors cursor-pointer select-none flex items-center gap-2"
+              @click="form.supportsThinking = !form.supportsThinking"
+            >
+              <BaseToggle :model-value="form.supportsThinking" :disabled="isSaving" @click.stop @update:model-value="form.supportsThinking = $event" />
               <span class="text-xs">تفکر عمیق (Thinking)</span>
-            </label>
-            <label class="toggle-label border border-border/80 rounded-lg p-2 bg-secondary/20 hover:bg-secondary/40 transition-colors">
-              <BaseToggle v-model="form.supportsVision" :disabled="isSaving" />
+            </div>
+            <div
+              class="toggle-label border border-border/80 rounded-lg p-2 bg-secondary/20 hover:bg-secondary/40 transition-colors cursor-pointer select-none flex items-center gap-2"
+              @click="form.supportsVision = !form.supportsVision"
+            >
+              <BaseToggle :model-value="form.supportsVision" :disabled="isSaving" @click.stop @update:model-value="form.supportsVision = $event" />
               <span class="text-xs">بینایی / عکس (Vision)</span>
-            </label>
-            <label class="toggle-label border border-border/80 rounded-lg p-2 bg-secondary/20 hover:bg-secondary/40 transition-colors">
-              <BaseToggle v-model="form.supportsDocument" :disabled="isSaving" />
+            </div>
+            <div
+              class="toggle-label border border-border/80 rounded-lg p-2 bg-secondary/20 hover:bg-secondary/40 transition-colors cursor-pointer select-none flex items-center gap-2"
+              @click="form.supportsDocument = !form.supportsDocument"
+            >
+              <BaseToggle :model-value="form.supportsDocument" :disabled="isSaving" @click.stop @update:model-value="form.supportsDocument = $event" />
               <span class="text-xs">تحلیل اسناد (Document)</span>
-            </label>
+            </div>
           </div>
 
           <!-- Thinking Budget Tokens (shown if supportsThinking) -->

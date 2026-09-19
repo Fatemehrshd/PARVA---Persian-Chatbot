@@ -14,7 +14,7 @@ const modelsStore = useModelsStore()
 const uiStore = useUiStore()
 
 const activeModel = computed(() => modelsStore.selectedModel)
-const activeModelSupportsThinking = computed(() => Boolean(activeModel.value?.supportsThinking))
+const activeModelSupportsThinking = computed(() => activeModel.value?.supportsThinking !== false)
 const activeModelSupportsVision = computed(() => Boolean(activeModel.value?.supportsVision))
 const activeModelSupportsDocument = computed(() => Boolean(activeModel.value?.supportsDocument))
 const activeModelSupportsAttachments = computed(() => activeModelSupportsVision.value || activeModelSupportsDocument.value)
@@ -103,12 +103,11 @@ function toggleWebSearch() {
 }
 
 function toggleThinking() {
-  if (!activeModelSupportsThinking.value) {
-    uiStore.showToast('این مدل از قابلیت تفکر عمیق پشتیبانی نمی‌کند', 'warning')
-    return
-  }
   const cur = chatStore.getConvFlag(activeConvId.value).thinking ?? false
   chatStore.setConvFlag(activeConvId.value, { thinking: !cur })
+  if (!cur && !activeModelSupportsThinking.value) {
+    uiStore.showToast('توجه: ممکن است این مدل به طور کامل از تفکر عمیق پشتیبانی نکند', 'info')
+  }
   attachmentMenuOpen.value = false
 }
 
@@ -335,7 +334,7 @@ async function handleSubmit() {
   }
   chatStore.sendMessage(text, files, {
     useWebSearch: chatStore.getConvFlag(activeConvId.value).web,
-    useThinking: activeModelSupportsThinking.value && (chatStore.getConvFlag(activeConvId.value).thinking ?? false),
+    useThinking: Boolean(chatStore.getConvFlag(activeConvId.value).thinking),
   })
 }
 
@@ -594,12 +593,10 @@ onUnmounted(() => {
                   type="button"
                   class="attachment-menu-item"
                   data-testid="toggle-thinking"
-                  :disabled="!activeModelSupportsThinking"
                   :class="[
-                    chatStore.getConvFlag(activeConvId).thinking && activeModelSupportsThinking ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400' : '',
-                    !activeModelSupportsThinking ? 'opacity-40 cursor-not-allowed' : ''
+                    chatStore.getConvFlag(activeConvId).thinking ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400' : ''
                   ]"
-                  :title="!activeModelSupportsThinking ? 'این مدل از قابلیت تفکر عمیق پشتیبانی نمی‌کند' : ''"
+                  :title="chatStore.getConvFlag(activeConvId).thinking ? 'تفکر عمیق فعال است (ضریب ۱.۳×) — کلیک برای غیرفعال‌سازی' : 'فعال‌سازی تفکر عمیق (ضریب ۱.۳×)'"
                   @click="toggleThinking"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -611,8 +608,7 @@ onUnmounted(() => {
                     <span class="text-[10px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/40 px-1.5 py-0.5 rounded-full">ضریب ۱.۳×</span>
                     <BaseToggle
                       size="sm"
-                      :disabled="!activeModelSupportsThinking"
-                      :modelValue="Boolean(chatStore.getConvFlag(activeConvId).thinking && activeModelSupportsThinking)"
+                      :modelValue="Boolean(chatStore.getConvFlag(activeConvId).thinking)"
                       @click.stop
                       @update:modelValue="toggleThinking"
                     />
@@ -653,19 +649,15 @@ onUnmounted(() => {
                 type="button"
                 data-testid="modelbar-thinking-toggle"
                 class="flex h-7 items-center gap-1 rounded-full px-2 text-xs transition-colors"
-                :disabled="!activeModelSupportsThinking"
                 :class="[
-                  chatStore.getConvFlag(activeConvId).thinking && activeModelSupportsThinking
+                  chatStore.getConvFlag(activeConvId).thinking
                     ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 font-medium'
-                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
-                  !activeModelSupportsThinking ? 'opacity-40 cursor-not-allowed' : ''
+                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
                 ]"
                 :title="
-                  !activeModelSupportsThinking
-                    ? 'این مدل از قابلیت تفکر عمیق پشتیبانی نمی‌کند'
-                    : chatStore.getConvFlag(activeConvId).thinking
-                      ? 'تفکر عمیق فعال است (ضریب ۱.۳×) — کلیک برای غیرفعال‌سازی'
-                      : 'فعال‌سازی تفکر عمیق (ضریب ۱.۳×)'
+                  chatStore.getConvFlag(activeConvId).thinking
+                    ? 'تفکر عمیق فعال است (ضریب ۱.۳×) — کلیک برای غیرفعال‌سازی'
+                    : 'فعال‌سازی تفکر عمیق (ضریب ۱.۳×)'
                 "
                 @click="toggleThinking"
               >
@@ -674,7 +666,7 @@ onUnmounted(() => {
                   <line x1="9" y1="21" x2="15" y2="21"/>
                 </svg>
                 <span class="hidden sm:inline">تفکر</span>
-                <span v-if="chatStore.getConvFlag(activeConvId).thinking && activeModelSupportsThinking" class="text-[10px] opacity-75">۱.۳×</span>
+                <span v-if="chatStore.getConvFlag(activeConvId).thinking" class="text-[10px] opacity-75">۱.۳×</span>
               </button>
 
               <!-- Dropdown Popover opening upward -->

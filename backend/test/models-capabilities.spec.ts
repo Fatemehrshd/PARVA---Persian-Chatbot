@@ -7,8 +7,8 @@ describe('AiModel Capabilities', () => {
     model.provider = 'OpenAI';
     model.apiIdentifier = 'gpt-4o';
     // When instantiated, defaults should be:
-    // supportsThinking: false, supportsVision: true, supportsDocument: true, thinkingBudgetTokens: null/undefined
-    expect(model.supportsThinking).toBe(false);
+    // supportsThinking: true, supportsVision: true, supportsDocument: true, thinkingBudgetTokens: null/undefined
+    expect(model.supportsThinking).toBe(true);
     expect(model.supportsVision).toBe(true);
     expect(model.supportsDocument).toBe(true);
     expect(model.thinkingBudgetTokens).toBeUndefined();

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.0] - 2026-09-19
+
+### Added
+- **StreamAdapter Architecture & OpenAI Reasoning Adapter**: Implemented generic stream adapter interface (`StreamAdapter`) and `OpenAICompatAdapter` extracting reasoning deltas (`delta.reasoning` / `delta.reasoning_content`) independently from text content.
+- **ThinkingBlock Component with Live Stopwatch**: Added `ThinkingBlock.vue` featuring live streaming Persian timer (`در حال فکر کردن (۳ ثانیه)...`), purple pulse animation, and collapsible reasoning viewer powered by `reka-ui`.
+- **Model Capabilities Matrix**: Added schema, DTOs, and migrations for `supportsThinking`, `supportsVision`, `supportsDocument`, and `thinkingBudgetTokens` in database entity `AiModel` and admin management forms.
+- **Dynamic Feature Tariffs**: Added compound token multipliers for live web search (default `1.2×`) and deep thinking (default `1.3×`), with configurable settings in Admin Panel and live tariff badges in ChatComposer.
+- **Message Reasoning Persistence**: Persisted `reasoning_content` and `thinking_duration_ms` in `Message` entity with database migration `1761300000003-AddMessageReasoning.ts`.
+- **Attachment Capability Guards**: Backend and frontend defensive guards preventing users from sending image or document attachments to models that lack vision or document capabilities.
+- **Seamless Thinking Selectability Fix**: Removed hard `:disabled` locks on thinking toggles, defaulted `supportsThinking = true` across entities and migrations (`1761300000004-EnableThinkingDefault.ts`), and fixed toggle event propagation in `ModelEditorModal.vue`.
+- **Dedicated Documentation Artifacts**: Created comprehensive documentation reports `docs/PHASE_4_THINKING_AND_TARIFFS_REPORT.md` and `docs/گزارش_فاز_۴_تفکر_عمیق_و_تعرفه‌ها.md`.
+
 ## [1.3.2] - 2026-09-18
 
 ### Added

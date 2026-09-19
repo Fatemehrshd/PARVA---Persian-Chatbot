@@ -17,12 +17,14 @@ export interface ResolvedTarget {
   apiIdentifier: string;
   apiKey: string;
   baseUrl: string;
+  thinkingBudgetTokens?: number | null;
 }
 
 export interface StreamOptions {
   signal?: AbortSignal;
   connectTimeoutMs?: number;
   stallTimeoutMs?: number;
+  useThinking?: boolean;
 }
 
 /**
@@ -47,7 +49,12 @@ export class OpenAiCompatForwarder {
       process.env.OPENAI_BASE_URL ||
       'https://api.openai.com/v1'
     ).replace(/\/+$/, '');
-    return { apiIdentifier: model?.apiIdentifier || 'gpt-4o', apiKey, baseUrl };
+    return {
+      apiIdentifier: model?.apiIdentifier || 'gpt-4o',
+      apiKey,
+      baseUrl,
+      thinkingBudgetTokens: model?.thinkingBudgetTokens ?? null,
+    };
   }
 
   /**
@@ -59,9 +66,8 @@ export class OpenAiCompatForwarder {
     messages: ChatMessage[],
     options?: StreamOptions,
   ): AsyncGenerator<any> {
-    const url = target.baseUrl.endsWith('/chat/completions')
-      ? target.baseUrl
-      : `${target.baseUrl}/chat/completions`;
+    const req = this.adapter.buildRequest({ target, messages, options });
+    const url = req.url;
 
     const connectTimeoutMs = options?.connectTimeoutMs ?? 35000;
     const stallTimeoutMs = options?.stallTimeoutMs ?? 25000;
@@ -83,16 +89,7 @@ export class OpenAiCompatForwarder {
     let res: Response;
     try {
       res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${target.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: target.apiIdentifier,
-          messages,
-          stream: true,
-        }),
+        ...req.init,
         signal: connectAbortCtrl.signal,
       });
     } catch (err: any) {

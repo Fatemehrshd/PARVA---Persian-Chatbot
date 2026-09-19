@@ -4,22 +4,32 @@ export class OpenAiCompatAdapter implements StreamAdapter {
   readonly name = 'openai-compat';
 
   buildRequest(ctx: StreamRequestContext): { url: string; init: RequestInit } {
-    const url = `${ctx.target.baseUrl}/chat/completions`;
+    const url = ctx.target.baseUrl.endsWith('/chat/completions')
+      ? ctx.target.baseUrl
+      : `${ctx.target.baseUrl}/chat/completions`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${ctx.target.apiKey}`,
     };
-    const body = JSON.stringify({
+    const bodyObj: any = {
       model: ctx.target.apiIdentifier,
       messages: ctx.messages,
       stream: true,
-    });
+    };
+    if (ctx.options?.useThinking) {
+      if (ctx.target.thinkingBudgetTokens) {
+        bodyObj.max_completion_tokens = ctx.target.thinkingBudgetTokens;
+      }
+      if (ctx.target.apiIdentifier.startsWith('o1') || ctx.target.apiIdentifier.startsWith('o3')) {
+        bodyObj.reasoning_effort = 'medium';
+      }
+    }
     return {
       url,
       init: {
         method: 'POST',
         headers,
-        body,
+        body: JSON.stringify(bodyObj),
         signal: ctx.options?.signal,
       },
     };

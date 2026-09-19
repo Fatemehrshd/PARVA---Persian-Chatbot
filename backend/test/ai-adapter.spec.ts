@@ -13,6 +13,34 @@ describe('OpenAiCompatAdapter', () => {
     expect(body.stream).toBe(true);
   });
 
+  it('passes max_completion_tokens and reasoning_effort when thinking is enabled', () => {
+    const targetWithBudget = {
+      apiIdentifier: 'o3-mini',
+      apiKey: 'test-key',
+      baseUrl: 'https://api.openai.com/v1',
+      thinkingBudgetTokens: 4096,
+    };
+    const { url, init } = adapter.buildRequest({
+      target: targetWithBudget,
+      messages: [{ role: 'user', content: 'think hard' }],
+      options: { useThinking: true },
+    });
+    expect(url).toBe('https://api.openai.com/v1/chat/completions');
+    const body = JSON.parse(init.body as string);
+    expect(body.max_completion_tokens).toBe(4096);
+    expect(body.reasoning_effort).toBe('medium');
+  });
+
+  it('normalizes baseUrl that already includes /chat/completions', () => {
+    const targetCustom = {
+      apiIdentifier: 'deepseek-reasoner',
+      apiKey: 'test-key',
+      baseUrl: 'https://custom-proxy.com/v1/chat/completions',
+    };
+    const { url } = adapter.buildRequest({ target: targetCustom, messages: [] });
+    expect(url).toBe('https://custom-proxy.com/v1/chat/completions');
+  });
+
   it('extracts content and reasoning deltas separately', () => {
     expect(adapter.parseStreamChunk({ choices: [{ delta: { content: 'hello' } }] })).toEqual([
       { type: 'content', text: 'hello' },

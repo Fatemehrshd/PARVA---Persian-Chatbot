@@ -472,6 +472,26 @@ export class ChatService {
       this.logger.warn(
         'No API key configured for the resolved model/provider (and no global OPENAI_API_KEY) — using offline echo fallback.',
       );
+      let reasoningContent: string | null = null;
+      let thinkingDurationMs: number | null = null;
+
+      if (wantThinking) {
+        const thinkingStartTime = Date.now();
+        yield { thinkingStatus: 'thinking' };
+        const mockReasoning = 'در حال تحلیل دقیق و پردازش ابعاد مختلف درخواست...';
+        for (const w of mockReasoning.split(/(\s+)/)) {
+          if (w) {
+            if (!/^\s+$/.test(w)) await paceToken();
+            this.activeStream?.appendReasoning(id, w);
+            yield { thinking: w };
+          }
+        }
+        thinkingDurationMs = Math.max(100, Date.now() - thinkingStartTime);
+        this.activeStream?.completeThinking(id, thinkingDurationMs);
+        yield { thinkingStatus: 'done', thinkingDurationMs };
+        reasoningContent = mockReasoning;
+      }
+
       const full = `Echo: ${effectiveContent}`;
       for (const w of full.split(/(\s+)/)) {
         if (w) {
@@ -488,6 +508,8 @@ export class ChatService {
           isInterrupted: false,
           stoppedByUser: false,
           sources: webSources,
+          reasoning_content: reasoningContent,
+          thinkingDurationMs: thinkingDurationMs,
         }),
       );
       // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست و ضرایب وب سرچ و تفکر
@@ -571,6 +593,7 @@ export class ChatService {
 
         for await (const chunk of this.forwarder.stream(target, messages, {
           signal: session?.abortController.signal,
+          useThinking: wantThinking,
         })) {
           if (session?.abortController.signal.aborted) break;
 

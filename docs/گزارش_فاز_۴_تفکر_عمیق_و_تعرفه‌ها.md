@@ -56,6 +56,15 @@
 - **محاسبه توکن:** تابع `calculateEffectiveTokens` در `chat.service.ts` با ترکیب ضرایب دریافتی از `SettingsService` میزان مصرف توکن کاربر را محاسبه کرده و به حساب کاربری وی اعمال می‌کند.
 - **گارد پیوست‌ها:** تابع `assertModelSupportsAttachments` پیش از آغاز استریم بررسی می‌کند که آیا فایل‌های ارسال‌شده با قابلیت‌های مدل سازگار است یا خیر. در صورت عدم تطابق، خطای مناسب فارسی بازگردانده می‌شود.
 
+### ۲.۴. ریشه‌یابی و حل مشکل فعال‌سازی تفکر عمیق (Root Cause Analysis & Fix)
+در بررسی دقیق رفتار سیستم مشخص شد که چرا در برخی شرایط یا تست‌ها تفکر فعال به نظر نمی‌رسید:
+1. **مسیر آفلاین / توسعه (Offline Echo Fallback):**
+   در حالتی که کاربر در محیط لوکال یا تست کلید API تنظیم نکرده بود، `ChatService` وارد مسیر `!target` می‌شد. در این مسیر با وجود فعال بودن فلگ `wantThinking`، هیچ ایونت یا چانکی برای `thinkingStatus` یا `thinking` ارسال نمی‌شد و فیلدهای `reasoning_content` و `thinkingDurationMs` نیز بر روی پیام ذخیره نمی‌شدند.
+   - **اصلاح انجام‌شده:** مسیر آفلاین اکنون در صورت درخواست تفکر (`wantThinking: true`) ابتدا وضعیت `thinkingStatus: 'thinking'` را ارسال کرده، چانک‌های استدلال شبیه‌سازی‌شده را استریم می‌کند، سپس `thinkingStatus: 'done'` را با مدت‌زمان محاسبه‌شده ارسال نموده و در نهایت استدلال و مدت تفکر را در پایگاه داده ذخیره می‌کند.
+2. **ارسال پارامترهای تفکر در لایه Forwarder و آداپتور:**
+   - رابط `StreamOptions` و `ResolvedTarget` به فیلدهای `useThinking` و `thinkingBudgetTokens` مجهز شدند.
+   - تابع `OpenAiCompatAdapter.buildRequest` اکنون در صورت فعال بودن تفکر، مقدار `max_completion_tokens` را بر اساس بودجه مدل تنظیم کرده و برای مدل‌های سری `o1` و `o3` پارامتر `reasoning_effort: 'medium'` را در بدنه درخواست قرار می‌دهد.
+
 ---
 
 ## ۳. معماری فنی سمت کلاینت (Frontend Architecture)
@@ -108,8 +117,8 @@
 
 | بخش | تعداد آزمون‌ها | وضعیت | درصد موفقیت |
 | :--- | :---: | :---: | :---: |
-| **Backend Unit & Integration Tests (Jest)** | ۱۸۵ تست در ۳۲ فایل | پاس‌شده | ۱۰۰٪ |
-| **Frontend Unit & Component Tests (Vitest)** | ۱۹۲ تست در ۴۱ فایل | پاس‌شده | ۱۰۰٪ |
+| **Backend Unit & Integration Tests (Jest)** | ۱۹۰ تست در ۳۲ فایل | پاس‌شده | ۱۰۰٪ |
+| **Frontend Unit & Component Tests (Vitest)** | ۲۰۱ تست در ۴۲ فایل | پاس‌شده | ۱۰۰٪ |
 | **Frontend Production Build (`vue-tsc` + `vite build`)** | بدون خطا | موفق | ۱۰۰٪ |
 | **Backend Production Build (`nest build`)** | بدون خطا | موفق | ۱۰۰٪ |
 

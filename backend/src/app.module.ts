@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
@@ -29,6 +29,8 @@ import { AuditModule } from './modules/audit/audit.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { ResponseEnvelopeInterceptor } from './shared/response-envelope.interceptor';
+import { HttpLoggingInterceptor } from './shared/http-logging.interceptor';
+import { TraceContextMiddleware } from './shared/trace-context.service';
 
 @Module({
   imports: [
@@ -77,6 +79,14 @@ import { ResponseEnvelopeInterceptor } from './shared/response-envelope.intercep
       provide: APP_INTERCEPTOR,
       useClass: ResponseEnvelopeInterceptor,
     },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: HttpLoggingInterceptor,
+    },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(TraceContextMiddleware).forRoutes('*');
+  }
+}

@@ -7,6 +7,7 @@ import {
 import { AiModel } from '../models-admin/ai-model.entity';
 import { AiProvider } from '../models-admin/ai-provider.entity';
 import { OpenAiCompatAdapter, ThinkTagStreamParser } from './adapters/openai-compat.adapter';
+import { tracedFetch } from '../../shared/traced-fetch';
 
 export interface ChatMessage {
   role: string;
@@ -88,10 +89,18 @@ export class OpenAiCompatForwarder {
 
     let res: Response;
     try {
-      res = await fetch(url, {
-        ...req.init,
-        signal: connectAbortCtrl.signal,
-      });
+      res = await tracedFetch(
+        url,
+        {
+          ...req.init,
+          signal: connectAbortCtrl.signal,
+        },
+        {
+          name: 'ai.stream.completion',
+          entityId: target.apiIdentifier,
+          metadata: { model: target.apiIdentifier, baseUrl: target.baseUrl },
+        },
+      );
     } catch (err: any) {
       clearTimeout(connectTimer);
       if (options?.signal) {
@@ -229,19 +238,27 @@ export class OpenAiCompatForwarder {
       ? target.baseUrl
       : `${target.baseUrl}/chat/completions`;
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${target.apiKey}`,
+      const res = await tracedFetch(
+        url,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${target.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: target.apiIdentifier,
+            messages,
+            max_tokens: maxTokens,
+            stream: false,
+          }),
         },
-        body: JSON.stringify({
-          model: target.apiIdentifier,
-          messages,
-          max_tokens: maxTokens,
-          stream: false,
-        }),
-      });
+        {
+          name: 'ai.completion',
+          entityId: target.apiIdentifier,
+          metadata: { model: target.apiIdentifier },
+        },
+      );
       if (!res.ok) {
         this.logger.warn(
           `AI provider non-streaming call returned ${res.status}: ${await res.text().catch(() => '')}`,
@@ -271,20 +288,28 @@ export class OpenAiCompatForwarder {
     const timer = setTimeout(() => ctrl.abort(), 12000);
 
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${target.apiKey}`,
+      const res = await tracedFetch(
+        url,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${target.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: target.apiIdentifier,
+            messages: [{ role: 'user', content: testPrompt }],
+            max_tokens: 35,
+            stream: false,
+          }),
+          signal: ctrl.signal,
         },
-        body: JSON.stringify({
-          model: target.apiIdentifier,
-          messages: [{ role: 'user', content: testPrompt }],
-          max_tokens: 35,
-          stream: false,
-        }),
-        signal: ctrl.signal,
-      });
+        {
+          name: 'ai.testTarget',
+          entityId: target.apiIdentifier,
+          metadata: { model: target.apiIdentifier },
+        },
+      );
       clearTimeout(timer);
       const latencyMs = Date.now() - start;
 

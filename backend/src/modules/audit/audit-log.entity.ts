@@ -12,6 +12,13 @@ export class AuditLog {
   id: string;
 
   @Index()
+  @Column({ length: 64, nullable: true })
+  traceId: string | null;
+
+  @Column({ length: 32, nullable: true })
+  spanId: string | null;
+
+  @Index()
   @Column({ type: 'uuid', nullable: true })
   actorId: string | null;
 
@@ -29,6 +36,21 @@ export class AuditLog {
   @Index()
   @Column({ type: 'text', nullable: true })
   entityId: string | null;
+
+  @Column({ length: 10, nullable: true })
+  method: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  path: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  statusCode: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  durationMs: number | null;
+
+  @Column({ type: 'text', nullable: true })
+  errorMessage: string | null;
 
   @Column({ type: 'jsonb', nullable: true })
   changes: { before?: any; after?: any } | null;

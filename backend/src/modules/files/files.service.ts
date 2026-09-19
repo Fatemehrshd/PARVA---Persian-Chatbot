@@ -13,6 +13,17 @@ import { QueueManagerService } from './queue-manager.service';
 import { SettingsService } from '../admin/settings.service';
 import { randomUUID } from 'crypto';
 
+export function fixUtf8MangledString(name: string): string {
+  if (!name) return name;
+  try {
+    const decoded = Buffer.from(name, 'latin1').toString('utf8');
+    if (!decoded.includes('\uFFFD') && decoded !== name) {
+      return decoded;
+    }
+  } catch {}
+  return name;
+}
+
 export interface UploadedFileInfo {
   id: string;
   originalName: string;
@@ -124,16 +135,17 @@ export class FilesService {
       }
 
       // 2. Validate file type
-      const fileType = this.resolveFileType(file.mimetype, file.originalname);
+      const originalName = fixUtf8MangledString(file.originalname);
+      const fileType = this.resolveFileType(file.mimetype, originalName);
 
       // 3. Pre-storage Security & Malware Scan Pipeline
-      const scanResult = await this.scanner.scanBuffer(file.buffer, file.originalname);
+      const scanResult = await this.scanner.scanBuffer(file.buffer, originalName);
       if (scanResult.isInfected) {
         throw new BadRequestException('فایل ناسالم تشخیص داده شد');
       }
 
       // 4. Store in MinIO with Server-Side Encryption
-      const safeExt = file.originalname.split('.').pop() || '';
+      const safeExt = originalName.split('.').pop() || '';
       const minioKey = `attachments/${userId}/${randomUUID()}.${safeExt}`;
       await this.storage.put(minioKey, file.buffer, file.mimetype);
 
@@ -142,7 +154,7 @@ export class FilesService {
       const record = this.fileRepo.create({
         userId,
         conversationId,
-        originalName: file.originalname,
+        originalName,
         mimeType: file.mimetype,
         fileType,
         fileSize: file.size,
@@ -212,7 +224,7 @@ export class FilesService {
 
     return {
       id: file.id,
-      originalName: file.originalName,
+      originalName: fixUtf8MangledString(file.originalName),
       mimeType: file.mimeType,
       fileType: file.fileType,
       fileSize: file.fileSize,
@@ -266,6 +278,7 @@ export class FilesService {
     if (!file) {
       throw new NotFoundException('فایل یافت نشد');
     }
+    file.originalName = fixUtf8MangledString(file.originalName);
     return file;
   }
 

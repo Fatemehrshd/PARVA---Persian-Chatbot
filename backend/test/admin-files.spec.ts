@@ -251,6 +251,8 @@ describe('AdminFilesController E2E / Integration', () => {
 
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toBe('application/pdf');
+    expect(res.headers['content-disposition']).toContain('attachment');
+    expect(res.headers['content-disposition']).toContain("filename*=UTF-8''");
     expect(res.body.toString()).toBe('PDF_DUMMY_BINARY_DATA');
   });
 
@@ -261,6 +263,7 @@ describe('AdminFilesController E2E / Integration', () => {
 
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toBe('application/pdf');
+    expect(res.headers['content-disposition']).toContain('attachment');
     expect(res.body.toString()).toBe('PDF_DUMMY_BINARY_DATA');
   });
 

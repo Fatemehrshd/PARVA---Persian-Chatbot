@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
-import { Eye, Trash2, RotateCw, FileText, CheckCircle2, Clock, AlertTriangle, X } from '@lucide/vue'
+import { Eye, Download, Trash2, RotateCw, FileText, CheckCircle2, Clock, AlertTriangle, X } from '@lucide/vue'
 import AdminTable, { type TableColumn } from '../../components/admin/AdminTable.vue'
 import BaseButton from '../../components/ui/BaseButton.vue'
 import FileDetailModal from '../../components/admin/modals/FileDetailModal.vue'
 import { adminService } from '../../services/admin.service'
 import { formatIranDateTime } from '../../lib/date'
+import { buildUrl } from '../../services/api'
 import { useUiStore } from '../../stores/ui'
 import type { AdminFileItem, AdminFileStats, AdminFileDetail, AdminUser } from '../../types'
 
@@ -172,6 +173,12 @@ async function openFileDetail(file: AdminFileItem) {
   } catch (err: any) {
     uiStore.showToast(err?.message || 'خطا در دریافت جزئیات فایل', 'error')
   }
+}
+
+function getFileDownloadUrl(fileId: string): string {
+  const token = localStorage.getItem('token')
+  const qs = token ? `?token=${encodeURIComponent(token)}` : ''
+  return buildUrl(`/admin/files/${fileId}/content${qs}`)
 }
 
 async function handleRetry(file: AdminFileDetail) {
@@ -374,6 +381,15 @@ onMounted(loadFilesData)
         <!-- عملیات -->
         <td data-label="عملیات" class="text-left">
           <div class="flex items-center justify-end gap-1.5">
+            <a
+              :href="getFileDownloadUrl(file.id)"
+              :download="file.originalName"
+              class="download-action-btn inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              title="دانلود فایل"
+              @click.stop
+            >
+              <Download :size="14" />
+            </a>
             <BaseButton variant="ghost" size="sm" @click="openFileDetail(file)" title="مشاهده لاگ و جزئیات">
               <Eye :size="14" />
             </BaseButton>

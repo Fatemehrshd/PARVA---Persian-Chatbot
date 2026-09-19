@@ -10,6 +10,7 @@ import { SettingsService } from '../admin/settings.service';
 import { UsersService } from '../users/users.service';
 import { ActiveStreamService, ActiveStreamStatus } from './active-stream.service';
 import { WebSearchService } from '../web-search/web-search.service';
+import { fixUtf8MangledString } from '../files/files.service';
 
 export interface ChatChunk {
   token?: string;
@@ -195,13 +196,24 @@ export class ChatService {
   }
 
   history(userId: string, id: string) {
-    return this.assertOwned(userId, id).then(() =>
-      this.msg.find({
-        where: { conversationId: id, isDeleted: false },
-        relations: ['attachments'],
-        order: { createdAt: 'ASC' },
-      }),
-    );
+    return this.assertOwned(userId, id)
+      .then(() =>
+        this.msg.find({
+          where: { conversationId: id, isDeleted: false },
+          relations: ['attachments'],
+          order: { createdAt: 'ASC' },
+        }),
+      )
+      .then((messages) => {
+        for (const m of messages) {
+          if (m.attachments) {
+            for (const a of m.attachments) {
+              a.originalName = fixUtf8MangledString(a.originalName);
+            }
+          }
+        }
+        return messages;
+      });
   }
 
   async delete(userId: string, id: string): Promise<void> {

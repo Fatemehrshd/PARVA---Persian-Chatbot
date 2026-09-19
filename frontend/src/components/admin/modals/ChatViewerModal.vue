@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, nextTick } from 'vue'
-import { Loader2, Eye } from '@lucide/vue'
+import { Loader2, Download } from '@lucide/vue'
 import AdminModal from '../AdminModal.vue'
 import { formatIranTime } from '../../../lib/date'
 import { buildUrl } from '../../../services/api'
@@ -216,11 +216,11 @@ function getStatusClass(status: string): string {
                   <a
                     v-if="att.id"
                     :href="getFileDownloadUrl(att.id)"
-                    target="_blank"
+                    :download="att.originalName"
                     class="text-primary hover:underline flex items-center gap-0.5 text-[10px] mr-1"
-                    title="دانلود یا مشاهده محتوای فایل"
+                    title="دانلود فایل"
                   >
-                    <Eye :size="12" />
+                    <Download :size="12" />
                   </a>
                 </div>
               </div>

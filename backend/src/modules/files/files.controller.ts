@@ -17,7 +17,7 @@ import {
 import type { Response } from 'express';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
-import { FilesService } from './files.service';
+import { FilesService, fixUtf8MangledString } from './files.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('files')
@@ -89,12 +89,16 @@ export class FilesController {
     const isAdmin = req.user?.role === 'admin';
     const file = await this.filesService.getFileRecord(req.user.sub, id, isAdmin);
     const buffer = await this.filesService.getFileBuffer(file);
+    const fixedName = fixUtf8MangledString(file.originalName);
+    const encodedName = encodeURIComponent(fixedName);
+    const isDownload = req.query?.download === '1' || req.query?.download === 'true';
+    const dispositionType = isDownload ? 'attachment' : 'inline';
     res.setHeader('Content-Type', file.mimeType);
     res.setHeader('Content-Length', buffer.length);
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.setHeader(
       'Content-Disposition',
-      `inline; filename="${encodeURIComponent(file.originalName)}"`,
+      `${dispositionType}; filename="${encodedName}"; filename*=UTF-8''${encodedName}`,
     );
     res.end(buffer);
   }

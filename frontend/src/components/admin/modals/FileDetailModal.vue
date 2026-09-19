@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Eye } from '@lucide/vue'
+import { Download } from '@lucide/vue'
 import AdminModal from '../AdminModal.vue'
 import BaseButton from '../../ui/BaseButton.vue'
 import { formatIranDateTime } from '../../../lib/date'
@@ -89,12 +89,12 @@ function getStatusClass(status: string): string {
           </span>
           <a
             :href="getFileDownloadUrl(file.id)"
-            target="_blank"
-            class="download-btn flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-foreground"
+            :download="file.originalName"
+            class="download-btn flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-foreground font-medium"
             title="دانلود فایل اصلی"
           >
-            <Eye :size="13" />
-            <span>مشاهده / دانلود</span>
+            <Download :size="13" />
+            <span>دانلود فایل</span>
           </a>
         </div>
       </div>

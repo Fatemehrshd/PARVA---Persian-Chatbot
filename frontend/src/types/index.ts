@@ -214,10 +214,12 @@ export interface FeedbackItem {
 export interface AdminUser extends User {
   usedTokens: number
   tokenLimit?: number | null
-  /** سقف مؤثر resolve شده در بک‌اند: اختصاصی ← نقش ← سراسری (null = نامحدود) */
+  /** سقف مؤثر resolve شده در بک‌اند: اختصاصی ← طرح اشتراک ← نقش ← سراسری ← مدیر (null = نامحدود) */
   effectiveTokenLimit?: number | null
   effectiveMessageLimit?: number | null
-  tokenLimitSource?: 'personal' | 'role' | 'global'
+  tokenLimitSource?: 'personal' | 'plan' | 'role' | 'global' | 'admin'
+  planName?: string | null
+  planId?: string | null
   conversationsCount: number
   filesCount?: number
   messageLimit?: number | null
@@ -244,6 +246,14 @@ export interface QuotaState {
   remainingMessages: number | null
   remainingPercent: number | null
   resetAt: string | null
+  tokenLimit?: number | null
+  usedTokens?: number
+  periodUsedTokens?: number
+  messageLimit?: number | null
+  usedMessages?: number
+  planName?: string | null
+  limitSource?: 'personal' | 'plan' | 'role' | 'global' | 'admin' | null
+  isAdmin?: boolean
 }
 
 export interface AdminConversationSummary {
@@ -373,4 +383,239 @@ export interface AdminFileDetail extends AdminFileItem {
   minioKey?: string
   conversationTitle?: string
 }
+
+// ========================
+// Subscriptions & Plans
+// ========================
+
+export interface PlanFeatureSet {
+  webSearch?: boolean
+  thinking?: boolean
+  document?: boolean
+  maxFileSizeMb?: number
+  [key: string]: any
+}
+
+export interface SubscriptionPlan {
+  id: string
+  slug: string
+  name: string
+  description?: string | null
+  price: string | number
+  currency: string
+  durationDays: number
+  tokenQuota: number
+  messageQuota?: number | null
+  resetHours: number
+  features: PlanFeatureSet
+  isActive: boolean
+  isDefault: boolean
+  sortOrder: number
+  planModels?: Array<{ id: string; modelId: string; model?: { id: string; name: string } }>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Subscription {
+  id: string
+  userId: string
+  planId: string
+  status: 'ACTIVE' | 'EXPIRED' | 'CANCELLED' | 'PENDING'
+  startDate: string
+  endDate?: string | null
+  paymentId?: string | null
+  source: string
+  cancelledAt?: string | null
+  cancellationReason?: string | null
+  plan?: SubscriptionPlan
+  user?: { id: string; email: string; displayName?: string }
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UserEntitlements {
+  userId: string
+  role: string
+  isAdmin: boolean
+  plan: SubscriptionPlan | null
+  hasActiveSubscription: boolean
+  effectiveTokenLimit: number | null
+  effectiveMessageLimit: number | null
+  limitSource: 'personal' | 'plan' | 'role' | 'global' | 'admin'
+  features: {
+    webSearch: boolean
+    thinking: boolean
+    document: boolean
+    maxFileSizeMb: number
+  }
+  allowedModelIds: string[] | null
+}
+
+export interface CurrentSubscriptionResponse {
+  activeSubscription: Subscription | null
+  entitlements: UserEntitlements
+  history: Subscription[]
+}
+
+// ========================
+// Payments & Gateways
+// ========================
+
+export interface Payment {
+  id: string
+  userId: string
+  planId: string
+  amount: string | number
+  currency: string
+  status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'REFUNDED'
+  gateway: string
+  authority?: string | null
+  refId?: string | null
+  idempotencyKey?: string | null
+  verifiedAt?: string | null
+  createdAt: string
+  updatedAt: string
+  plan?: SubscriptionPlan
+  user?: { id: string; email: string; displayName?: string }
+}
+
+export interface CheckoutResponse {
+  paymentId: string
+  authority?: string
+  paymentUrl?: string
+  status?: string
+  message?: string
+}
+
+export interface VerifyPaymentResponse {
+  success: boolean
+  refId?: string | null
+  message?: string
+  alreadyVerified?: boolean
+  payment?: Payment
+}
+
+// ========================
+// Audit Logs
+// ========================
+
+export interface AuditLogItem {
+  id: string
+  actorId?: string | null
+  actorType: 'admin' | 'user' | 'system'
+  action: string
+  entityType: string
+  entityId?: string | null
+  changes?: { before?: any; after?: any } | null
+  metadata?: Record<string, any>
+  ip?: string | null
+  userAgent?: string | null
+  createdAt: string
+}
+
+// ========================
+// Chat Share (Frozen Snapshot)
+// ========================
+
+export interface ShareSnapshotMessage {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  createdAt: string
+  sources?: { title: string; url: string; snippet?: string }[] | null
+  reasoning_content?: string | null
+  thinkingDurationMs?: number | null
+  attachments?: {
+    id: string
+    originalName: string
+    mimeType: string
+    fileType: string
+    fileSize: number
+  }[]
+}
+
+export interface ChatShareSummary {
+  id: string
+  shareCode: string
+  title: string
+  modelId?: string | null
+  modelName?: string | null
+  messageCount: number
+  createdAt: string
+  updatedAt: string
+  isActive: boolean
+  viewCount?: number
+}
+
+export interface PublicShareResponse {
+  shareCode: string
+  title: string
+  modelId?: string | null
+  modelName?: string | null
+  messages: ShareSnapshotMessage[]
+  createdAt: string
+  updatedAt: string
+}
+
+// ========================
+// Coupons & Discounts
+// ========================
+
+export type DiscountType = 'PERCENTAGE' | 'FIXED'
+
+export interface Coupon {
+  id: string
+  code: string
+  description?: string | null
+  discountType: DiscountType
+  discountValue: number
+  maxDiscountAmount?: number | null
+  minOrderAmount?: number | null
+  usageLimit?: number | null
+  usedCount: number
+  perUserLimit: number
+  expiresAt?: string | null
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateCouponRequest {
+  code: string
+  description?: string
+  discountType: DiscountType
+  discountValue: number
+  maxDiscountAmount?: number | null
+  minOrderAmount?: number | null
+  usageLimit?: number | null
+  perUserLimit?: number
+  expiresAt?: string | null
+  isActive?: boolean
+}
+
+export interface UpdateCouponRequest {
+  description?: string
+  discountType?: DiscountType
+  discountValue?: number
+  maxDiscountAmount?: number | null
+  minOrderAmount?: number | null
+  usageLimit?: number | null
+  perUserLimit?: number
+  expiresAt?: string | null
+  isActive?: boolean
+}
+
+export interface ValidateCouponResponse {
+  valid: boolean
+  couponId: string
+  code: string
+  discountType: DiscountType
+  discountValue: number
+  discountAmount: number
+  originalAmount: number
+  finalAmount: number
+  message: string
+}
+
+
 

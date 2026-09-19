@@ -84,8 +84,57 @@ const router = createRouter({
           path: 'file-settings',
           name: 'admin-file-settings',
           component: () => import('../views/admin/AdminFileSettingsSection.vue')
+        },
+        {
+          path: 'plans',
+          name: 'admin-plans',
+          component: () => import('../views/admin/AdminPlansSection.vue')
+        },
+        {
+          path: 'subscriptions',
+          name: 'admin-subscriptions',
+          component: () => import('../views/admin/AdminSubscriptionsSection.vue')
+        },
+        {
+          path: 'payments',
+          name: 'admin-payments',
+          component: () => import('../views/admin/AdminPaymentsSection.vue')
+        },
+        {
+          path: 'coupons',
+          name: 'admin-coupons',
+          component: () => import('../views/admin/AdminCouponsSection.vue')
+        },
+        {
+          path: 'audit-logs',
+          name: 'admin-audit-logs',
+          component: () => import('../views/admin/AdminAuditLogsSection.vue')
         }
       ]
+    },
+    {
+      path: '/subscription',
+      name: 'subscription',
+      component: () => import('../views/SubscriptionView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/payment-result',
+      name: 'payment-result',
+      component: () => import('../views/PaymentResultView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/sandbox-gateway',
+      name: 'sandbox-gateway',
+      component: () => import('../views/SandboxGatewayMockView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/share/:shareCode',
+      name: 'shared-chat',
+      component: () => import('../views/SharedChatView.vue'),
+      meta: { requiresAuth: false }
     }
   ]
 })

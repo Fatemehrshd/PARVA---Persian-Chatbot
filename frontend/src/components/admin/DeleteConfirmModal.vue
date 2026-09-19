@@ -1,20 +1,31 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import AdminModal from './AdminModal.vue'
 import BaseButton from '../ui/BaseButton.vue'
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     open: boolean
     title?: string
     message?: string
+    description?: string
     itemName?: string
     loading?: boolean
+    isLoading?: boolean
+    confirmText?: string
+    cancelText?: string
+    eyebrow?: string
   }>(),
   {
-    title: '????? ???',
-    message: '??? ?? ??? ??? ???? ??????? ?????? ??? ?????? ??????? ?????? ???.',
+    title: 'تایید عملیات حذف',
+    message: '',
+    description: '',
     itemName: '',
     loading: false,
+    isLoading: false,
+    confirmText: 'تایید و حذف',
+    cancelText: 'انصراف',
+    eyebrow: 'هشدار',
   }
 )
 
@@ -22,11 +33,19 @@ defineEmits<{
   confirm: []
   close: []
 }>()
+
+const computedMessage = computed(() => {
+  return props.message || props.description || 'آیا از انجام این عملیات اطمینان دارید؟ این عمل غیرقابل بازگشت است.'
+})
+
+const computedLoading = computed(() => {
+  return props.loading || props.isLoading
+})
 </script>
 
 <template>
-  <AdminModal v-if="open" eyebrow="???" :title="title" @close="$emit('close')">
-    <div class="delete-modal-content">
+  <AdminModal v-if="open" :eyebrow="eyebrow" :title="title" @close="$emit('close')">
+    <div class="delete-modal-content" dir="rtl">
       <div class="delete-icon-wrap">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="3 6 5 6 21 6" />
@@ -37,16 +56,16 @@ defineEmits<{
       </div>
 
       <div class="delete-text">
-        <p class="delete-message">{{ message }}</p>
-        <p v-if="itemName" class="delete-item-name">�{{ itemName }}�</p>
+        <p class="delete-message">{{ computedMessage }}</p>
+        <p v-if="itemName" class="delete-item-name">«{{ itemName }}»</p>
       </div>
 
       <div class="delete-actions">
-        <BaseButton variant="ghost" size="md" :disabled="loading" @click="$emit('close')">
-          ??????
+        <BaseButton variant="ghost" size="md" :disabled="computedLoading" type="button" @click="$emit('close')">
+          {{ cancelText }}
         </BaseButton>
-        <BaseButton variant="danger" size="md" :loading="loading" :disabled="loading" @click="$emit('confirm')">
-          ????? ? ???
+        <BaseButton variant="danger" size="md" :loading="computedLoading" :disabled="computedLoading" type="button" @click="$emit('confirm')">
+          {{ confirmText }}
         </BaseButton>
       </div>
     </div>

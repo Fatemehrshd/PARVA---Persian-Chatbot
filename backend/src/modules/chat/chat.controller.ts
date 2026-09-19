@@ -393,6 +393,7 @@ export class ChatQuotaController {
 
   @Get('quota')
   getQuota(@Req() req: any) {
-    return this.chat.getQuotaState(req.user.sub);
+    const userId = req.user?.id || req.user?.sub;
+    return this.chat.getQuotaState(userId);
   }
 }

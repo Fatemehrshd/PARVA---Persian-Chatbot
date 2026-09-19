@@ -15,7 +15,11 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Missing or invalid access token');
     }
     try {
-      req.user = this.jwt.verify(token);
+      const decoded = this.jwt.verify(token);
+      if (decoded && typeof decoded === 'object') {
+        decoded.id = decoded.id || decoded.sub;
+      }
+      req.user = decoded;
       req.token = token;
       return true;
     } catch {

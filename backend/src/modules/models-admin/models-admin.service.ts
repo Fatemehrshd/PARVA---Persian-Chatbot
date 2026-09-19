@@ -6,6 +6,8 @@ import { AiProvider } from './ai-provider.entity';
 import { maskSecret } from './mask-secret';
 import { OpenAiCompatForwarder } from '../ai/openai-compat.forwarder';
 import { SettingsService, resolveModelAccess } from '../admin/settings.service';
+import { EntitlementService } from '../subscriptions/entitlement.service';
+
 @Injectable()
 export class ModelsAdminService {
   constructor(
@@ -13,6 +15,7 @@ export class ModelsAdminService {
     @InjectRepository(AiProvider) private providers: Repository<AiProvider>,
     @Optional() private forwarder?: OpenAiCompatForwarder,
     @Optional() private settings?: SettingsService,
+    @Optional() private entitlements?: EntitlementService,
   ) {}
 
   private maskApiKey(m: AiModel): AiModel {
@@ -28,7 +31,7 @@ export class ModelsAdminService {
   /**
    * Chat-ready listing: active models whose owning provider (when one is
    * linked/resolvable) is also active. When a `user` is supplied, models are
-   * additionally filtered by that user's access rights (public/commercial/private).
+   * additionally filtered by that user's access rights (public/commercial/private and plan entitlements).
    */
   async listActive(user?: { id?: string; role?: string } | null) {
     const models = await this.repo.find({
@@ -40,7 +43,7 @@ export class ModelsAdminService {
     for (const m of models) {
       const provider = await this.resolveProvider(m);
       if (provider && provider.isActive === false) continue;
-      if (user && !resolveModelAccess(m, user, access)) continue;
+      if (user && !(await this.isModelAllowedForUser(m, user))) continue;
       usable.push(m);
     }
     return usable.map((m) => this.maskApiKey(m));
@@ -52,6 +55,9 @@ export class ModelsAdminService {
     user: { id?: string; role?: string },
   ): Promise<boolean> {
     if (!model) return false;
+    if (this.entitlements && user?.id) {
+      return this.entitlements.isModelAllowedForUser(model, user as any);
+    }
     const access = this.settings ? await this.settings.getModelAccess().catch(() => ({})) : {};
     return resolveModelAccess(model, user, access);
   }

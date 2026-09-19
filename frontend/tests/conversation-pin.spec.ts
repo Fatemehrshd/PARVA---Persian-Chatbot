@@ -150,10 +150,11 @@ describe('AppSidebar 3-dots action menu and pin indicator', () => {
     expect(dropdown.exists()).toBe(true)
 
     const items = dropdown.findAll('.sb-dropdown-item')
-    expect(items.length).toBe(3)
+    expect(items.length).toBe(4)
     expect(items[0].text()).toContain('پین کردن گفتگو')
     expect(items[1].text()).toContain('ویرایش عنوان')
-    expect(items[2].text()).toContain('حذف گفتگو')
+    expect(items[2].text()).toContain('اشتراک‌گذاری گفتگو')
+    expect(items[3].text()).toContain('حذف گفتگو')
 
     wrapper.unmount()
   })

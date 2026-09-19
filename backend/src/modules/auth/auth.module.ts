@@ -8,7 +8,11 @@ import { AdminGuard } from '../../shared/admin.guard';
 @Module({
   imports: [
     forwardRef(() => UsersModule),
-    JwtModule.register({ secret: process.env.JWT_SECRET ?? 'dev-secret', signOptions: {} }),
+    JwtModule.register({
+      global: true,
+      secret: process.env.JWT_SECRET ?? 'dev-secret',
+      signOptions: {},
+    }),
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtAuthGuard, AdminGuard],

@@ -2,8 +2,9 @@
 import { ref, watch } from 'vue'
 import AdminModal from '../AdminModal.vue'
 import BaseButton from '../../ui/BaseButton.vue'
-import type { AdminUser } from '../../../types'
+import type { AdminUser, SubscriptionPlan } from '../../../types'
 import { numericInputValue } from '../../../utils/numberInput'
+import { subscriptionService } from '../../../services/subscription.service'
 
 const props = defineProps<{
   open: boolean
@@ -17,8 +18,48 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  save: [data: { displayName?: string; email?: string; role?: 'user' | 'admin'; tokenLimit?: number | null; messageLimit?: number | null }]
+  save: [data: {
+    displayName?: string
+    email?: string
+    role?: 'user' | 'admin'
+    tokenLimit?: number | null
+    messageLimit?: number | null
+    newPlanId?: string
+    durationDays?: number
+  }]
 }>()
+
+const availablePlans = ref<SubscriptionPlan[]>([])
+const selectedPlanId = ref<string>('')
+const planDurationDays = ref<number | null>(null)
+
+watch(
+  () => props.open,
+  async (isOpen) => {
+    if (isOpen) {
+      selectedPlanId.value = ''
+      planDurationDays.value = null
+      try {
+        availablePlans.value = (await subscriptionService.getAllPlans()) || []
+      } catch {
+        availablePlans.value = []
+      }
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  () => selectedPlanId.value,
+  (newPid) => {
+    if (newPid) {
+      const p = availablePlans.value.find((item) => item.id === newPid)
+      planDurationDays.value = p && p.durationDays > 0 ? p.durationDays : null
+    } else {
+      planDurationDays.value = null
+    }
+  },
+)
 
 const form = ref<{
   displayName: string
@@ -123,6 +164,8 @@ function handleSubmit() {
     role: form.value.role,
     tokenLimit: form.value.tokenLimit === null || form.value.tokenLimit === undefined ? null : Number(form.value.tokenLimit),
     messageLimit: form.value.messageLimit === null || form.value.messageLimit === undefined ? null : Number(form.value.messageLimit),
+    newPlanId: selectedPlanId.value || undefined,
+    durationDays: planDurationDays.value !== null && planDurationDays.value > 0 ? planDurationDays.value : undefined,
   })
 }
 </script>
@@ -272,6 +315,33 @@ function handleSubmit() {
           <small class="text-[11px] text-muted-foreground block leading-relaxed">
             با تغییر هر یک از فیلدهای بالا (دلار یا توکن)، فیلد دیگر به صورت خودکار با نرخ برابری روزانه همگام می‌شود. در صورت تعیین عدد، این سهمیه مستقیماً بر سقف کلی اولویت داشته و اعمال می‌شود. برای حذف سقف اختصاصی و ارث‌بری، کادر را خالی بگذارید.
           </small>
+        </div>
+
+        <!-- بخش طرح اشتراک کاربر -->
+        <div class="col-span-full p-3.5 rounded-xl bg-purple-500/5 border border-purple-500/20 space-y-3">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <span class="text-xs font-bold text-foreground">طرح اشتراک کاربر:</span>
+            <span class="px-2 py-0.5 text-xs font-bold rounded-full bg-purple-500/15 text-purple-500 border border-purple-500/25">
+              {{ user?.planName || 'طرح پیش‌فرض سیستم' }}
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+            <label>
+              <span class="field-label text-xs font-semibold text-muted-foreground block mb-1">تغییر طرح اشتراک:</span>
+              <select v-model="selectedPlanId" :disabled="isSaving" class="w-full">
+                <option value="">-- بدون تغییر --</option>
+                <option v-for="p in availablePlans" :key="p.id" :value="p.id">
+                  {{ p.name }} ({{ Number(p.price) === 0 ? 'رایگان' : `${Number(p.price).toLocaleString('fa-IR')} ریال` }})
+                </option>
+              </select>
+            </label>
+
+            <label v-if="selectedPlanId">
+              <span class="field-label text-xs font-semibold text-muted-foreground block mb-1">مدت اعتبار (روز - خالی برای پیش‌فرض طرح):</span>
+              <input v-model.number="planDurationDays" type="number" min="0" placeholder="پیش‌فرض طرح" :disabled="isSaving" />
+            </label>
+          </div>
         </div>
       </div>
       <div class="modal-actions">

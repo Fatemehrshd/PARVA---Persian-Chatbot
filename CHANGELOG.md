@@ -10,6 +10,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Zarinpal Sandbox Payment Gateway & Discount Code System (درگاه پرداخت زرین‌پال سندباکس و سیستم کدهای تخفیف)**:
+  - **Payment Verification & Locking Fix (`backend/src/modules/payments/payments.service.ts`)**:
+    - Fixed PostgreSQL `QueryFailedError: FOR UPDATE cannot be applied to the nullable side of an outer join` by switching from `paymentRepo.findOne` to `paymentRepo.createQueryBuilder('p').where('p.authority = :authority').setLock('pessimistic_write').getOne()`.
+    - Added resilient network timeouts (`AbortSignal.timeout(3000)`) and sandbox fallback to `/sandbox-gateway?gateway=zarinpal` when external `sandbox.zarinpal.com` is unreachable.
+  - **Payment Result Auto-Verification (`frontend/src/views/PaymentResultView.vue`)**:
+    - Implemented automatic payment verification on return from gateway callbacks when status is `PENDING` and `status === 'OK'`.
+    - Added support for case-insensitive gateway query parameters (`authority` / `Authority` and `status` / `Status`).
+    - Added a clean loading spinner state while verification is in progress.
+  - **Zarinpal Sandbox Simulator UI (`frontend/src/views/SandboxGatewayMockView.vue`)**:
+    - Branded simulator interface with official amber Zarinpal badges and status feedback.
+  - **Chat Header Cleanup (`frontend/src/views/ChatView.vue` & `AppSidebar.vue`)**:
+    - Completely removed the top header bar in `ChatView.vue` per user requirement.
+    - Restricted conversation sharing strictly to the 3-dots action dropdown menu in `AppSidebar.vue`.
+  - **Zarinpal Sandbox Gateway Provider (`backend/src/modules/payments/gateway/zarinpal-payment.gateway.ts`)**:
+    - Official Zarinpal v4 Sandbox integration (`https://sandbox.zarinpal.com/pg/v4/payment/request.json`, `verify.json`, and `/pg/StartPay/{authority}`).
+    - Automatic currency conversion between Rials and Tomans (`IRR` to `IRT`).
+    - Dual gateway options: «درگاه پرداخت زرین‌پال (سندباکس رسمی ایران)» for realistic external sandbox payment tests vs «شبیه‌ساز پرداخت سریع (سندباکس داخلی)» for offline/instant testing.
+  - **Coupons & Discount Engine (`backend/src/modules/payments/coupons.service.ts`)**:
+    - Comprehensive discount validation: percentage (`PERCENTAGE`) and fixed Rial (`FIXED`) discounts, max ceiling (`maxDiscountAmount`), minimum order price (`minOrderAmount`), system usage limit (`usageLimit`), per-user usage cap (`perUserLimit`), and expiration dates (`expiresAt`).
+    - Database entity `Coupon` (`coupons`) and redemption tracking in `CouponUsage` (`coupon_usages`).
+    - Zero-Cost Coupon Bypass: if a coupon reduces the payable amount to 0 (100% discount), the subscription is activated immediately with `SUCCESS` and gateway `'free'`, bypassing external gateway redirects.
+    - Public coupon validation endpoint: `POST /api/v1/payments/coupons/validate`.
+    - Admin CRUD endpoints: `GET /api/v1/admin/coupons`, `POST /api/v1/admin/coupons`, `PATCH /api/v1/admin/coupons/:id`, `DELETE /api/v1/admin/coupons/:id`.
+  - **Frontend UI & Admin Management (`frontend`)**:
+    - `CheckoutModal.vue`: Modern modal triggered upon upgrading any paid plan on `/subscription` with interactive discount code entry, live price breakdown (original, discount, payable), and payment gateway selector.
+    - `AdminCouponsSection.vue` & `CouponEditorModal.vue`: Dedicated admin management section under «کدهای تخفیف» (Tag icon) for creating, editing, monitoring usage, and deleting discount coupons.
+    - `PersianDatePicker.vue` (`frontend/src/components/ui/PersianDatePicker.vue` & `frontend/src/lib/jalali.ts`):
+      - Custom, high-precision Iranian Jalali (Shamsi) datepicker component with zero external dependencies.
+      - Integrated into `CouponEditorModal.vue` for selecting coupon expiration dates.
+      - Full Light and Dark theme adaptation (Obsidian Dark & Warm Cream Light) using CSS design system variables.
+      - Features include Jalali month/year selector, interactive day grid with today indicator, time picker (hour and minute), quick "Today" shortcut, and clear expiration option.
+- **Chat Snapshot Share (اشتراک‌گذاری گفتگو با پیوند عمومی و منجمد)**:
+  - **Immutable JSONB Snapshot Engine (`backend/src/modules/chat/chat-share.service.ts`)**:
+    - Captures an immutable snapshot of all conversation messages up to the exact moment the share button is clicked.
+    - Subsequent messages, edits, or deletions in the original conversation do not alter or appear in the shared snapshot.
+    - Database entity `ChatShare` (`chat_shares` table) with URL-safe random `shareCode`, indexed lookup, view count tracking, and active/revoked lifecycle.
+  - **Public & Authenticated API Endpoints (`ChatShareController`)**:
+    - `POST /api/v1/chat/conversations/:id/share`: Generates or updates the snapshot.
+    - `GET /api/v1/chat/conversations/:id/share`: Retrieves current share status for conversation owner.
+    - `DELETE /api/v1/chat/conversations/:id/share`: Revokes public link.
+    - `GET /api/v1/chat/shares/:shareCode`: Public endpoint (no auth required) returning frozen snapshot messages and metadata.
+    - `POST /api/v1/chat/shares/:shareCode/fork`: Clones the snapshot into a new editable conversation for the authenticated viewer.
+  - **Frontend UI & Public Viewer (`frontend`)**:
+    - `ShareConversationModal.vue`: Modal with copyable link, 1-click clipboard copy, snapshot details, update to current messages button, and revoke button.
+    - `AppSidebar.vue`: Integrated «اشتراک‌گذاری گفتگو» action in the conversation 3-dots dropdown menu.
+    - `ChatView.vue`: Added a sleek top chat header bar with conversation title and direct «اشتراک‌گذاری» button.
+    - `SharedChatView.vue`: Dedicated public page at `/share/:shareCode` with clean header, frozen notice banner, full Markdown/KaTeX/Code/Reasoning message rendering, theme switcher, and «ادامه گفتگو در پروا» fork CTA button.
+- **Subscription & Commercialization Platform (Task 44 / Commercialization Phase)**:
+  - **Subscriptions & Entitlement Engine (`backend/src/modules/subscriptions`)**:
+    - Multi-tier subscription plans (`subscription_plans`, `plan_models`, `subscriptions`) supporting `free`, `pro`, `enterprise`, and custom plans with customizable billing cycles (`monthly`, `yearly`, `lifetime`).
+    - Association of AI models to specific plans via `plan_models` junction table.
+    - Zero-conflict RBAC vs Subscription architecture: System roles (`admin` vs `user`) strictly govern system administrative privileges (admin panel, bypass all quotas/model locks), while Subscriptions govern product access (AI models, token/message quotas, advanced capability flags).
+    - 3-Tier Quota Cascade Priority: `Personal override (user.tokenLimit > 0) > Active plan quota (plan.tokenQuota > 0) > Global system limit (globalTokenLimit > 0)`.
+    - Automated lazy expiration: expired subscriptions transition to `expired` status and automatically fall back to the system default plan.
+    - Feature gating support (`webSearch`, `thinking`, `document`, `customPrompts`) via `EntitlementService`.
+  - **Payment Processing & Sandbox Gateway (`backend/src/modules/payments`)**:
+    - Modular payment infrastructure with `PaymentGatewayProvider` interface and built-in `SandboxPaymentGateway` for test environments.
+    - Pessimistic locking (`pessimistic_write`) transaction during payment verification to prevent double-credit and race conditions from duplicate webhooks or network replays.
+    - Instant activation for free plans (0 price) without unnecessary gateway redirects.
+    - Mock Sandbox Gateway UI (`SandboxGatewayMockView.vue`) for simulating successful or failed transactions.
+    - Payment Result View (`PaymentResultView.vue`) with transaction reference, tracking code, and return to chat.
+  - **Security Audit Logging (`backend/src/modules/audit`)**:
+    - Comprehensive audit trail (`audit_logs`) tracking administrative changes and user commercial actions (`subscription.checkout`, `subscription.activated`, `plan.create`, `plan.update`, `plan.delete`, `payment.verified`, `payment.failed`).
+    - Recursive redaction in `AuditService` to automatically sanitize sensitive attributes (passwords, tokens, API keys, card numbers, cvv).
+    - Admin Audit Logs Section (`AdminAuditLogsSection.vue`) with action search, date filtering, and sanitized JSON inspection.
+  - **User & Admin Frontend UI (`frontend`)**:
+    - Public/User Subscription view (`SubscriptionView.vue`): minimal, beautiful pricing cards matching Obsidian Dark and Warm Cream Light themes, active plan badge, and seamless upgrade buttons.
+    - Active Plan Immutability: users with an active purchased subscription cannot change their plan or re-enter the subscription page until cancelled/deleted by an admin; guarded in backend (`initiateCheckout`), router/page redirect, and profile menu (`ProfileMenu.vue`).
+    - Model & Provider Subscription Assignment: in `PlanEditorModal.vue`, models are grouped by provider with select-all provider toggles and chips (feature tool toggles removed). Models assigned to paid plans are hidden from non-subscribed users (`GET /models`) and blocked in chat.
+    - Admin Management Sections: `AdminPlansSection.vue` (plan editor with provider-grouped model selection), `AdminSubscriptionsSection.vue` (paginated table for user subscription tracking and manual assignment), and `AdminPaymentsSection.vue` (paginated financial transactions ledger with aggregate revenue KPI summary cards: total revenue, successful count, and subscriptions breakdown by plan).
+    - Direct User Subscription Assignment for Admin: Admin can directly change or assign a subscription plan to any user from the Users section (`AdminUsersSection.vue`), either via a direct 1-click action button in the table row or within the user edit modal (`UserEditorModal.vue`).
+    - User Payment History Inspection: Users can view and inspect their complete payment history (amounts, dates, statuses, tracking codes, plans, and pending sandbox payment resumption links) directly from their user menu and profile modal (`ProfileModal.vue` on the «سوابق پرداخت» tab).
+    - Security Audit Logs: hidden from primary navigation tabs in `AdminPanelView.vue`.
 - **Token & Message Limit System Harmonization (Cascade Priority, Inheritance, & Chat Blocking)**:
   - **Strict Priority Cascade**: Explicit per-user limits (`user.tokenLimit > 0` or `user.messageLimit > 0`) override role-based and global policies completely. If not set (stored as `null`), limits dynamically inherit from role quotas (`roleQuota.tokenLimit`, `roleQuota.messageLimit`) or the global token limit.
   - **Dynamic Inheritance & Visual Badges in Users Table**: `AdminUsersSection.vue` displays effective limits (`effectiveTokenLimit`, `effectiveMessageLimit`) and origin badges: «اختصاصی» (Personal override), «از نقش» (Inherited from role), and «سراسری» (Inherited from global).
@@ -34,6 +107,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **All deletions are now soft-delete (production-ready)**: `users`, `ai_models`, and `ai_providers` gained an `isDeleted` flag; `DELETE /admin/users/:id`, `DELETE /admin/models/:id`, and `DELETE /admin/providers/:id` now flag rows instead of physically removing them.
 
 ### Fixed
+- **Admin Modal Submit & Slot Harmonization**: Fixed `AdminModal.vue` to properly render the `<footer v-if="$slots.footer">` slot. Resolved missing and duplicate submit buttons in `PlanEditorModal.vue` and `AssignSubscriptionModal.vue` by standardizing action controls with clear Persian labels («ثبت طرح اشتراک»، «ذخیره تغییرات طرح»، «ثبت و تخصیص اشتراک»).
+- **DeleteConfirmModal Encoding & Props Compatibility**: Fixed corrupted UTF-8 mojibake/question marks in `DeleteConfirmModal.vue` and added support for `description`, `isLoading`, `confirmText`, and `eyebrow` props for seamless modal confirmation across admin views.
+- **Admin Tables for Subscriptions, Plans, Payments, and Audit Logs**: Standardized all commercialization admin sections (`AdminPlansSection`, `AdminSubscriptionsSection`, `AdminPaymentsSection`, `AdminAuditLogsSection`) to use `AdminTable.vue` with `:items` and `<template #row="{ item }">` for uniform DataGrid display, sorting, and responsive layout.
+- **Initial Database Seeding for Subscriptions**: Created and executed `seed:subscriptions` script, ensuring `free`, `pro`, and `enterprise` plans are provisioned, model mappings are populated, and all existing users are assigned active subscriptions.
 - **Users Table Token Limit Sync with Global**: Fixed issue where users without dedicated personal limits displayed "نامحدود" instead of inheriting the active global token limit when roles had no specific quota (`null` or `0`). Updated `resolveEffectiveTokenLimit`, `resolveLimitSource`, and `effectiveLimitFor` to accurately fallback to `globalLimit` and mark source as «سراسری».
 - **DB-authoritative user role and quota state**: user role access for model listings and admin routing is re-read from the database instead of trusting stale claims.
 - **Streaming auto-scroll fixes**: Smooth follow and disengage on scroll gestures.

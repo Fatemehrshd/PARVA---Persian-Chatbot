@@ -8,25 +8,58 @@ import {
   DialogRoot,
   DialogTitle,
 } from 'reka-ui'
-import { X, UserRound, Mail, LockKeyhole, Plus } from '@lucide/vue'
+import {
+  X,
+  UserRound,
+  Mail,
+  LockKeyhole,
+  Receipt,
+  ExternalLink,
+  RefreshCw,
+  CheckCircle2,
+  Clock,
+  XCircle,
+} from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useFormSubmit } from '../../composables/useFormSubmit'
 import { profileService } from '../../services/profile.service'
+import { paymentService } from '../../services/payment.service'
 import { useAuthStore } from '../../stores/auth'
 import { useUiStore } from '../../stores/ui'
-import type { UserProfile } from '../../types'
+import type { UserProfile, Payment } from '../../types'
+import { formatIranDateTime } from '../../lib/date'
 
-const props = defineProps<{ isOpen: boolean }>()
+const props = withDefaults(
+  defineProps<{
+    isOpen: boolean
+    defaultTab?: 'profile' | 'email' | 'password' | 'payments'
+  }>(),
+  { defaultTab: 'profile' }
+)
 const emit = defineEmits<{ close: [] }>()
 
 const authStore = useAuthStore()
 const uiStore = useUiStore()
 const profile = ref<UserProfile | null>(null)
 const isLoadingProfile = ref(false)
-const activeTab = ref<'profile' | 'email' | 'password'>('profile')
+const activeTab = ref<'profile' | 'email' | 'password' | 'payments'>(props.defaultTab || 'profile')
+
+const payments = ref<Payment[]>([])
+const isLoadingPayments = ref(false)
+
+async function loadPayments() {
+  isLoadingPayments.value = true
+  try {
+    payments.value = await paymentService.getMyPayments()
+  } catch {
+    payments.value = []
+  } finally {
+    isLoadingPayments.value = false
+  }
+}
 
 const displayName = ref('')
 const username = ref('')
@@ -149,13 +182,25 @@ watch(
   () => props.isOpen,
   (isOpen) => {
     if (isOpen) {
-      activeTab.value = 'profile'
+      activeTab.value = props.defaultTab || 'profile'
       loadProfile()
+      if (activeTab.value === 'payments') {
+        loadPayments()
+      }
     } else {
       resetPendingAvatar()
     }
   },
   { immediate: true },
+)
+
+watch(
+  () => activeTab.value,
+  (tab) => {
+    if (tab === 'payments') {
+      loadPayments()
+    }
+  },
 )
 </script>
 
@@ -183,6 +228,7 @@ watch(
               { id: 'profile', label: 'اطلاعات حساب', icon: UserRound },
               { id: 'email', label: 'ایمیل', icon: Mail },
               { id: 'password', label: 'رمز عبور', icon: LockKeyhole },
+              { id: 'payments', label: 'سوابق پرداخت', icon: Receipt },
             ]"
             :key="tab.id"
             class="profile-tab"
@@ -256,7 +302,7 @@ watch(
             </div>
           </form>
 
-          <form v-else id="form-password" class="profile-form" @submit.prevent="passwordSubmit.submit()">
+          <form v-else-if="activeTab === 'password'" id="form-password" class="profile-form" @submit.prevent="passwordSubmit.submit()">
             <div class="profile-tab-intro"><LockKeyhole :size="20" /><span>رمز عبور جدید باید حداقل ۸ کاراکتر باشد.</span></div>
             <div class="profile-field">
               <Label for="profile-current-password">رمز عبور فعلی</Label>
@@ -271,10 +317,95 @@ watch(
               <Input id="profile-confirm-password" v-model="confirmPassword" type="password" :loading="passwordSubmit.isSubmitting.value" required />
             </div>
           </form>
+
+          <!-- تب سوابق پرداخت -->
+          <div v-else-if="activeTab === 'payments'" class="payments-history-wrap space-y-3">
+            <div class="flex items-center justify-between pb-2 border-b border-border">
+              <span class="text-xs font-bold text-foreground">سوابق تراکنش‌ها و خریدهای شما</span>
+              <button
+                type="button"
+                class="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
+                :disabled="isLoadingPayments"
+                @click="loadPayments"
+              >
+                <RefreshCw :size="13" :class="{ 'animate-spin': isLoadingPayments }" />
+                <span>بروزرسانی</span>
+              </button>
+            </div>
+
+            <div v-if="isLoadingPayments" class="space-y-2 py-4">
+              <Skeleton class="h-16 w-full rounded-xl" />
+              <Skeleton class="h-16 w-full rounded-xl" />
+            </div>
+
+            <div v-else-if="!payments.length" class="empty-payments text-center py-12 space-y-2 text-muted-foreground">
+              <Receipt :size="36" class="mx-auto opacity-30 text-primary" />
+              <p class="text-sm font-semibold">هیچ تراکنشی یافت نشد.</p>
+              <p class="text-xs opacity-75">سوابق پرداخت‌ها و فاکتورهای شما پس از انجام خرید در این بخش نمایش داده می‌شوند.</p>
+            </div>
+
+            <div v-else class="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+              <div
+                v-for="pay in payments"
+                :key="pay.id"
+                class="payment-item p-3.5 rounded-xl border border-border bg-card/60 hover:bg-secondary/30 transition-colors space-y-2"
+              >
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-sm text-foreground">{{ pay.plan?.name || 'پلن اشتراک' }}</span>
+                    <span
+                      v-if="pay.status === 'SUCCESS'"
+                      class="px-2 py-0.5 text-[11px] font-bold rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center gap-1"
+                    >
+                      <CheckCircle2 :size="12" />
+                      <span>موفق</span>
+                    </span>
+                    <span
+                      v-else-if="pay.status === 'PENDING'"
+                      class="px-2 py-0.5 text-[11px] font-medium rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center gap-1"
+                    >
+                      <Clock :size="12" />
+                      <span>در انتظار</span>
+                    </span>
+                    <span
+                      v-else
+                      class="px-2 py-0.5 text-[11px] font-medium rounded-full bg-destructive/10 text-destructive border border-destructive/20 flex items-center gap-1"
+                    >
+                      <XCircle :size="12" />
+                      <span>ناموفق</span>
+                    </span>
+                  </div>
+
+                  <span class="font-mono text-xs font-bold text-foreground">
+                    {{ Number(pay.amount).toLocaleString('fa-IR') }} ریال
+                  </span>
+                </div>
+
+                <div class="flex items-center justify-between text-[11px] text-muted-foreground flex-wrap gap-2 pt-1 border-t border-border/50">
+                  <span class="font-mono">{{ formatIranDateTime(pay.createdAt) }}</span>
+                  <div class="flex items-center gap-3">
+                    <span v-if="pay.refId" class="font-mono" dir="ltr">کد پیگیری: {{ pay.refId }}</span>
+                    <span v-else-if="pay.authority" class="font-mono text-[10px]" dir="ltr">{{ pay.authority }}</span>
+                    <span class="opacity-75">درگاه: {{ pay.gateway === 'sandbox' ? 'سندباکس' : pay.gateway === 'free' ? 'رایگان' : pay.gateway }}</span>
+                  </div>
+                </div>
+
+                <div v-if="pay.status === 'PENDING' && pay.authority" class="pt-1">
+                  <a
+                    :href="`/sandbox-gateway?authority=${pay.authority}&amount=${pay.amount}`"
+                    class="inline-flex items-center gap-1 text-xs text-primary font-semibold hover:underline"
+                  >
+                    <span>ادامه فرایند پرداخت</span>
+                    <ExternalLink :size="12" />
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <!-- Footer مشترک برای همه تب‌ها -->
-        <div v-if="!isLoadingProfile" class="profile-modal-footer">
+        <!-- Footer مشترک برای تب‌های فرم -->
+        <div v-if="!isLoadingProfile && activeTab !== 'payments'" class="profile-modal-footer">
           <Button
             v-if="activeTab === 'profile'"
             type="submit"
@@ -293,7 +424,7 @@ watch(
             تغییر ایمیل
           </Button>
           <Button
-            v-else
+            v-else-if="activeTab === 'password'"
             type="submit"
             form="form-password"
             :loading="passwordSubmit.isSubmitting.value"
@@ -312,7 +443,7 @@ watch(
 .profile-modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 22px 24px 16px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--secondary) 38%, transparent); }
 .profile-modal-title { font-size: 18px; font-weight: 700; }
 .profile-modal-description { margin-top: 4px; color: var(--muted-foreground); font-size: 12px; }
-.profile-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 12px 20px 0; border-bottom: 1px solid var(--border); }
+.profile-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 12px 20px 0; border-bottom: 1px solid var(--border); }
 .profile-tab { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-bottom: 2px solid transparent; color: var(--muted-foreground); font-size: 13px; }
 .profile-tab:hover, .profile-tab--active { color: var(--primary); }
 .profile-tab--active { border-bottom-color: var(--primary); font-weight: 600; }
@@ -340,7 +471,7 @@ watch(
   .profile-modal-header { gap: 10px; padding: 16px; }
   .profile-modal-title { font-size: 16px; }
   .profile-modal-description { font-size: 11px; }
-  .profile-tabs { grid-template-columns: repeat(3, minmax(112px, 1fr)); overflow-x: auto; padding: 10px 12px 0; }
+  .profile-tabs { grid-template-columns: repeat(4, minmax(90px, 1fr)); overflow-x: auto; padding: 10px 12px 0; }
   .profile-tab { min-height: 40px; font-size: 11px; white-space: nowrap; }
   .profile-modal-body { padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
   .profile-skeleton, .profile-form { min-height: 360px; height: 100%; gap: 14px; }

@@ -13,6 +13,18 @@ describe('ProfileMenu', () => {
     expect(wrapper.emitted('openProfile')).toHaveLength(1)
   })
 
+  it('emits openPayments when the payment history item is selected', async () => {
+    setActivePinia(createPinia())
+    const wrapper = mount(ProfileMenu)
+
+    const menuItems = wrapper.findAll('[role="menuitem"]')
+    const paymentsItem = menuItems.find((w) => w.text().includes('سوابق پرداخت'))
+    expect(paymentsItem).toBeDefined()
+    await paymentsItem!.trigger('click')
+
+    expect(wrapper.emitted('openPayments')).toHaveLength(1)
+  })
+
   it('shows the quota snapshot for the current session user', async () => {
     setActivePinia(createPinia())
     const { useAuthStore } = await import('../src/stores/auth')

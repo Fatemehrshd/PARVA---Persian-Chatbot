@@ -35,15 +35,16 @@ const sortBy = ref<string | undefined>(undefined)
 const sortOrder = ref<'ASC' | 'DESC' | undefined>(undefined)
 const columnFilters = ref<Record<string, string>>({})
 const tableSearchQuery = ref(props.searchQuery || '')
+const searchField = ref('')
 
 const isDetailModalOpen = ref(false)
 const inspectingFile = ref<AdminFileDetail | null>(null)
 const isRetrying = ref(false)
 
 const fileColumns: TableColumn[] = [
-  { key: 'name', label: 'نام فایل و فرمت', width: '250px', sortable: true },
-  { key: 'user', label: 'کاربر', width: '200px', sortable: true },
-  { key: 'size', label: 'حجم فایل', width: '120px', sortable: true },
+  { key: 'originalName', label: 'نام فایل و فرمت', width: '250px', sortable: true },
+  { key: 'user.displayName', label: 'کاربر', width: '200px', sortable: true },
+  { key: 'fileSize', label: 'حجم فایل', width: '120px', sortable: true },
   { key: 'status', label: 'وضعیت پردازش', width: '130px', sortable: true },
   { key: 'createdAt', label: 'زمان آپلود', width: '160px', sortable: true },
   { key: 'actions', label: 'عملیات', align: 'center', width: '120px', sortable: false },
@@ -101,6 +102,7 @@ async function loadFilesData() {
       userId: props.userFilter?.id,
     }
     if (combinedSearch) params.search = combinedSearch
+    if (searchField.value) params.searchField = searchField.value
     if (sortBy.value) {
       params.sortBy = sortBy.value
       params.sortOrder = sortOrder.value
@@ -148,8 +150,9 @@ function handlePageSizeChange(newSize: number) {
   loadFilesData()
 }
 
-function handleSearch(query: string) {
+function handleSearch(query: string, field?: string) {
   tableSearchQuery.value = query
+  searchField.value = field || ''
   page.value = 1
   loadFilesData()
 }
@@ -323,6 +326,11 @@ onMounted(loadFilesData)
       :totalItems="totalItems"
       :pageSizes="[10, 25, 50, 100]"
       :searchQuery="tableSearchQuery"
+      :searchFields="[
+        { key: 'originalName', label: 'نام فایل' },
+        { key: 'user.email', label: 'ایمیل کاربر' },
+        { key: 'user.displayName', label: 'نام کاربر' },
+      ]"
       @update:page="handlePageChange"
       @update:pageSize="handlePageSizeChange"
       @search="handleSearch"

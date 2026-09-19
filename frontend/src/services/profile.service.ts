@@ -11,6 +11,25 @@ export const profileService = {
     return resolveAvatarUrl(await request<UserProfile>('/users/me'))
   },
 
+  async getThemePreference(): Promise<'dark' | 'light' | null> {
+    // Tolerate both shapes: the documented `{ preference }` envelope and the
+    // legacy bare-string response some deployments may still serve.
+    const res = await request<'dark' | 'light' | { preference: 'dark' | 'light' | null }>(
+      '/users/me/theme'
+    )
+    if (typeof res === 'string') {
+      return res === 'dark' ? 'dark' : 'light'
+    }
+    return res?.preference ?? null
+  },
+
+  async updateThemePreference(preference: 'dark' | 'light' | null): Promise<UserProfile> {
+    return resolveAvatarUrl(await request<UserProfile>('/users/me/theme', {
+      method: 'PATCH',
+      body: JSON.stringify({ preference: preference ?? null }),
+    }))
+  },
+
   async updateProfile(payload: UpdateProfileRequest): Promise<UserProfile> {
     return resolveAvatarUrl(await request<UserProfile>('/users/me', {
       method: 'PATCH',

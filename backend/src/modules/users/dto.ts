@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEmail, MinLength, Matches, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsEmail, MinLength, Matches, MaxLength, IsIn } from 'class-validator';
 import { FA } from '../../shared/messages.fa';
 
 export class UpdateProfileDto {
@@ -29,4 +29,10 @@ export class ChangePasswordDto {
   @IsString({ message: FA.passwordRequired })
   @MinLength(8, { message: FA.passwordMin })
   newPassword: string;
+}
+
+export class UpdateThemePreferenceDto {
+  @IsOptional()
+  @IsIn(['dark', 'light'], { message: 'تم نامعتبر است' })
+  preference?: 'dark' | 'light' | null;
 }

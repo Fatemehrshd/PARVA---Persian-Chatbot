@@ -541,7 +541,6 @@ onUnmounted(() => {
           :class="['composer-textarea', inputDirection]"
           :dir="inputDirection"
           :placeholder="chatStore.isTokenLimitExceeded || authStore.quota?.blocked ? 'توکن مصرفی شما به پایان رسید' : 'پیام خود را بنویسید...'"
-          :disabled="chatStore.isTokenLimitExceeded || authStore.quota?.blocked"
           rows="1"
           @focus="isFocused = true; updateDirection()"
           @blur="isFocused = false"

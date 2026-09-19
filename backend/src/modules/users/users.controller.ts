@@ -21,7 +21,7 @@ import { MAX_AVATAR_BYTES } from './profile.service';
 import { StorageService } from '../storage/storage.service';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { CurrentUser } from '../../shared/current-user.decorator';
-import { UpdateProfileDto, ChangeEmailDto, ChangePasswordDto } from './dto';
+import { UpdateProfileDto, ChangeEmailDto, ChangePasswordDto, UpdateThemePreferenceDto } from './dto';
 import { QuotaInterceptor } from '../../shared/response-envelope.interceptor';
 
 @UseGuards(JwtAuthGuard)
@@ -33,6 +33,16 @@ export class UsersController {
   @Get()
   getProfile(@CurrentUser() user: any) {
     return this.profile.getProfile(user.sub);
+  }
+
+  @Get('theme')
+  getThemePreference(@CurrentUser() user: any) {
+    return this.profile.getThemePreference(user.sub);
+  }
+
+  @Patch('theme')
+  updateThemePreference(@CurrentUser() user: any, @Body() d: UpdateThemePreferenceDto) {
+    return this.profile.updateThemePreference(user.sub, d.preference ?? null);
   }
 
   @Patch()

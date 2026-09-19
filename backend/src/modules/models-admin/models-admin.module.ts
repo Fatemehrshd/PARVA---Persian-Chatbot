@@ -3,6 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { AiModel } from './ai-model.entity';
 import { AiProvider } from './ai-provider.entity';
+import { PlanModel } from '../subscriptions/plan-model.entity';
+import { SubscriptionPlan } from '../subscriptions/subscription-plan.entity';
 import { ModelsAdminService } from './models-admin.service';
 import { ModelsAdminController } from './models-admin.controller';
 import { ModelsController } from './models.controller';
@@ -17,7 +19,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([AiModel, AiProvider]),
+    TypeOrmModule.forFeature([AiModel, AiProvider, PlanModel, SubscriptionPlan]),
     JwtModule.register({ secret: process.env.JWT_SECRET ?? 'dev-secret' }),
     AiModule,
     // SettingsService supplies the role → model-access map used to filter models.

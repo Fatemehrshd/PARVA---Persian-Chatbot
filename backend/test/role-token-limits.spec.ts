@@ -47,6 +47,35 @@ describe('Role-based token limits', () => {
       expect(fixture.userRow.periodUsedMessages).toBe(1);
       expect(fixture.userRow.usageByType.image).toBe(300);
     });
+
+    it('refreshes the quota reset timestamp after a lazy period reset', async () => {
+      const user = {
+        id: 'u1',
+        role: 'user',
+        periodStart: new Date(Date.now() - 7 * 3600_000),
+        periodUsedTokens: 500,
+        periodUsedMessages: 9,
+      };
+      const users = makeUsersService(user);
+      const settings: any = {
+        getRoleQuotas: async () => ({ user: { tokenLimit: 1000, messageLimit: 10, resetHours: 6 } }),
+        getGlobalTokenLimit: async () => 0,
+      };
+      const chat = new ChatService(
+        {} as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        settings,
+        users.service,
+      );
+
+      const state = await chat.getQuotaState('u1');
+
+      expect(user.periodUsedTokens).toBe(0);
+      expect(user.periodUsedMessages).toBe(0);
+      expect(new Date(state.resetAt).getTime()).toBeGreaterThan(Date.now());
+    });
   });
 
   describe('resolveEffectiveTokenLimit (personal > role > global)', () => {
@@ -209,6 +238,8 @@ describe('Role-based token limits', () => {
       };
       const convRepo: any = {
         findOne: async () => ({ id: 'c1', userId: 'u1', modelId: 'm1' }),
+        create: (dto: any) => dto,
+        save: async (dto: any) => dto,
       };
       const msgRepo: any = {
         count: async () => 1,
@@ -270,7 +301,7 @@ describe('Role-based token limits', () => {
       await expect(gen.next()).rejects.toThrow('سقف مجاز مصرف توکن به پایان رسیده است');
     });
 
-    it('reports the display percentage from lifetime usage like the admin users table', async () => {
+    it('reports the remaining percentage from current-period usage after a reset', async () => {
       const user = {
         id: 'u1',
         role: 'user',
@@ -285,7 +316,7 @@ describe('Role-based token limits', () => {
         getSystemPrompt: async () => 'p',
       };
       const state = await buildChatService(user, settings).getQuotaState('u1');
-      expect(state.remainingPercent).toBe(71);
+      expect(state.remainingPercent).toBe(100);
     });
 
     it('personal token limit overrides role quota and blocks when exhausted', async () => {
@@ -308,6 +339,18 @@ describe('Role-based token limits', () => {
       };
       const gen = buildChatService(user, settings).generate('u1', 'c1', 'Hello');
       await expect(gen.next()).rejects.toThrow('سقف تعداد پیام‌های شما در این دوره پر شده است');
+    });
+
+    it('blocks creating a conversation when the personal token quota is exhausted', async () => {
+      const user = { id: 'u1', role: 'user', tokenLimit: 20, usedTokens: 20 };
+      const settings: any = {
+        getRoleQuotas: async () => ({ user: { tokenLimit: 100000, messageLimit: null, resetHours: 6 } }),
+        getGlobalTokenLimit: async () => 100000,
+      };
+
+      await expect(buildChatService(user, settings).create('u1', 'm1')).rejects.toThrow(
+        'سقف مجاز مصرف توکن به پایان رسیده است',
+      );
     });
   });
 });

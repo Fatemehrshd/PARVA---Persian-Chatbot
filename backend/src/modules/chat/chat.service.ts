@@ -159,6 +159,11 @@ export class ChatService {
   }
 
   async create(userId: string, modelId?: string, title?: string) {
+    if (typeof this.users?.findById === 'function') {
+      const user = await this.users.findById(userId);
+      if (user) await this.assertQuota(user);
+    }
+
     // If user's latest conversation is empty (has 0 messages), reuse it instead of creating a duplicate.
     // Soft-deleted conversations must never be reused — sending to them would 404 (assertOwned
     // filters isDeleted), which is exactly the "delete a chat then send → 404" bug.
@@ -455,6 +460,9 @@ export class ChatService {
     const quota = await this.resolveQuota(user);
     if (quota.isAdmin) return;
     if (typeof this.users?.syncPeriod === 'function') await this.users.syncPeriod(user, quota.resetHours);
+    quota.resetAt = quota.resetHours > 0 && user.periodStart
+      ? new Date(new Date(user.periodStart).getTime() + quota.resetHours * 3600_000)
+      : null;
     const usedTokens = user.periodUsedTokens ?? user.usedTokens ?? 0;
     const usedMessages = user.periodUsedMessages || 0;
     if (quota.tokenLimit > 0 && usedTokens >= quota.tokenLimit) {
@@ -487,8 +495,10 @@ export class ChatService {
     }
     const quota = await this.resolveQuota(user);
     if (typeof this.users?.syncPeriod === 'function') await this.users.syncPeriod(user, quota.resetHours);
+    quota.resetAt = quota.resetHours > 0 && user.periodStart
+      ? new Date(new Date(user.periodStart).getTime() + quota.resetHours * 3600_000)
+      : null;
     const usedTokens = user.periodUsedTokens ?? user.usedTokens ?? 0;
-    const displayUsedTokens = user.usedTokens ?? usedTokens;
     const usedMessages = user.periodUsedMessages || 0;
     const blockedTokens = !quota.isAdmin && quota.tokenLimit > 0 && usedTokens >= quota.tokenLimit;
     const blockedMessages = !quota.isAdmin && !!quota.messageLimit && quota.messageLimit > 0 && usedMessages >= quota.messageLimit;
@@ -497,11 +507,11 @@ export class ChatService {
     if (quota.isAdmin) {
       remainingPercent = null;
     } else if (quota.tokenLimit > 0 && quota.messageLimit && quota.messageLimit > 0) {
-      const tokenPct = Math.max(0, Math.min(100, Math.round(((quota.tokenLimit - displayUsedTokens) / quota.tokenLimit) * 100)));
+      const tokenPct = Math.max(0, Math.min(100, Math.round(((quota.tokenLimit - usedTokens) / quota.tokenLimit) * 100)));
       const msgPct = Math.max(0, Math.min(100, Math.round(((quota.messageLimit - usedMessages) / quota.messageLimit) * 100)));
       remainingPercent = Math.min(tokenPct, msgPct);
     } else if (quota.tokenLimit > 0) {
-      remainingPercent = Math.max(0, Math.min(100, Math.round(((quota.tokenLimit - displayUsedTokens) / quota.tokenLimit) * 100)));
+      remainingPercent = Math.max(0, Math.min(100, Math.round(((quota.tokenLimit - usedTokens) / quota.tokenLimit) * 100)));
     } else if (quota.messageLimit && quota.messageLimit > 0) {
       remainingPercent = Math.max(0, Math.min(100, Math.round(((quota.messageLimit - usedMessages) / quota.messageLimit) * 100)));
     }

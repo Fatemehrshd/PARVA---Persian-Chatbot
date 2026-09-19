@@ -972,8 +972,12 @@ export const useChatStore = defineStore('chat', () => {
   // ─── Send message ──────────────────────────────────────────────────────────
   async function sendMessage(content: string, files?: FileAttachmentItem[], opts?: { useWebSearch?: boolean; useThinking?: boolean }) {
     if (isTokenLimitExceeded.value) {
-      uiStore.showToast('توکن مصرفی شما به پایان رسید', 'error')
-      return
+      await authStore.refreshQuota()
+      if (authStore.quota.blocked) {
+        uiStore.showToast('توکن مصرفی شما به پایان رسید', 'error')
+        return
+      }
+      isTokenLimitExceeded.value = false
     }
 
     if (!content.trim() && (!files || files.length === 0)) return
@@ -1050,6 +1054,7 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     // If conversation is a local placeholder, persist it to backend
+    let createError: string | null = null
     if (convId.startsWith('c-')) {
       try {
         const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
@@ -1077,8 +1082,10 @@ export const useChatStore = defineStore('chat', () => {
           }
           convId = created.id
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn('Could not persist conversation to backend before streaming:', err)
+        // پیام واقعی سرور (مثلاً «به این مدل دسترسی ندارید») را نگه می‌داریم تا به کاربر نشان دهیم
+        createError = err?.message || null
       }
     }
 
@@ -1090,9 +1097,9 @@ export const useChatStore = defineStore('chat', () => {
       const s = ensureState(convId)
       s.isStreaming = false
       s.isThinking = false
-      s.streamError = 'خطا در ایجاد گفتگو روی سرور — دوباره تلاش کنید'
+      s.streamError = createError || 'خطا در ایجاد گفتگو روی سرور — دوباره تلاش کنید'
       convStreamStates.value.set(convId, { ...s })
-      uiStore.showToast('خطا در ایجاد گفتگو روی سرور — دوباره تلاش کنید', 'error')
+      uiStore.showToast(createError || 'خطا در ایجاد گفتگو روی سرور — دوباره تلاش کنید', 'error')
       return
     }
 

@@ -3,6 +3,9 @@
 Welcome to the project documentation wiki.
 
 ## Navigation
+- [Onboarding Guide — Full Backend & Frontend Conventions](onboarding-guide.md)
+- [NestJS Backend Guide — Principles, Patterns & Decisions](backend-nestjs-guide.md)
+- [Frontend Guide — Vue 3, shadcn-vue & Tailwind Principles](frontend-guide.md)
 - [Getting Started](getting-started.md)
 - [Architecture Overview](architecture.md)
 - [API Architecture & Technical Reference](api-reference.md)

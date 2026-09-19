@@ -322,7 +322,7 @@ onMounted(loadSettings)
           </div>
         </div>
 
-        <AdminTable :columns="roleColumns" :items="roleRows" emptyText="نقشی برای نمایش یافت نشد.">
+        <AdminTable :columns="roleColumns" :items="roleRows" searchable emptyText="نقشی برای نمایش یافت نشد.">
           <template #row="{ item }">
             <!-- نقش -->
             <td data-label="نقش">

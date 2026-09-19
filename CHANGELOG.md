@@ -9,7 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Dark theme no longer reset to light on page refresh (رفع بازگشت تم تیره به روشن بعد از رفرش)**: `GET /users/me/theme` returned the raw value (e.g. `"dark"`) while the client read `.preference` from it, so every refresh silently resolved the preference to `null` (→ light default). The backend now returns the documented `{ preference }` envelope, and the frontend parser tolerates both the envelope and the legacy bare-string shape. Covered by new tests in `backend/test/profile.spec.ts` and `frontend/tests/ThemePerUser.spec.ts`.
+- Theme behavior hardened (رفع مشکلات تم):
+  - The login page (`/login`) now **always renders in the light theme** via a view-local `authPageLightMode` override in the `ui` store — never persisted to `localStorage` or the backend, and a signed-in user's theme is restored as soon as they leave the page.
+  - Per-user theme is now guaranteed to be **independent per user and stable across page refreshes**: the backend preference (`GET /users/me/theme`) re-syncs on every refresh, and login/logout reset the session theme to the global default (light) so one user's preference never leaks to another.
+  - The default theme for any user without an explicit preference is **light**, even when stale `localStorage` state says otherwise. Covered by new behavioral tests in `frontend/tests/ThemePerUser.spec.ts`.
+- Admin table search and filtering now support selected fields, nested values, column-filter controls, and server-side field mapping across users, models, providers, chats, files, subscriptions, payments, and coupons.
+- Payment admin search now accepts nested fields such as `user.email`, `plan.name`, `refId`, and `authority`, and sends the correct `searchField` parameter to the backend.
+- Coupon admin search remains aligned with the server-side `search` and `isActive` filters, preserving the status filter while searching by code or description.
+- User-facing model visibility now follows explicit `plan_models` assignments. Free users no longer see or use public models outside the free plan, while admins retain full access.
+- Selecting a platform default model automatically links it to the free plan, including a migration backfill for the existing default model.
+
 ### Added
+- **Per-User Theme Preference (تم اختصاصی به ازای هر کاربر)**:
+  - Backend: `themePreference` column on `users`, `GET /users/me/theme` and `PATCH /users/me/theme` endpoints, migration `1762400000000-AddUserThemePreference.ts`.
+  - Frontend: `ui` store gains `userThemePreference` and computed `effectiveTheme`; theme selection in `SettingsModal.vue` and `ProfileMenu.vue` now persists per-user on the backend and takes priority over the local `localStorage` setting. Default theme for all users is Light.
+  - Tests: `SettingsModal.spec.ts` updated to assert per-user preference persistence.
 - **Zarinpal Sandbox Payment Gateway & Discount Code System (درگاه پرداخت زرین‌پال سندباکس و سیستم کدهای تخفیف)**:
   - **Payment Verification & Locking Fix (`backend/src/modules/payments/payments.service.ts`)**:
     - Fixed PostgreSQL `QueryFailedError: FOR UPDATE cannot be applied to the nullable side of an outer join` by switching from `paymentRepo.findOne` to `paymentRepo.createQueryBuilder('p').where('p.authority = :authority').setLock('pessimistic_write').getOne()`.

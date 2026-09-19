@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
@@ -17,6 +17,13 @@ const authStore = useAuthStore()
 const uiStore = useUiStore()
 
 const { activeLogo } = useThemeLogo()
+
+// The login page must always render in the light theme, no matter what theme
+// any user (or a previous session) left behind. The override is view-local:
+// it is not persisted anywhere, and leaving this page restores the session's
+// own theme untouched (including a signed-in user's backend preference).
+onMounted(() => uiStore.setAuthPageLightMode(true))
+onUnmounted(() => uiStore.setAuthPageLightMode(false))
 
 const isSignup = ref(false)
 const email = ref('')

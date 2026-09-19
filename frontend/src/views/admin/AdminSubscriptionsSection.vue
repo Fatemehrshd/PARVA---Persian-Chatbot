@@ -21,8 +21,8 @@ const isCancelModalOpen = ref(false)
 const cancellingSub = ref<Subscription | null>(null)
 
 const columns: TableColumn[] = [
-  { key: 'user', label: 'کاربر (نام و ایمیل)', width: '240px', sortable: true },
-  { key: 'plan', label: 'طرح اشتراک', width: '160px', sortable: true, align: 'center' },
+  { key: 'user.displayName', label: 'کاربر (نام و ایمیل)', width: '240px', sortable: true },
+  { key: 'plan.name', label: 'طرح اشتراک', width: '160px', sortable: true, align: 'center' },
   { key: 'status', label: 'وضعیت', width: '120px', sortable: true, align: 'center' },
   { key: 'dates', label: 'دوره اعتبار', width: '200px', sortable: false, align: 'center' },
   { key: 'source', label: 'نحوه تخصیص', width: '130px', align: 'center' },
@@ -111,6 +111,14 @@ function formatDate(iso?: string | null): string {
         v-else
         :columns="columns"
         :items="subscriptions"
+        searchable
+        :search-fields="[
+          { key: 'user.displayName', label: 'نام کاربر' },
+          { key: 'user.email', label: 'ایمیل کاربر' },
+          { key: 'plan.name', label: 'نام طرح' },
+          { key: 'status', label: 'وضعیت' },
+          { key: 'source', label: 'نحوه تخصیص' },
+        ]"
         paginated
         :page-size="10"
         :page-sizes="[10, 25, 50]"

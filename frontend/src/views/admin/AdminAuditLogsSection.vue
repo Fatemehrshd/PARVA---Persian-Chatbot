@@ -85,6 +85,7 @@ function formatDate(iso?: string): string {
         v-else
         :columns="columns"
         :items="logs"
+        searchable
         empty-text="هیچ لاگی ثبت نشده است."
       >
         <template #row="{ item: log }">

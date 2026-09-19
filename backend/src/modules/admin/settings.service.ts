@@ -99,6 +99,34 @@ export function resolveEffectiveMessageLimit(
   return null;
 }
 
+/**
+ * درصد باقی‌مانده مؤثر کاربر: اگر هم سقف توکن و هم سقف پیام فعال باشد،
+ * مینیمم هر دو در نظر گرفته می‌شود (مطابق getQuotaState سایدبار) تا پنل
+ * ادمین و سایدبار همیشه عدد یکسانی نشان دهند. بدون هیچ سقفی → null (نامحدود).
+ */
+export function computeRemainingPercent(
+  user: {
+    periodUsedTokens?: number;
+    periodUsedMessages?: number;
+    usedTokens?: number;
+    usedMessages?: number;
+  },
+  tokenLimit: number | null,
+  messageLimit: number | null,
+): number | null {
+  const usedTokens = Number(user.periodUsedTokens ?? user.usedTokens ?? 0);
+  const usedMessages = Number(user.periodUsedMessages ?? user.usedMessages ?? 0);
+  const pcts: number[] = [];
+  if (tokenLimit && tokenLimit > 0) {
+    pcts.push(Math.max(0, Math.min(100, Math.round(((tokenLimit - usedTokens) / tokenLimit) * 100))));
+  }
+  if (messageLimit && messageLimit > 0) {
+    pcts.push(Math.max(0, Math.min(100, Math.round(((messageLimit - usedMessages) / messageLimit) * 100))));
+  }
+  if (pcts.length === 0) return null;
+  return Math.min(...pcts);
+}
+
 const ACCESS_LEVELS: ModelAccessLevelName[] = ['public', 'commercial', 'private'];
 
 /**

@@ -54,22 +54,22 @@ describe('AdminModelsView.vue (Dashboard)', () => {
     expect(wrapper.text()).toContain('کاربران')
   })
 
-  it('filters models using the search box with 3s debounce and confirms no search on dashboard', async () => {
+  it('filters models using the table search box and confirms no header search on dashboard', async () => {
     const wrapper = mount(AdminModelsView)
 
-    // Search bar is removed from Dashboard per user request
+    // Header search is removed from Dashboard per user request
     expect(wrapper.find('.search-input').exists()).toBe(false)
 
     // Switch to models section where search is available
     await wrapper.find('[data-admin-section="models"]').trigger('click')
+    await flushPromises()
+    await wrapper.vm.$nextTick()
 
-    const searchInput = wrapper.find('.search-input')
+    const searchInput = wrapper.find('.search-text-input')
     expect(searchInput.exists()).toBe(true)
 
     vi.useFakeTimers()
     await searchInput.setValue('gpt')
-    await vi.advanceTimersByTimeAsync(3000)
-    // AdminTable's own 250ms search debounce fires after the parent's 3s one
     await vi.advanceTimersByTimeAsync(250)
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()

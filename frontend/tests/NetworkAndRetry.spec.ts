@@ -10,6 +10,14 @@ vi.mock('../src/services/chat.service', () => ({
   chatService: {
     listConversations: vi.fn().mockResolvedValue([]),
     getMessages: vi.fn().mockResolvedValue([]),
+    getQuota: vi.fn().mockResolvedValue({
+      blocked: false,
+      reason: null,
+      remainingTokens: 100,
+      remainingMessages: 10,
+      remainingPercent: 100,
+      resetAt: null,
+    }),
     sendMessageStream: vi.fn().mockImplementation((id, content, onToken, onDone) => {
       onToken('chunk1')
       onDone('msg-done-123')
@@ -29,6 +37,7 @@ vi.mock('../src/services/api', async (importOriginal) => {
 describe('Network Resilience and Recovery Actions', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    vi.clearAllMocks()
   })
 
   it('NetworkStatusBanner shows offline indicator when offline and hides when online', async () => {
@@ -53,6 +62,18 @@ describe('Network Resilience and Recovery Actions', () => {
     expect(chatStore.lastUserPrompt).toBe('Hello PARVA')
     expect(typeof chatStore.retryLastMessage).toBe('function')
     expect(typeof chatStore.continueLastMessage).toBe('function')
+  })
+
+  it('refreshes quota before blocking a send after a previous quota error', async () => {
+    const chatStore = useChatStore()
+    chatStore.currentConversationId = 'conv-reset'
+    chatStore.isTokenLimitExceeded = true
+
+    await chatStore.sendMessage('سلام')
+
+    const { chatService } = await import('../src/services/chat.service')
+    expect(chatService.getQuota).toHaveBeenCalled()
+    expect(chatService.sendMessageStream).toHaveBeenCalled()
   })
 
   it('stopStreaming interrupts active stream and saves partial text with isInterrupted flag', () => {

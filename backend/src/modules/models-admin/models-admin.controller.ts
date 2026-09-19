@@ -31,7 +31,7 @@ export class ModelsAdminController {
     }
     const result = ApiFeatures.applyToArray(all, query, {
       searchableFields: ['name', 'provider', 'apiIdentifier'],
-      allowedFilterFields: ['provider', 'isActive'],
+      allowedFilterFields: ['name', 'provider', 'apiIdentifier', 'accessLevel', 'isActive'],
     });
     if (query.page || query.limit) {
       return result;

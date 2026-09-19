@@ -133,8 +133,8 @@ function handleOpenSubscription() {
       <button class="menu-item" role="menuitem" @click="emit('openSettings')">
         <Palette :size="15" class="menu-icon text-primary" />
         <span class="menu-label">شخصی‌سازی و تم</span>
-        <span class="theme-badge" :title="uiStore.theme === 'dark' ? 'حالت تیره' : 'حالت روشن'">
-          <Moon v-if="uiStore.theme === 'dark'" :size="12" />
+        <span class="theme-badge" :title="uiStore.effectiveTheme === 'dark' ? 'حالت تیره' : 'حالت روشن'">
+          <Moon v-if="uiStore.effectiveTheme === 'dark'" :size="12" />
           <Sun v-else :size="12" />
         </span>
       </button>

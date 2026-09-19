@@ -19,6 +19,8 @@ export interface UserEntitlements {
   effectiveTokenLimit: number | null;
   effectiveMessageLimit: number | null;
   limitSource: 'personal' | 'plan' | 'role' | 'global' | 'admin';
+  subscriptionExpired: boolean;
+  expiredPlanName: string | null;
   features: {
     webSearch: boolean;
     thinking: boolean;
@@ -59,6 +61,8 @@ export class EntitlementService {
         effectiveTokenLimit: null,
         effectiveMessageLimit: null,
         limitSource: 'admin',
+        subscriptionExpired: false,
+        expiredPlanName: null,
         features: {
           webSearch: true,
           thinking: true,
@@ -73,6 +77,12 @@ export class EntitlementService {
     const activeSub = await this.subscriptionsService.getActiveSubscription(userId);
     let plan = activeSub?.plan ?? null;
     const hasActiveSubscription = !!activeSub;
+    const latestSubscription = !activeSub
+      ? (await this.subscriptionsService.getUserHistory(userId))[0]
+      : null;
+    const expiredSubscription = latestSubscription?.status === SubscriptionStatus.EXPIRED
+      ? latestSubscription
+      : null;
 
     if (!plan) {
       plan = await this.plansService.findDefaultPlan();
@@ -122,15 +132,10 @@ export class EntitlementService {
 
     // Allowed model IDs
     let allowedModelIds: string[] | null = null;
-    if (plan?.planModels) {
-      const planAssignedModelIds = plan.planModels.map((pm) => pm.modelId);
-      // Public models are always accessible
-      const publicModels = await this.modelRepo.find({
-        where: { accessLevel: 'public', isDeleted: false, isActive: true },
-        select: ['id'],
-      });
-      const publicIds = publicModels.map((m) => m.id);
-      allowedModelIds = Array.from(new Set([...planAssignedModelIds, ...publicIds]));
+    if (plan) {
+      // A user's plan is the source of truth for model visibility. A model
+      // being public no longer bypasses the plan's explicit model selection.
+      allowedModelIds = Array.from(new Set((plan.planModels || []).map((pm) => pm.modelId)));
     }
 
     return {
@@ -142,6 +147,8 @@ export class EntitlementService {
       effectiveTokenLimit,
       effectiveMessageLimit,
       limitSource,
+      subscriptionExpired: !!expiredSubscription,
+      expiredPlanName: expiredSubscription?.plan?.name ?? null,
       features,
       allowedModelIds,
     };
@@ -163,6 +170,11 @@ export class EntitlementService {
       );
     }
 
+    const entitlements = await this.getUserEntitlements(user.id);
+    if (entitlements.allowedModelIds !== null) {
+      return entitlements.allowedModelIds.includes(model.id);
+    }
+
     // 2. Check if this model is assigned to any active, paid subscription plan(s)
     const planModels = await this.planModelRepo.find({
       where: { modelId: model.id },
@@ -174,7 +186,9 @@ export class EntitlementService {
       .filter((p) => p && p.isActive && !p.isDeleted && !p.isDefault && Number(p.price) > 0);
 
     if (activePaidPlansWithModel.length > 0) {
-      // Model is tied to paid plan(s): User MUST have an active subscription to one of them
+      // پلنِ جاری خود کاربر (مثلاً پلن پایه/پیش‌فرض) ممکن است همین مدل را grant کرده باشد؛
+      // در آن صورت نباید به اشتراک پولی نیاز باشد — grant پلن جاری ملاک است.
+      // مدل فقط به پلن‌های پولی وصل است و پلن کاربر آن را grant نکرده: اشتراک فعال لازم است
       const activeSub = await this.subscriptionsService.getActiveSubscription(user.id);
       if (!activeSub || activeSub.status !== SubscriptionStatus.ACTIVE) {
         return false;

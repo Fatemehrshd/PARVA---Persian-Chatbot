@@ -57,7 +57,7 @@ export function useThemeLogo(): UseThemeLogoReturn {
   const uiStore = useUiStore()
 
   const activeLogo = computed(() => {
-    if (uiStore.theme === 'dark') {
+    if (uiStore.effectiveTheme === 'dark') {
       return darkLogoUrl ?? logoFallback
     }
     return lightLogoUrl ?? logoFallback

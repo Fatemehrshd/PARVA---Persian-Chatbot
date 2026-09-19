@@ -22,6 +22,7 @@ import { JwtAuthGuard } from '../src/shared/jwt-auth.guard';
 import { AdminGuard } from '../src/shared/admin.guard';
 import { HttpExceptionFilter } from '../src/shared/http-exception.filter';
 import { ResponseEnvelopeInterceptor } from '../src/shared/response-envelope.interceptor';
+import { EntitlementService } from '../src/modules/subscriptions/entitlement.service';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 
 describe('Admin Panel Suite', () => {
@@ -234,6 +235,8 @@ describe('Admin Panel Suite', () => {
         isActive: true,
         avatarUrl: null,
         usedTokens: 800,
+        periodUsedTokens: 800,
+        periodUsedMessages: 50,
         conversationsCount: 5,
         createdAt: new Date(),
       },
@@ -257,6 +260,32 @@ describe('Admin Panel Suite', () => {
         const idx = fakeUsers.findIndex((x) => x.id === id);
         if (idx < 0) throw new NotFoundException('User not found');
         fakeUsers.splice(idx, 1);
+      },
+    };
+
+    // شبیه‌سازی رفتار واقعی entitlements: مدیر نامحدود، کاربر عادی از role limits ارث می‌برد.
+    const fakeEntitlementService = {
+      getUserEntitlements: async (userId: string) => {
+        if (userId === 'admin-id') {
+          return {
+            userId,
+            role: 'admin',
+            isAdmin: true,
+            effectiveTokenLimit: null,
+            effectiveMessageLimit: null,
+            limitSource: 'admin',
+            planName: 'سازمانی (مدیر)',
+          };
+        }
+        return {
+          userId,
+          role: 'user',
+          isAdmin: false,
+          effectiveTokenLimit: 900,
+          effectiveMessageLimit: null,
+          limitSource: 'role',
+          planName: null,
+        };
       },
     };
 
@@ -342,6 +371,7 @@ describe('Admin Panel Suite', () => {
         providers: [
           { provide: SettingsService, useValue: fakeSettingsService },
           { provide: UsersService, useValue: fakeUsersService },
+          { provide: EntitlementService, useValue: fakeEntitlementService },
           { provide: ModelsAdminService, useValue: fakeModelsService },
           { provide: 'UserRepository', useValue: fakeRepos.users },
           { provide: 'AiModelRepository', useValue: fakeRepos.models },
@@ -429,12 +459,29 @@ describe('Admin Panel Suite', () => {
         .get('/admin/users')
         .set('Authorization', 'Bearer token');
       expect(res.status).toBe(200);
-      // admin: بدون سقف اختصاصی، نقش admin در فیک سقفی ندارد → سراسری 1000
+      // admin: در رفتار واقعی (entitlements) مدیر نامحدود است → null
       const adminRow = res.body.data.find((u: any) => u.id === 'admin-id');
-      expect(adminRow.effectiveTokenLimit).toBe(1000);
+      expect(adminRow.effectiveTokenLimit).toBeNull();
       // user: بدون سقف اختصاصی، سقف نقش user = 900 → 900 (نه سراسری)
       const userRow = res.body.data.find((u: any) => u.id === 'user-id');
       expect(userRow.effectiveTokenLimit).toBe(900);
+    });
+
+    it('GET /admin/users returns remainingPercent as min(token%, message%)', async () => {
+      currentUserRole = 'admin';
+      const res = await request(app.getHttpServer())
+        .get('/admin/users')
+        .set('Authorization', 'Bearer token');
+      expect(res.status).toBe(200);
+
+      // user-id: periodUsedTokens=800, role user tokenLimit=900 → tokenPct=round((900-800)/900*100)=11
+      // effectiveMessageLimit از entitlements fallback نمی‌آید (فیک null) → فقط توکن ملاک است
+      const userRow = res.body.data.find((u: any) => u.id === 'user-id');
+      expect(userRow.remainingPercent).toBe(11);
+
+      // admin-id: بدون سقف (فیک) → نامحدود → null
+      const adminRow = res.body.data.find((u: any) => u.id === 'admin-id');
+      expect(adminRow.remainingPercent).toBeNull();
     });
 
     it('PATCH /admin/users/:id updates user details and role', async () => {

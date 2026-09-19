@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import AdminModal from '../AdminModal.vue'
 import BaseButton from '../../ui/BaseButton.vue'
 import { modelsService } from '../../../services/models.service'
+import { subscriptionService } from '../../../services/subscription.service'
 import type { SubscriptionPlan, Model as AiModel } from '../../../types'
 
 const props = defineProps<{
@@ -95,21 +96,30 @@ function toggleProvider(prov: string) {
 }
 
 watch(
-  () => props.plan,
-  (p) => {
-    if (p) {
-      const selectedModelIds = p.planModels ? p.planModels.map((pm) => pm.modelId) : []
+  [() => props.open, () => props.plan],
+  async ([isOpen, p]) => {
+    if (!isOpen) return
+    let currentPlan = p
+    if (p?.id) {
+      try {
+        currentPlan = await subscriptionService.getPlan(p.id)
+      } catch {
+        // Keep the list item as a fallback when the refresh is unavailable.
+      }
+    }
+    if (currentPlan) {
+      const selectedModelIds = currentPlan.planModels ? currentPlan.planModels.map((pm) => pm.modelId) : []
       form.value = {
-        name: p.name || '',
-        slug: p.slug || '',
-        description: p.description || '',
-        price: Number(p.price || 0),
-        durationDays: p.durationDays ?? 30,
-        tokenQuota: p.tokenQuota ?? 0,
-        messageQuota: p.messageQuota ?? null,
-        resetHours: p.resetHours ?? 6,
-        isActive: p.isActive ?? true,
-        isDefault: p.isDefault ?? false,
+        name: currentPlan.name || '',
+        slug: currentPlan.slug || '',
+        description: currentPlan.description || '',
+        price: Number(currentPlan.price || 0),
+        durationDays: currentPlan.durationDays ?? 30,
+        tokenQuota: currentPlan.tokenQuota ?? 0,
+        messageQuota: currentPlan.messageQuota ?? null,
+        resetHours: currentPlan.resetHours ?? 6,
+        isActive: currentPlan.isActive ?? true,
+        isDefault: currentPlan.isDefault ?? false,
         modelIds: selectedModelIds,
       }
     } else {

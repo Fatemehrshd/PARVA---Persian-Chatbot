@@ -42,13 +42,17 @@ export class ApiFeatures<T extends Record<string, any>> {
     if (!searchVal || !this.queryBuilder || !searchableFields.length) return this;
 
     const q = `%${searchVal.toLowerCase()}%`;
-    const conditions = searchableFields.map((field, idx) => {
+    const selectedField = this.queryString.searchField;
+    const fields = selectedField && searchableFields.includes(selectedField)
+      ? [selectedField]
+      : searchableFields;
+    const conditions = fields.map((field, idx) => {
       const fieldPath = field.includes('.') ? field : `${this.alias}.${field}`;
       return `LOWER(CAST(${fieldPath} AS text)) LIKE :searchParam_${idx}`;
     });
 
     const params: Record<string, string> = {};
-    searchableFields.forEach((_, idx) => {
+    fields.forEach((_, idx) => {
       params[`searchParam_${idx}`] = q;
     });
 
@@ -62,7 +66,7 @@ export class ApiFeatures<T extends Record<string, any>> {
   filter(allowedFields?: string[]): this {
     if (!this.queryBuilder) return this;
 
-    const reservedKeys = new Set(['page', 'limit', 'search', 'q', 'sortBy', 'sortOrder', 'sort']);
+    const reservedKeys = new Set(['page', 'limit', 'search', 'q', 'searchField', 'sortBy', 'sortOrder', 'sort']);
     const keys = allowedFields || Object.keys(this.queryString).filter((k) => !reservedKeys.has(k));
 
     for (const key of keys) {
@@ -162,8 +166,12 @@ export class ApiFeatures<T extends Record<string, any>> {
     // ۱. جستجوی متنی روی فیلدهای مشخص
     const searchVal = (queryString.search || queryString.q || '')?.toString().trim().toLowerCase();
     if (searchVal && options.searchableFields?.length) {
+      const selectedField = queryString.searchField;
+      const searchableFields = selectedField && options.searchableFields.includes(selectedField)
+        ? [selectedField]
+        : options.searchableFields;
       result = result.filter((item) => {
-        return options.searchableFields!.some((field) => {
+        return searchableFields.some((field) => {
           const val = (item as any)[field];
           return val !== undefined && val !== null && String(val).toLowerCase().includes(searchVal);
         });
@@ -171,7 +179,7 @@ export class ApiFeatures<T extends Record<string, any>> {
     }
 
     // ۲. فیلتر ستونی / مقداری
-    const reservedKeys = new Set(['page', 'limit', 'search', 'q', 'sortBy', 'sortOrder', 'sort']);
+    const reservedKeys = new Set(['page', 'limit', 'search', 'q', 'searchField', 'sortBy', 'sortOrder', 'sort']);
     for (const [key, rawVal] of Object.entries(queryString)) {
       if (reservedKeys.has(key) || rawVal === undefined || rawVal === null || rawVal === '') continue;
       if (options.allowedFilterFields && !options.allowedFilterFields.includes(key)) continue;
@@ -182,7 +190,7 @@ export class ApiFeatures<T extends Record<string, any>> {
         if (typeof itemVal === 'boolean') {
           return itemVal === (rawVal === 'true' || rawVal === true);
         }
-        return String(itemVal).toLowerCase() === String(rawVal).toLowerCase();
+        return String(itemVal).toLowerCase().includes(String(rawVal).toLowerCase());
       });
     }
 

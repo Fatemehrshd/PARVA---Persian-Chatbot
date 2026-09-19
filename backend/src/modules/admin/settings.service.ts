@@ -147,7 +147,6 @@ export class SettingsService {
     return { used, total, remaining: Math.max(0, total - used) };
   }
 
-<<<<<<< HEAD
   /**
    * سقف توکن به ازای هر نقش (مثلاً user/admin و نقش‌های آینده). فقط مقادیر
    * صحیح غیرمنفی نگه داشته می‌شوند؛ ورودی خراب نادیده گرفته می‌شود تا هرگز

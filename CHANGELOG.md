@@ -10,6 +10,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Minimalist Speech-to-Text (STT) & Text-to-Speech (TTS) (قابلیت صوتی مینیمال: تبدیل گفتار به متن و متن به گفتار)**:
+  - **Speech-to-Text (`frontend/src/composables/useSpeechRecognition.ts`)**:
+    - Implemented Web Speech API recognition composable supporting Persian (`fa-IR`) with real-time interim results and silence handling.
+    - Integrated with `ChatComposer.vue` via a minimalist microphone icon button (`.btn-mic`) in the action toolbar with zero text labels.
+    - Features pulsating recording indicator, instant text appending, auto-growing textarea, and auto-stop on message send or unmount.
+  - **Multi-Engine Neural Persian Text-to-Speech (`backend/src/modules/tts` & `frontend/src/composables/useTextToSpeech.ts`)**:
+    - Built a robust, multi-engine backend TTS service (`TtsService`) providing `POST /api/v1/tts/synthesize`, `GET /api/v1/tts/synthesize`, and `GET /api/v1/tts/voices`.
+    - **Engine 1: Microsoft Edge Neural TTS**: Uses state-of-the-art neural models `fa-IR-DilaraNeural` (female) and `fa-IR-FaridNeural` (male) producing studio-quality Persian speech with correct phonetics, accents, and vowels with zero API costs.
+    - **Engine 2: OpenAI / Compatible Audio Speech API**: Supports OpenAI standard `/v1/audio/speech` with models `tts-1` / `tts-1-hd` and voices (`nova`, `alloy`, `echo`, `shimmer`).
+    - **Auto-Failover Architecture**: Transparently routes requests to Edge Neural first, falls back to OpenAI TTS if available, and finally falls back to browser client-side Web Speech Synthesis.
+    - **Streaming Audio**: Directly streams binary `audio/mpeg` chunks from the synthesis process to the HTTP response stream without creating intermediate disk files.
+    - **Frontend Experience (`MessageBubble.vue`)**: Minimal icon button showing loading spinner during synthesis, pulsing square during playback, and volume icon when idle (zero text labels). Instant cancellation on message toggle or conversation switch.
+- **Comprehensive System & Audit Logging, Outbound Fetch Tracing & SigNoz Deep-Link Integration (سیستم جامع لاگ، ردیابی فراخوانی‌ها و اتصال به SigNoz)**:
+  - **W3C Trace Context Propagation (`backend/src/shared/trace-context.service.ts`)**:
+    - Generates and propagates W3C-compliant 32-hex `traceId` and 16-hex `spanId` using `AsyncLocalStorage` (`node:async_hooks`).
+    - Global middleware `TraceContextMiddleware` extracts incoming `traceparent` (format `00-<trace_id>-<span_id>-01`) or `x-trace-id`, generating new IDs when omitted, and binds `x-trace-id` / `traceparent` to HTTP response headers.
+  - **Inbound HTTP Request Interceptor (`backend/src/shared/http-logging.interceptor.ts`)**:
+    - Automatically captures and logs all business-critical API requests (`/api/v1/auth`, `/api/v1/chat`, `/api/v1/payments`, `/api/v1/subscriptions`, `/api/v1/coupons`, `/api/v1/files`, `/api/v1/admin`).
+    - Records method, path, HTTP status code, execution duration (`durationMs`), client IP, User-Agent, actor (user/admin/system), and error message if any.
+    - Emits standard OpenTelemetry OTLP spans for SigNoz APM.
+  - **Outbound HTTP Fetch Tracing Wrapper (`backend/src/shared/traced-fetch.ts`)**:
+    - Transparently wraps `fetch` to inject `x-trace-id` and `traceparent` downstream, establishing end-to-end distributed trace continuity.
+    - Automatically records outbound calls in `audit_logs` and sends OTLP spans to SigNoz collector (`SIGNOZ_OTLP_URL` or `http://localhost:4318/v1/traces`).
+    - Integrated across all external HTTP operations including `OpenAiCompatForwarder` (AI stream, completions, ping) and `ZarinpalPaymentGateway` (request and verify payment).
+  - **AuditLog Entity & Service Enhancements (`backend/src/modules/audit`)**:
+    - Added columns `traceId` (indexed), `spanId`, `method`, `path`, `statusCode`, `durationMs`, and `errorMessage` to `audit_logs` table.
+    - Updated `AuditService.findAll` and `AdminAuditController` with multi-field search, trace ID filtering, status filters (success vs error), and real-time aggregate KPI metrics (total logs, error count, fetch count, average duration).
+  - **Admin Panel Sidebar & Logs Dashboard (`frontend/src/views/admin/AdminAuditLogsSection.vue` & `AdminPanelView.vue`)**:
+    - Added «لاگ‌های امنیتی» to the admin sidebar with Lucide `Activity` icon.
+    - Top summary KPI cards for quick inspection of system health, failure counts, outbound fetch calls, and latency.
+    - Filter toolbar with type tabs (All, Inbound HTTP, Outbound Fetch, Security), status selector, and Trace ID search.
+    - Dedicated Trace ID badge with instant 1-click clipboard copy and **direct SigNoz deep link** (`${SIGNOZ_URL}/trace/${traceId}`) opening the trace flame graph in a new tab.
+    - Detailed request/event inspection modal with sanitized payload viewers, error stack banners, and timing breakdown.
 - **Zarinpal Sandbox Payment Gateway & Discount Code System (درگاه پرداخت زرین‌پال سندباکس و سیستم کدهای تخفیف)**:
   - **Payment Verification & Locking Fix (`backend/src/modules/payments/payments.service.ts`)**:
     - Fixed PostgreSQL `QueryFailedError: FOR UPDATE cannot be applied to the nullable side of an outer join` by switching from `paymentRepo.findOne` to `paymentRepo.createQueryBuilder('p').where('p.authority = :authority').setLock('pessimistic_write').getOne()`.

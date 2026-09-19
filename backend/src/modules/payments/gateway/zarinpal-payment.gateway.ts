@@ -4,6 +4,7 @@ import {
   RequestPaymentResult,
   VerifyPaymentResult,
 } from './payment-gateway.interface';
+import { tracedFetch } from '../../../shared/traced-fetch';
 
 @Injectable()
 export class ZarinpalPaymentGateway implements PaymentGatewayProvider {
@@ -73,15 +74,23 @@ export class ZarinpalPaymentGateway implements PaymentGatewayProvider {
     };
 
     try {
-      const response = await fetch(this.requestUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
+      const response = await tracedFetch(
+        this.requestUrl,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(3000),
         },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(3000),
-      });
+        {
+          name: 'payment.zarinpal.request',
+          entityId: params.paymentId,
+          metadata: { amount: amountInTomans, paymentId: params.paymentId },
+        },
+      );
 
       let data: any = null;
       try {
@@ -174,15 +183,23 @@ export class ZarinpalPaymentGateway implements PaymentGatewayProvider {
     };
 
     try {
-      const response = await fetch(this.verifyUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
+      const response = await tracedFetch(
+        this.verifyUrl,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(3500),
         },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(3500),
-      });
+        {
+          name: 'payment.zarinpal.verify',
+          entityId: params.authority,
+          metadata: { amount: amountInTomans, authority: params.authority },
+        },
+      );
 
       const data = (await response.json()) as any;
 

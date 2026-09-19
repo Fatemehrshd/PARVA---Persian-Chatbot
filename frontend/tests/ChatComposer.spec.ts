@@ -167,7 +167,7 @@ describe('ChatComposer.vue', () => {
     expect(textarea.classes()).toContain('rtl')
   })
 
-  it('renders tariff badges for web search (1.2x) and thinking (1.3x) in attachment menu', async () => {
+  it('renders tariff badges for web search (1.2x) and thinking (1.3x) in model bar', async () => {
     const modelsStore = useModelsStore()
     modelsStore.selectedModelId = 'm-thinking'
     modelsStore.models = [
@@ -187,11 +187,15 @@ describe('ChatComposer.vue', () => {
     ] as any
 
     const wrapper = mount(ChatComposer)
-    await wrapper.find('.attachment-btn').trigger('click')
+    await wrapper.vm.$nextTick()
 
-    expect(wrapper.text()).toContain('ضریب ۱.۲×')
-    expect(wrapper.text()).toContain('ضریب ۱.۳×')
-    expect(wrapper.find('[data-testid="toggle-thinking"]').exists()).toBe(true)
+    const searchBtn = wrapper.find('[data-testid="modelbar-search-toggle"]')
+    const thinkingBtn = wrapper.find('[data-testid="modelbar-thinking-toggle"]')
+
+    expect(searchBtn.exists()).toBe(true)
+    expect(searchBtn.attributes('title')).toContain('ضریب ۱.۲×')
+    expect(thinkingBtn.exists()).toBe(true)
+    expect(thinkingBtn.attributes('title')).toContain('ضریب ۱.۳×')
   })
 
   it('toggles thinking flag when active model supports thinking', async () => {
@@ -279,10 +283,8 @@ describe('ChatComposer.vue', () => {
     expect(wrapper.find('[data-capability="thinking"]').exists()).toBe(false)
 
     await wrapper.find('.attachment-btn').trigger('click')
-    const searchBtn = wrapper.find('[data-testid="toggle-web-search"]')
     const menuItems = wrapper.findAll('.attachment-menu-item')
 
-    expect(searchBtn.attributes('disabled')).toBeDefined()
     expect(menuItems.length).toBeGreaterThanOrEqual(2)
     expect(menuItems[0].attributes('disabled')).toBeDefined()
     expect(menuItems[1].attributes('disabled')).toBeDefined()

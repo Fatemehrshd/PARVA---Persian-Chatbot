@@ -252,7 +252,7 @@ describe('ZarinpalPaymentGateway', () => {
       'https://sandbox.zarinpal.com/pg/v4/payment/request.json',
       expect.objectContaining({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: expect.objectContaining({ 'Content-Type': 'application/json', Accept: 'application/json' }),
       }),
     );
   });

@@ -8,9 +8,15 @@ import MarkdownContent from './MarkdownContent.vue'
 import EmptyState from './EmptyState.vue'
 import ThinkingIndicator from './ThinkingIndicator.vue'
 import ThinkingBlock from './ThinkingBlock.vue'
+import { useTextToSpeech } from '../../composables/useTextToSpeech'
 
 const chatStore = useChatStore()
 const { activeLogo } = useThemeLogo()
+const { stop: stopTts } = useTextToSpeech()
+
+watch(() => chatStore.currentConversationId, () => {
+  stopTts()
+})
 
 const containerRef = ref<HTMLElement | null>(null)
 const contentRef = ref<HTMLElement | null>(null)
@@ -61,11 +67,7 @@ function isNearBottom(container: HTMLElement, threshold = 120): boolean {
   return distanceFromBottom <= threshold
 }
 
-function hasReasoningOverflow(container: HTMLElement | null): boolean {
-  if (!container) return false
-  if (!chatStore.isThinking || !chatStore.currentReasoning) return false
-  return container.scrollHeight - container.clientHeight > 220
-}
+
 
 function handleScroll() {
   const container = containerRef.value

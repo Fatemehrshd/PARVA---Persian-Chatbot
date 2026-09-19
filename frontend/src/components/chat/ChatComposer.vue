@@ -6,8 +6,8 @@ import { useUiStore } from '../../stores/ui'
 import { useAuthStore } from '../../stores/auth'
 import { getActiveTypingDirection } from '../../utils/textDirection'
 import { useFileUpload } from '../../composables/useFileUpload'
+import { useSpeechRecognition } from '../../composables/useSpeechRecognition'
 import FilePreviewCard from './FilePreviewCard.vue'
-import BaseToggle from '../ui/BaseToggle.vue'
 import CapabilityBadge from './CapabilityBadge.vue'
 
 const chatStore = useChatStore()
@@ -19,7 +19,6 @@ const activeModel = computed(() => modelsStore.selectedModel)
 const activeModelSupportsThinking = computed(() => Boolean(activeModel.value?.supportsThinking))
 const activeModelSupportsVision = computed(() => Boolean(activeModel.value?.supportsVision))
 const activeModelSupportsDocument = computed(() => Boolean(activeModel.value?.supportsDocument))
-const activeModelSupportsWebSearch = computed(() => true)
 const activeModelSupportsAttachments = computed(() => activeModelSupportsVision.value || activeModelSupportsDocument.value)
 
 watch(activeModelSupportsThinking, (supported) => {
@@ -34,6 +33,46 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isFocused = ref(false)
 const modelMenuOpen = ref(false)
 const modelPickerRef = ref<HTMLElement | null>(null)
+
+// ─── Speech-to-Text (STT) Voice Input ─────────────────────────────────────────
+const {
+  isListening,
+  isSupported: isSpeechSupported,
+  toggle: toggleSpeech,
+  stop: stopSpeech,
+} = useSpeechRecognition()
+
+let baseInputBeforeSpeech = ''
+
+function toggleVoiceInput() {
+  if (isGenerating.value || chatStore.isTokenLimitExceeded || authStore.quota?.blocked) {
+    return
+  }
+
+  if (!isSpeechSupported.value) {
+    uiStore.showToast('مرورگر شما از قابلیت تبدیل گفتار به متن پشتیبانی نمی‌کند (Chrome یا Edge پیشنهاد می‌شود)', 'warning')
+    return
+  }
+
+  if (isListening.value) {
+    stopSpeech()
+  } else {
+    baseInputBeforeSpeech = inputContent.value ? inputContent.value.trim() + ' ' : ''
+    toggleSpeech({
+      lang: 'fa-IR',
+      onResult: (spokenText) => {
+        inputContent.value = baseInputBeforeSpeech + spokenText
+        updateDirection()
+        adjustHeight()
+      },
+      onError: (err) => {
+        if (err.error === 'not-allowed' || err.error === 'service-not-allowed') {
+          uiStore.showToast('دسترسی به میکروفون داده نشد. لطفاً در مرورگر دسترسی میکروفون را فعال کنید.', 'error')
+        }
+      },
+    })
+  }
+}
 
 // ─── File Upload Composable ──────────────────────────────────────────────────
 const {
@@ -320,6 +359,10 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 async function handleSubmit() {
+  if (isListening.value) {
+    stopSpeech()
+  }
+
   if (chatStore.isTokenLimitExceeded || authStore.quota?.blocked) {
     uiStore.showToast('توکن مصرفی شما به پایان رسید', 'error')
     return
@@ -405,6 +448,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  stopSpeech()
   window.removeEventListener('click', handleClickOutside)
 })
 </script>
@@ -694,6 +738,49 @@ onUnmounted(() => {
 
           <!-- Action Button: Stop or Send (Queueing disabled while streaming) -->
           <div class="action-buttons">
+            <!-- Voice Input Button (Minimal Icon) -->
+            <button
+              v-if="!isGenerating"
+              type="button"
+              class="btn-mic"
+              :class="{ 'btn-mic--active': isListening }"
+              :disabled="chatStore.isTokenLimitExceeded || authStore.quota?.blocked"
+              :title="isListening ? 'توقف ضبط صدا' : 'تایپ صوتی (تبدیل گفتار به متن)'"
+              @click="toggleVoiceInput"
+            >
+              <svg
+                v-if="!isListening"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="22"/>
+              </svg>
+              <svg
+                v-else
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="animate-pulse text-rose-500"
+              >
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" fill="currentColor"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="22"/>
+              </svg>
+            </button>
+
             <button
               v-if="isGenerating"
               type="button"
@@ -1110,6 +1197,37 @@ onUnmounted(() => {
 .action-buttons {
   display: flex;
   align-items: center;
+  gap: 4px;
+}
+
+.btn-mic {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background-color: transparent;
+  color: var(--muted-foreground);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 150ms ease;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.btn-mic:hover:not(:disabled) {
+  background-color: var(--secondary);
+  color: var(--foreground);
+}
+
+.btn-mic:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-mic--active {
+  background-color: rgba(239, 68, 68, 0.12) !important;
+  color: #ef4444 !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
 }
 
 .btn-send {

@@ -17,6 +17,10 @@ export class AdminAuditController {
   async getAuditLogs(
     @Query('page') page?: number,
     @Query('limit') limit?: number,
+    @Query('search') search?: string,
+    @Query('traceId') traceId?: string,
+    @Query('status') status?: string,
+    @Query('type') type?: string,
     @Query('action') action?: string,
     @Query('entityType') entityType?: string,
     @Query('actorId') actorId?: string,
@@ -24,6 +28,10 @@ export class AdminAuditController {
     return this.auditService.findAll({
       page,
       limit,
+      search,
+      traceId,
+      status,
+      type,
       action,
       entityType,
       actorId,

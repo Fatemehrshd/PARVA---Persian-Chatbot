@@ -95,6 +95,7 @@ export interface FileAttachmentItem {
   abortController?: AbortController
   rawFile?: File
   metadata?: Record<string, any>
+  extractedText?: string
 }
 
 export interface WebSource {

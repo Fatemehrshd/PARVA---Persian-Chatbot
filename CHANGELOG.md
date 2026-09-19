@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.1] - 2026-09-19
+
+### Added
+- **Sent File Content Viewer in User Chat**:
+  - Made attachment cards (`FilePreviewCard.vue`) fully interactive and clickable in user chat for all supported document types (`PDF`, `Text`, `Markdown`, `Excel`, `Image`).
+  - Added full content lightbox modal featuring:
+    - **PDF Preview**: Embedded native PDF `<iframe>` viewer with tabs for PDF view vs AI-extracted text layer, "open in new tab" link, and direct download.
+    - **Text & Markdown Preview**: Beautiful Markdown rendered view powered by `MarkdownContent.vue` for `.md` files, raw text view with monospace formatting for `.txt` and source files, and one-click "copy text" action with live feedback.
+    - **Excel Preview**: Structured view of extracted worksheet data and summary tables, with direct download action for the original spreadsheet.
+    - **Image Lightbox**: Smooth, dark-backdrop image viewer with download and keyboard Escape support.
+  - Added comprehensive unit tests in `frontend/tests/FilePreviewCard.spec.ts` covering modal lifecycle, PDF rendering, tabs switching, clipboard copy, and keyboard events.
+
+### Fixed
+- **Admin File Content Download 401 Unauthorized**:
+  - Resolved 401 Unauthorized errors when admins attempted to view or download user files in Admin Panel.
+  - Added authenticated `GET /admin/files/:id/content` endpoint in `AdminFilesController` with query token support (`?token=...`), and updated `FilesService.getFileRecord` to support admin bypass of user ownership checks.
+  - Updated `FileDetailModal.vue` and `ChatViewerModal.vue` download links.
+
 ## [1.4.0] - 2026-09-19
 
 ### Added

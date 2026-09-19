@@ -3,6 +3,8 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import AdminModelsView from '../src/views/AdminModelsView.vue'
 import { useModelsStore } from '../src/stores/models'
+import { modelsService } from '../src/services/models.service'
+import { adminService } from '../src/services/admin.service'
 
 // Mock vue-router
 const pushMock = vi.fn()
@@ -16,6 +18,14 @@ describe('AdminModelsView.vue (Dashboard)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     pushMock.mockClear()
+    const store = useModelsStore()
+    vi.spyOn(modelsService, 'listModels').mockImplementation(async (params) => {
+      const q = (params?.search || '').toLowerCase()
+      const items = store.models.filter(m => !q || m.name.toLowerCase().includes(q) || m.apiIdentifier.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q))
+      return { items, total: items.length }
+    })
+    vi.spyOn(modelsService, 'listProviders').mockResolvedValue([])
+    vi.spyOn(adminService, 'listUsers').mockResolvedValue([] as any)
   })
 
   it('renders dashboard with KPI metric cards and models table', () => {
@@ -66,6 +76,7 @@ describe('AdminModelsView.vue (Dashboard)', () => {
 
     // The async list request fired by the search must settle before asserting
     await vi.advanceTimersByTimeAsync(0)
+    await flushPromises()
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
 

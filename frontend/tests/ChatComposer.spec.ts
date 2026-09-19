@@ -192,11 +192,9 @@ describe('ChatComposer.vue', () => {
     expect(chatStore.getConvFlag('c-test').thinking).toBe(false)
   })
 
-  it('allows toggling thinking and warns when model has supportsThinking false', async () => {
+  it('hides thinking toggle when model has supportsThinking false', async () => {
     const wrapper = mount(ChatComposer)
     const modelsStore = useModelsStore()
-    const uiStore = useUiStore()
-    const toastSpy = vi.spyOn(uiStore, 'showToast')
     modelsStore.selectedModelId = 'm-no-think'
     modelsStore.models = [
       {
@@ -216,10 +214,7 @@ describe('ChatComposer.vue', () => {
     await wrapper.vm.$nextTick()
 
     const thinkingBtn = wrapper.find('[data-testid="modelbar-thinking-toggle"]')
-    expect(thinkingBtn.attributes('disabled')).toBeUndefined()
-
-    await thinkingBtn.trigger('click')
-    expect(toastSpy).toHaveBeenCalledWith('توجه: ممکن است این مدل به طور کامل از تفکر عمیق پشتیبانی نکند', 'info')
+    expect(thinkingBtn.exists()).toBe(false)
   })
 
   it('renders CapabilityBadge in model picker dropdown', async () => {

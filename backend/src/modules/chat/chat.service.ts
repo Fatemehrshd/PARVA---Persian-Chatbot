@@ -47,7 +47,7 @@ export class QuotaExceededException extends BadRequestException {
     super({
       message:
         reason === 'tokens'
-          ? 'سهمیه توکن شما در این دوره به پایان رسیده است (سقف مجاز مصرف توکن به پایان رسیده است).'
+          ? 'سهمیه توکن شما در این دوره به پایان رسیده است (سقف مجاز مصرف توکن به پایان رسیده است / توکن مصرفی شما به پایان رسید).'
           : 'سقف تعداد پیام‌های شما در این دوره پر شده است.',
       error: 'QUOTA_EXCEEDED',
       reason,

@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **All deletions are now soft-delete (production-ready)**: `users`, `ai_models`, and `ai_providers` gained an `isDeleted` flag; `DELETE /admin/users/:id`, `DELETE /admin/models/:id`, and `DELETE /admin/providers/:id` now flag rows instead of physically removing them.
 
 ### Fixed
+- **Users Table Token Limit Sync with Global**: Fixed issue where users without dedicated personal limits displayed "نامحدود" instead of inheriting the active global token limit when roles had no specific quota (`null` or `0`). Updated `resolveEffectiveTokenLimit`, `resolveLimitSource`, and `effectiveLimitFor` to accurately fallback to `globalLimit` and mark source as «سراسری».
 - **DB-authoritative user role and quota state**: user role access for model listings and admin routing is re-read from the database instead of trusting stale claims.
 - **Streaming auto-scroll fixes**: Smooth follow and disengage on scroll gestures.
 - **Sources hidden for user-stopped messages**: `SourcesBlock` is not displayed for stopped/interrupted messages.

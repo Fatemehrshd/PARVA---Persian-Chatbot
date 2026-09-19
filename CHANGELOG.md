@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Message Reasoning Persistence**: Persisted `reasoning_content` and `thinking_duration_ms` in `Message` entity with database migration `1761300000003-AddMessageReasoning.ts`.
 - **Attachment Capability Guards**: Backend and frontend defensive guards preventing users from sending image or document attachments to models that lack vision or document capabilities.
 - **Seamless Thinking Selectability Fix**: Removed hard `:disabled` locks on thinking toggles, defaulted `supportsThinking = true` across entities and migrations (`1761300000004-EnableThinkingDefault.ts`), and fixed toggle event propagation in `ModelEditorModal.vue`.
+- **Sent Images Gallery & Interactive Lightbox**: Implemented `ImageGallery.vue` for user-sent messages (both in past conversations and current chat) presenting sent images in modern responsive grid layouts (1-image showcase, 2-column, 3-column, and 4+ grid with `+N` badge). Clicking any image opens a full lightbox modal with next/previous navigation, keyboard arrow support, Persian counter (`تصویر ۲ از ۴`), and a bottom thumbnail strip allowing users to seamlessly switch between all sent images. Composer draft attachments remain intact as individual preview cards.
 - **Dedicated Documentation Artifacts**: Created comprehensive documentation reports `docs/PHASE_4_THINKING_AND_TARIFFS_REPORT.md` and `docs/گزارش_فاز_۴_تفکر_عمیق_و_تعرفه‌ها.md`.
 
 ## [1.3.2] - 2026-09-18

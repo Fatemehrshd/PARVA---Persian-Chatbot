@@ -229,5 +229,46 @@ describe('MessageBubble.vue', () => {
     expect(thinkingBlock.props('durationMs')).toBe(2500)
     expect(thinkingBlock.props('isThinking')).toBe(false)
   })
+
+  it('renders ImageGallery for sent images and FilePreviewCard for sent documents', () => {
+    const userMessage: Message = {
+      id: 'm-user-attach-1',
+      conversationId: 'c-1',
+      role: 'user',
+      content: 'Here are my photos and report',
+      createdAt: new Date().toISOString(),
+      attachments: [
+        {
+          id: 'att-img-1',
+          fileType: 'image',
+          originalName: 'photo1.jpg',
+          fileSize: 1024,
+          mimeType: 'image/jpeg',
+          status: 'ready',
+        },
+        {
+          id: 'att-doc-1',
+          fileType: 'pdf',
+          originalName: 'report.pdf',
+          fileSize: 2048,
+          mimeType: 'application/pdf',
+          status: 'ready',
+        },
+      ],
+    }
+
+    const wrapper = mount(MessageBubble, {
+      props: { message: userMessage },
+    })
+
+    const gallery = wrapper.findComponent({ name: 'ImageGallery' })
+    expect(gallery.exists()).toBe(true)
+    expect(gallery.props('images').length).toBe(1)
+    expect(gallery.props('images')[0].id).toBe('att-img-1')
+
+    const fileCards = wrapper.findAllComponents({ name: 'FilePreviewCard' })
+    expect(fileCards.length).toBe(1)
+    expect(fileCards[0].props('file').id).toBe('att-doc-1')
+  })
 })
 

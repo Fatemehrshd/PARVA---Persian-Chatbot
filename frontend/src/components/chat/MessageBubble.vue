@@ -7,6 +7,7 @@ import { useUiStore } from '../../stores/ui'
 import { getTextDirection, getLineDirection } from '../../utils/textDirection'
 import MarkdownContent from './MarkdownContent.vue'
 import FilePreviewCard from './FilePreviewCard.vue'
+import ImageGallery from './ImageGallery.vue'
 import SourcesBlock from './SourcesBlock.vue'
 import ThinkingBlock from './ThinkingBlock.vue'
 import { stripTrailingSourcesLine } from '../../utils/citations'
@@ -47,6 +48,16 @@ const formattedTime = computed(() => {
 const displayContent = computed(() =>
   stripTrailingSourcesLine(props.message.content, props.message.sources ?? null),
 )
+
+const imageAttachments = computed(() => {
+  if (!props.message.attachments) return []
+  return props.message.attachments.filter((f) => f.fileType === 'image')
+})
+
+const nonImageAttachments = computed(() => {
+  if (!props.message.attachments) return []
+  return props.message.attachments.filter((f) => f.fileType !== 'image')
+})
 
 const userInitial = computed(() => {
   if (authStore.user?.displayName) return authStore.user.displayName.charAt(0).toUpperCase()
@@ -120,14 +131,21 @@ async function handleFeedback(type: 'like' | 'dislike') {
         ]"
         :dir="textDirection"
       >
-        <!-- Attachments if any -->
+        <!-- Sent Images Gallery (only for sent user messages) -->
+        <ImageGallery
+          v-if="isUser && imageAttachments.length > 0"
+          :images="imageAttachments"
+          :class="{ 'mb-3': !!props.message.content?.trim() || nonImageAttachments.length > 0 }"
+        />
+
+        <!-- Non-Image Attachments (PDF, Excel, Text, etc.) -->
         <div
-          v-if="isUser && message.attachments && message.attachments.length > 0"
+          v-if="isUser && nonImageAttachments.length > 0"
           class="message-attachments flex flex-wrap gap-2.5"
           :class="{ 'mb-3': !!props.message.content?.trim() }"
         >
           <FilePreviewCard
-            v-for="file in message.attachments"
+            v-for="file in nonImageAttachments"
             :key="file.id"
             :file="file"
             read-only

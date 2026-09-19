@@ -8,7 +8,9 @@ import {
   UseGuards,
   HttpCode,
   NotFoundException,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { FileAttachment } from '../files/file-attachment.entity';
@@ -167,6 +169,30 @@ export class AdminFilesController {
           }
         : null,
     };
+  }
+
+  @Get(':id/content')
+  async getFileContent(
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const file = await this.fileRepo.findOne({
+      where: { id, isDeleted: false },
+    });
+
+    if (!file) {
+      throw new NotFoundException('فایل یافت نشد');
+    }
+
+    const buffer = await this.filesService.getFileBuffer(file);
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Content-Length', buffer.length);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${encodeURIComponent(file.originalName)}"`,
+    );
+    res.end(buffer);
   }
 
   @Post(':id/retry')

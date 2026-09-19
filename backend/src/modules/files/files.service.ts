@@ -257,10 +257,12 @@ export class FilesService {
   /**
    * Retrieves file entity record owned by user.
    */
-  async getFileRecord(userId: string, fileId: string): Promise<FileAttachment> {
-    const file = await this.fileRepo.findOne({
-      where: { id: fileId, userId, isDeleted: false },
-    });
+  async getFileRecord(userId: string, fileId: string, isAdmin: boolean = false): Promise<FileAttachment> {
+    const where: any = { id: fileId, isDeleted: false };
+    if (!isAdmin) {
+      where.userId = userId;
+    }
+    const file = await this.fileRepo.findOne({ where });
     if (!file) {
       throw new NotFoundException('فایل یافت نشد');
     }

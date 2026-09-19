@@ -86,7 +86,8 @@ export class FilesController {
     @Param('id') id: string,
     @Res() res: Response,
   ) {
-    const file = await this.filesService.getFileRecord(req.user.sub, id);
+    const isAdmin = req.user?.role === 'admin';
+    const file = await this.filesService.getFileRecord(req.user.sub, id, isAdmin);
     const buffer = await this.filesService.getFileBuffer(file);
     res.setHeader('Content-Type', file.mimeType);
     res.setHeader('Content-Length', buffer.length);

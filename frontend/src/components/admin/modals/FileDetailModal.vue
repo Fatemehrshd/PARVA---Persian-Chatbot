@@ -18,7 +18,9 @@ defineEmits<{
 }>()
 
 function getFileDownloadUrl(fileId: string): string {
-  return buildUrl(`/files/${fileId}/content`)
+  const token = localStorage.getItem('token')
+  const qs = token ? `?token=${encodeURIComponent(token)}` : ''
+  return buildUrl(`/admin/files/${fileId}/content${qs}`)
 }
 
 function formatFileSize(bytes?: number): string {

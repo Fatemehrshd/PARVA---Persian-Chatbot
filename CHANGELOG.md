@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.2] - 2026-09-19
+
+### Added
+- **Conversation Pinning & 3-Dots Action Dropdown Menu**:
+  - **3-Dots Action Menu**: Replaced direct edit (pencil) and delete (trash) buttons on conversation items in `AppSidebar.vue` with a single 3-dots menu button (`MoreVertical`). Clicking the 3-dots button opens a sleek dropdown menu with:
+    - **پین کردن گفتگو / برداشتن پین** with dynamic `Pin` / `PinOff` icon.
+    - **ویرایش عنوان** with `Pencil` icon (opens `EditConversationModal.vue`).
+    - **حذف گفتگو** with `Trash2` icon (opens `DeleteConversationModal.vue`).
+  - **Database Persistence for Pinned State**: Added `isPinned` boolean column (default `false`) to `conversations` table via TypeORM migration `1761300000005-AddConversationIsPinned.ts` and `Conversation` entity.
+  - **Backend API**:
+    - Added dedicated endpoint `PATCH /chat/conversations/:id/pin` with optional `isPinned` in request body (toggles if omitted).
+    - Updated `PATCH /chat/conversations/:id` to accept `isPinned` in `UpdateConvDto`.
+    - Updated `ChatService.list` to order conversations by `isPinned DESC, updatedAt DESC`, guaranteeing pinned conversations are always returned first.
+  - **Frontend Store & Optimistic Updates**:
+    - Added `isPinned?: boolean` to `Conversation` and `UpdateConversationRequest` types.
+    - Added `togglePinConversation(id, explicitState?)` in `useChatStore` with instant optimistic update, re-sorting (`sortConversations()`), and automatic rollback on network failure.
+    - Updated `finishStream`, `loadConversations`, and new conversation creations to preserve pinned ordering.
+  - **Visual Pinned Indicator**: Pinned conversations prominently display an amber `Pin` icon in the sidebar conversation list so users immediately identify their pinned chats.
+  - **Tests**: Added comprehensive unit test suites in `backend/test/chat-pin.spec.ts` and `frontend/tests/conversation-pin.spec.ts` covering pin toggle, sorting order, error rollback, and AppSidebar 3-dots menu interactions.
+
 ## [1.4.1] - 2026-09-19
 
 ### Added

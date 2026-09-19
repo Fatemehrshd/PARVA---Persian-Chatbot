@@ -44,13 +44,18 @@ export class ChatController {
   @Patch(':id')
   @UsePipes(new ValidationPipe({ whitelist: true }))
   async update(@Req() req: any, @Param('id') id: string, @Body() d: UpdateConvDto) {
-    if (!d.title && !d.modelId) {
-      throw new BadRequestException('حداقل یکی از عنوان یا شناسه مدل باید ارسال شود');
+    if (!d.title && !d.modelId && d.isPinned === undefined) {
+      throw new BadRequestException('حداقل یکی از عنوان، شناسه مدل یا وضعیت پین باید ارسال شود');
     }
     let result;
     if (d.title) result = await this.chat.updateTitle(req.user.sub, id, d.title);
     if (d.modelId) result = await this.chat.setModel(req.user.sub, id, d.modelId);
+    if (d.isPinned !== undefined) result = await this.chat.setPinned(req.user.sub, id, d.isPinned);
     return result;
+  }
+  @Patch(':id/pin')
+  async togglePin(@Req() req: any, @Param('id') id: string, @Body('isPinned') isPinned?: boolean) {
+    return this.chat.togglePin(req.user.sub, id, isPinned);
   }
   @Delete(':id')
   @HttpCode(204)

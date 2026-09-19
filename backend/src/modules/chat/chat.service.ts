@@ -134,7 +134,8 @@ export class ChatService {
             .andWhere('m.isDeleted = false')
             .getQuery(),
       )
-      .orderBy('conv.updatedAt', 'DESC')
+      .orderBy('conv.isPinned', 'DESC')
+      .addOrderBy('conv.updatedAt', 'DESC')
       .take(take)
       .skip(skip)
       .getMany();
@@ -268,6 +269,18 @@ export class ChatService {
       throw new BadRequestException(`Provider "${provider.name}" is disabled`);
     }
     c.modelId = m.id;
+    return this.conv.save(c);
+  }
+
+  async setPinned(userId: string, id: string, isPinned: boolean) {
+    const c = await this.assertOwned(userId, id);
+    c.isPinned = isPinned;
+    return this.conv.save(c);
+  }
+
+  async togglePin(userId: string, id: string, isPinned?: boolean) {
+    const c = await this.assertOwned(userId, id);
+    c.isPinned = typeof isPinned === 'boolean' ? isPinned : !c.isPinned;
     return this.conv.save(c);
   }
 

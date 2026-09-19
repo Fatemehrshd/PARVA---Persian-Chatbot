@@ -20,6 +20,10 @@ export class UpdateConvDto {
   @IsOptional()
   @IsUUID('4', { message: FA.modelIdUuid })
   modelId?: string;
+
+  @IsOptional()
+  @IsBoolean({ message: 'وضعیت پین باید boolean باشد' })
+  isPinned?: boolean;
 }
 
 export class SendMsgDto {

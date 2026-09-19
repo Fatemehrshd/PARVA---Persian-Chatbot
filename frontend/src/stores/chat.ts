@@ -223,6 +223,7 @@ export const useChatStore = defineStore('chat', () => {
       const data = await chatService.listConversations(1, 50)
       if (Array.isArray(data)) {
         conversations.value = data
+        sortConversations()
         hasMoreConversations.value = data.length >= 50
         if (data.length > 0) {
           let idToSelect: string = data[0].id
@@ -267,6 +268,7 @@ export const useChatStore = defineStore('chat', () => {
         const existingIds = new Set(conversations.value.map((c) => c.id))
         const newItems = data.filter((c) => !existingIds.has(c.id))
         conversations.value.push(...newItems)
+        sortConversations()
         conversationPage.value = nextPage
         hasMoreConversations.value = data.length >= 50
       } else {
@@ -616,6 +618,37 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  // ─── Pin / Unpin conversation ──────────────────────────────────────────────
+  function sortConversations() {
+    conversations.value.sort((a, b) => {
+      const aPinned = a.isPinned ? 1 : 0
+      const bPinned = b.isPinned ? 1 : 0
+      if (aPinned !== bPinned) {
+        return bPinned - aPinned
+      }
+      return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+    })
+  }
+
+  async function togglePinConversation(id: string, explicitState?: boolean): Promise<boolean> {
+    const conv = conversations.value.find((c) => c.id === id)
+    if (!conv) return false
+    const targetState = typeof explicitState === 'boolean' ? explicitState : !conv.isPinned
+    conv.isPinned = targetState
+
+    sortConversations()
+
+    try {
+      await chatService.togglePinConversation(id, targetState)
+      return targetState
+    } catch (err: any) {
+      console.warn('Backend togglePinConversation failed:', err)
+      conv.isPinned = !targetState
+      sortConversations()
+      throw err
+    }
+  }
+
   // ─── Update title ──────────────────────────────────────────────────────────
   async function updateConversationTitle(id: string, newTitle: string) {
     const trimmed = newTitle.trim()
@@ -741,6 +774,7 @@ export const useChatStore = defineStore('chat', () => {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           })
+          sortConversations()
         }
       },
       (messageId: string) => {
@@ -1176,15 +1210,11 @@ export const useChatStore = defineStore('chat', () => {
         })
       }
     }
-    // Live sidebar reorder (mirrors backend updatedAt DESC): the conversation
-    // that just got activity jumps to the top without needing a refresh.
-    const convIdx = conversations.value.findIndex((c) => c.id === convId)
-    if (convIdx > 0) {
-      const [bumped] = conversations.value.splice(convIdx, 1)
-      bumped.updatedAt = new Date().toISOString()
-      conversations.value.unshift(bumped)
-    } else if (convIdx === 0) {
-      conversations.value[0].updatedAt = new Date().toISOString()
+    // Live sidebar reorder (mirrors backend isPinned DESC, updatedAt DESC):
+    const targetConv = conversations.value.find((c) => c.id === convId)
+    if (targetConv) {
+      targetConv.updatedAt = new Date().toISOString()
+      sortConversations()
     }
     s.currentStreamingText = ''
     s.currentReasoning = ''
@@ -1398,6 +1428,8 @@ export const useChatStore = defineStore('chat', () => {
     loadConversations,
     loadMoreConversations,
     selectConversation,
+    sortConversations,
+    togglePinConversation,
     reconnectToActiveStream,
     createNewConversation,
     deleteConversation,

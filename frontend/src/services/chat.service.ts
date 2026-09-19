@@ -125,6 +125,17 @@ export const chatService = {
   },
 
   /**
+   * Toggle or set pin status of a conversation.
+   * PATCH /chat/conversations/{conversationId}/pin
+   */
+  async togglePinConversation(conversationId: string, isPinned?: boolean): Promise<Conversation> {
+    return request<Conversation>(`/chat/conversations/${conversationId}/pin`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isPinned })
+    })
+  },
+
+  /**
    * Delete a conversation.
    * DELETE /chat/conversations/{conversationId}
    */

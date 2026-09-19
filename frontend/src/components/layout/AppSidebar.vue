@@ -12,6 +12,9 @@ import {
   Trash2,
   ChevronUp,
   LogIn,
+  MoreVertical,
+  Pin,
+  PinOff,
 } from '@lucide/vue'
 import { useUiStore } from '../../stores/ui'
 import { useChatStore } from '../../stores/chat'
@@ -37,6 +40,9 @@ const isEditModalOpen = ref(false)
 
 const deletingConversation = ref<Conversation | null>(null)
 const isDeleteModalOpen = ref(false)
+
+const activeMenuConvId = ref<string | null>(null)
+const menuPosition = ref<'bottom' | 'top'>('bottom')
 
 const isLogoutModalOpen = ref(false)
 const isSearchModalOpen = ref(false)
@@ -83,10 +89,37 @@ function handleSelect(id: string) {
 }
 
 // ──────────────────────────────────────────
-// Edit / Delete modals
+// Edit / Delete / Pin actions & 3-dots menu
 // ──────────────────────────────────────────
+function toggleMenu(event: MouseEvent, convId: string) {
+  event.stopPropagation()
+  if (activeMenuConvId.value === convId) {
+    activeMenuConvId.value = null
+  } else {
+    const clientY = event.clientY
+    if (window.innerHeight - clientY < 160) {
+      menuPosition.value = 'top'
+    } else {
+      menuPosition.value = 'bottom'
+    }
+    activeMenuConvId.value = convId
+  }
+}
+
+async function handleTogglePin(event: Event, conv: Conversation) {
+  event.stopPropagation()
+  activeMenuConvId.value = null
+  try {
+    const isPinned = await chatStore.togglePinConversation(conv.id)
+    uiStore.showToast(isPinned ? 'گفتگو پین شد.' : 'پین گفتگو برداشته شد.', 'success')
+  } catch (err: any) {
+    uiStore.showToast(err?.message || 'خطا در تغییر وضعیت پین', 'error')
+  }
+}
+
 function openEditModal(event: Event, conv: Conversation) {
   event.stopPropagation()
+  activeMenuConvId.value = null
   editingConversation.value = conv
   isEditModalOpen.value = true
 }
@@ -104,6 +137,7 @@ async function handleSaveTitle(id: string, newTitle: string) {
 
 function openDeleteModal(event: Event, conv: Conversation) {
   event.stopPropagation()
+  activeMenuConvId.value = null
   deletingConversation.value = conv
   isDeleteModalOpen.value = true
 }
@@ -132,8 +166,15 @@ function toggleProfileMenu() {
 }
 
 function handleDocumentClick(e: MouseEvent) {
-  if (!profileMenuOpen.value) return
   const target = e.target as HTMLElement
+
+  if (activeMenuConvId.value) {
+    if (!target.closest('.sb-conv-menu-container')) {
+      activeMenuConvId.value = null
+    }
+  }
+
+  if (!profileMenuOpen.value) return
   if (
     !target.closest('.profile-menu-panel') &&
     !target.closest('.profile-trigger')
@@ -258,7 +299,7 @@ const userInitial = computed(() => {
             <div
               v-for="conv in chatStore.conversations"
               :key="conv.id"
-              :class="['sb-conv-item', { 'is-active': conv.id === chatStore.currentConversationId }]"
+              :class="['sb-conv-item', { 'is-active': conv.id === chatStore.currentConversationId, 'is-pinned': conv.isPinned, 'has-menu-open': activeMenuConvId === conv.id }]"
               @click="handleSelect(conv.id)"
             >
               <!-- Streaming indicator: pulsing dot when this conv is streaming in background -->
@@ -267,24 +308,54 @@ const userInitial = computed(() => {
                 class="sb-conv-streaming-dot"
                 title="در حال دریافت پاسخ..."
               />
+              <Pin v-else-if="conv.isPinned" :size="13" class="sb-conv-icon sb-conv-icon--pinned" title="پین شده" />
               <MessageSquare v-else :size="13" class="sb-conv-icon" />
               <span class="sb-conv-title">{{ conv.title }}</span>
 
               <div class="sb-conv-actions">
-                <button
-                  class="sb-conv-btn"
-                  @click="openEditModal($event, conv)"
-                  title="ویرایش"
-                >
-                  <Pencil :size="11" />
-                </button>
-                <button
-                  class="sb-conv-btn sb-conv-btn--danger"
-                  @click="openDeleteModal($event, conv)"
-                  title="حذف"
-                >
-                  <Trash2 :size="11" />
-                </button>
+                <div class="sb-conv-menu-container" @click.stop>
+                  <button
+                    class="sb-conv-btn sb-conv-more-btn"
+                    :class="{ 'is-open': activeMenuConvId === conv.id }"
+                    @click="toggleMenu($event, conv.id)"
+                    title="عملیات بیشتر"
+                    aria-label="عملیات بیشتر"
+                  >
+                    <MoreVertical :size="13" />
+                  </button>
+
+                  <!-- Dropdown Menu -->
+                  <div
+                    v-if="activeMenuConvId === conv.id"
+                    :class="['sb-conv-dropdown', { 'is-top': menuPosition === 'top' }]"
+                  >
+                    <button
+                      class="sb-dropdown-item"
+                      @click="handleTogglePin($event, conv)"
+                    >
+                      <component :is="conv.isPinned ? PinOff : Pin" :size="13" class="sb-dropdown-icon" />
+                      <span>{{ conv.isPinned ? 'برداشتن پین' : 'پین کردن گفتگو' }}</span>
+                    </button>
+
+                    <button
+                      class="sb-dropdown-item"
+                      @click="openEditModal($event, conv)"
+                    >
+                      <Pencil :size="13" class="sb-dropdown-icon" />
+                      <span>ویرایش عنوان</span>
+                    </button>
+
+                    <div class="sb-dropdown-divider"></div>
+
+                    <button
+                      class="sb-dropdown-item sb-dropdown-item--danger"
+                      @click="openDeleteModal($event, conv)"
+                    >
+                      <Trash2 :size="13" class="sb-dropdown-icon" />
+                      <span>حذف گفتگو</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -723,8 +794,19 @@ const userInitial = computed(() => {
 }
 
 .sb-conv-item:hover .sb-conv-actions,
-.sb-conv-item.is-active .sb-conv-actions {
+.sb-conv-item.is-active .sb-conv-actions,
+.sb-conv-item.has-menu-open .sb-conv-actions {
   opacity: 1;
+}
+
+.sb-conv-icon--pinned {
+  color: #eab308;
+}
+
+.sb-conv-menu-container {
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
 .sb-conv-btn {
@@ -741,7 +823,8 @@ const userInitial = computed(() => {
   transition: background-color 150ms ease, color 150ms ease;
 }
 
-.sb-conv-btn:hover {
+.sb-conv-btn:hover,
+.sb-conv-btn.is-open {
   background-color: var(--card);
   color: var(--foreground);
 }
@@ -749,6 +832,83 @@ const userInitial = computed(() => {
 .sb-conv-btn--danger:hover {
   background-color: rgba(239, 68, 68, 0.15);
   color: #f87171;
+}
+
+/* 3-dots action dropdown */
+.sb-conv-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 60;
+  min-width: 140px;
+  background-color: var(--card, #1c1c28);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.28);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: sb-dropdown-fade 120ms ease-out;
+}
+
+.sb-conv-dropdown.is-top {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+@keyframes sb-dropdown-fade {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.sb-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  color: var(--foreground);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  text-align: right;
+  transition: background-color 120ms ease, color 120ms ease;
+  white-space: nowrap;
+}
+
+.sb-dropdown-item:hover {
+  background-color: var(--surface-alt, var(--secondary));
+  color: var(--foreground);
+}
+
+.sb-dropdown-item--danger {
+  color: #f87171;
+}
+
+.sb-dropdown-item--danger:hover {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.sb-dropdown-icon {
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.sb-dropdown-divider {
+  height: 1px;
+  background-color: var(--border);
+  margin: 3px 0;
 }
 
 .sb-empty-hint {

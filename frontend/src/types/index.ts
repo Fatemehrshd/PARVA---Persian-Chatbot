@@ -67,6 +67,7 @@ export interface Conversation {
   id: string
   title: string
   modelId?: string
+  isPinned?: boolean
   createdAt: string
   updatedAt: string
 }
@@ -79,6 +80,7 @@ export interface CreateConversationRequest {
 export interface UpdateConversationRequest {
   title?: string
   modelId?: string
+  isPinned?: boolean
 }
 
 export interface FileAttachmentItem {

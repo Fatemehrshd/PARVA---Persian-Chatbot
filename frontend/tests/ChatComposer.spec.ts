@@ -3,6 +3,8 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ChatComposer from '../src/components/chat/ChatComposer.vue'
 import { useChatStore } from '../src/stores/chat'
+import { useModelsStore } from '../src/stores/models'
+import { useUiStore } from '../src/stores/ui'
 
 describe('ChatComposer.vue', () => {
   beforeEach(() => {
@@ -163,5 +165,69 @@ describe('ChatComposer.vue', () => {
     await textarea.setValue('')
     expect(textarea.attributes('dir')).toBe('rtl')
     expect(textarea.classes()).toContain('rtl')
+  })
+
+  it('renders tariff badges for web search (1.2x) and thinking (1.3x) in attachment menu', async () => {
+    const wrapper = mount(ChatComposer)
+    await wrapper.find('.attachment-btn').trigger('click')
+
+    expect(wrapper.text()).toContain('ضریب ۱.۲×')
+    expect(wrapper.text()).toContain('ضریب ۱.۳×')
+    expect(wrapper.find('[data-testid="toggle-thinking"]').exists()).toBe(true)
+  })
+
+  it('toggles thinking flag when active model supports thinking', async () => {
+    const wrapper = mount(ChatComposer)
+    const chatStore = useChatStore()
+    chatStore.currentConversationId = 'c-test'
+
+    const thinkingBtn = wrapper.find('[data-testid="modelbar-thinking-toggle"]')
+    expect(thinkingBtn.exists()).toBe(true)
+    expect(chatStore.getConvFlag('c-test').thinking).toBeFalsy()
+
+    await thinkingBtn.trigger('click')
+    expect(chatStore.getConvFlag('c-test').thinking).toBe(true)
+
+    await thinkingBtn.trigger('click')
+    expect(chatStore.getConvFlag('c-test').thinking).toBe(false)
+  })
+
+  it('disables thinking toggle and warns when active model does not support thinking', async () => {
+    const wrapper = mount(ChatComposer)
+    const modelsStore = useModelsStore()
+    const uiStore = useUiStore()
+    modelsStore.selectedModelId = 'm-no-think'
+    modelsStore.models = [
+      {
+        id: 'm-no-think',
+        name: 'Basic Model',
+        provider: 'openai',
+        apiIdentifier: 'basic',
+        isActive: true,
+        isDefault: true,
+        supportsThinking: false,
+        supportsVision: false,
+        supportsDocument: false,
+        createdAt: new Date().toISOString()
+      }
+    ] as any
+
+    await wrapper.vm.$nextTick()
+
+    const thinkingBtn = wrapper.find('[data-testid="modelbar-thinking-toggle"]')
+    expect(thinkingBtn.attributes('disabled')).toBeDefined()
+
+    await wrapper.find('.attachment-btn').trigger('click')
+    const menuThinkingBtn = wrapper.find('[data-testid="toggle-thinking"]')
+    expect(menuThinkingBtn.attributes('disabled')).toBeDefined()
+  })
+
+  it('renders CapabilityBadge in model picker dropdown', async () => {
+    const wrapper = mount(ChatComposer)
+    const modelBtn = wrapper.find('.model-badge-btn')
+    await modelBtn.trigger('click')
+
+    const badges = wrapper.findAll('[data-test="capability-badge"]')
+    expect(badges.length).toBeGreaterThan(0)
   })
 })

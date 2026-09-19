@@ -15,6 +15,10 @@ export const useModelsStore = defineStore('models', () => {
       apiIdentifier: 'claude-3-5-sonnet',
       isActive: true,
       isDefault: true,
+      supportsThinking: true,
+      supportsVision: true,
+      supportsDocument: true,
+      thinkingBudgetTokens: 4096,
       createdAt: new Date().toISOString()
     },
     {
@@ -24,6 +28,10 @@ export const useModelsStore = defineStore('models', () => {
       apiIdentifier: 'gpt-4o',
       isActive: true,
       isDefault: false,
+      supportsThinking: true,
+      supportsVision: true,
+      supportsDocument: true,
+      thinkingBudgetTokens: 4096,
       createdAt: new Date().toISOString()
     },
     {
@@ -33,6 +41,10 @@ export const useModelsStore = defineStore('models', () => {
       apiIdentifier: 'llama-3.3-70b-instruct',
       isActive: true,
       isDefault: false,
+      supportsThinking: true,
+      supportsVision: false,
+      supportsDocument: true,
+      thinkingBudgetTokens: 2048,
       createdAt: new Date().toISOString()
     }
   ]

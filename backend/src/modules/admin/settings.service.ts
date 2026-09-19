@@ -51,6 +51,34 @@ export function resolveEffectiveTokenLimit(
   return globalLimit > 0 ? globalLimit : null;
 }
 
+export function resolveLimitSource(
+  user: { tokenLimit?: number | null; role?: string },
+  roleLimits: Record<string, number>,
+): 'personal' | 'role' | 'global' {
+  if (user.tokenLimit !== null && user.tokenLimit !== undefined) {
+    return 'personal';
+  }
+  const roleLimit = user.role ? roleLimits[user.role] : undefined;
+  if (roleLimit !== undefined && roleLimit !== null) {
+    return 'role';
+  }
+  return 'global';
+}
+
+export function resolveEffectiveMessageLimit(
+  user: { messageLimit?: number | null; role?: string },
+  roleQuotas: Record<string, RoleQuota>,
+): number | null {
+  if (user.messageLimit !== null && user.messageLimit !== undefined) {
+    return user.messageLimit > 0 ? user.messageLimit : null;
+  }
+  const roleQuota = user.role ? roleQuotas[user.role] : undefined;
+  if (roleQuota && roleQuota.messageLimit !== null && roleQuota.messageLimit !== undefined) {
+    return roleQuota.messageLimit > 0 ? roleQuota.messageLimit : null;
+  }
+  return null;
+}
+
 const ACCESS_LEVELS: ModelAccessLevelName[] = ['public', 'commercial', 'private'];
 
 /**

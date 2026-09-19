@@ -27,6 +27,7 @@ const errorMessage = ref('')
 const tokenRatePer1000 = ref(10)
 // تنظیمات سقف‌ها برای resolve زنده سقف مؤثر هر کاربر (اختصاصی ← نقش ← سراسری)
 const roleTokenLimits = ref<Record<string, number>>({})
+const roleQuotas = ref<Record<string, any>>({})
 const globalTokenLimit = ref(0)
 
 const isEditorModalOpen = ref(false)
@@ -49,8 +50,9 @@ function tokensToDollars(tokens: number): number {
 
 /** منبع سقف مؤثر کاربر برای نمایش تگ در جدول. */
 function limitSourceFor(user: AdminUser): 'personal' | 'role' | 'global' {
-  if (user.tokenLimit !== null && user.tokenLimit !== undefined) return 'personal'
-  if (user.role && roleTokenLimits.value[user.role] !== undefined) return 'role'
+  if (user.tokenLimitSource) return user.tokenLimitSource
+  if (user.tokenLimit !== null && user.tokenLimit !== undefined && Number(user.tokenLimit) > 0) return 'personal'
+  if (user.role && (roleTokenLimits.value[user.role] !== undefined || roleQuotas.value[user.role]?.tokenLimit !== undefined)) return 'role'
   return 'global'
 }
 
@@ -62,8 +64,8 @@ function effectiveLimitFor(user: AdminUser): number | null {
   const source = limitSourceFor(user)
   if (source === 'personal') return Number(user.tokenLimit) > 0 ? Number(user.tokenLimit) : null
   if (source === 'role') {
-    const rl = roleTokenLimits.value[user.role || '']
-    return rl > 0 ? rl : null
+    const rl = roleTokenLimits.value[user.role || ''] ?? roleQuotas.value[user.role || '']?.tokenLimit
+    return rl && rl > 0 ? rl : null
   }
   return globalTokenLimit.value > 0 ? globalTokenLimit.value : null
 }
@@ -145,6 +147,7 @@ async function loadUsers() {
         tokenRatePer1000.value = sRes.value.tokenRatePer1000
       }
       roleTokenLimits.value = (sRes.value as any).roleTokenLimits || {}
+      roleQuotas.value = (sRes.value as any).roleQuotas || {}
       globalTokenLimit.value = (sRes.value as any).globalTokenLimit || 0
     }
   } catch (err: any) {
@@ -287,16 +290,42 @@ onMounted(loadUsers)
         <!-- وضعیت سقف و مصرف توکن: مصرف / سقف مؤثر + هزینه مصرفی -->
         <td data-label="وضعیت سقف و مصرف توکن" class="text-center">
           <div class="credit-metric-cell space-y-1 py-1">
-            <div class="text-xs">
+            <div class="text-xs flex items-center justify-center gap-1.5 flex-wrap">
               <span class="font-mono font-bold text-foreground">
                 {{ Number(user.usedTokens || 0).toLocaleString('fa-IR') }}
                 <span class="text-[11px] font-normal text-muted-foreground">
                   / {{ getUserStats(user).hasLimit ? Number(getUserStats(user).limit).toLocaleString('fa-IR') : 'نامحدود' }}
                 </span>
               </span>
+              <span
+                v-if="getUserStats(user).limitSource === 'personal'"
+                class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-500 border border-blue-500/25 font-sans font-medium"
+                title="سهمیه اختصاصی تعیین‌شده برای این کاربر"
+              >
+                اختصاصی
+              </span>
+              <span
+                v-else-if="getUserStats(user).limitSource === 'role'"
+                class="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-500 border border-purple-500/25 font-sans font-medium"
+                title="ارث‌بری خودکار از سقف نقش"
+              >
+                از نقش
+              </span>
+              <span
+                v-else
+                class="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border font-sans font-medium"
+                title="ارث‌بری از سقف سراسری سامانه"
+              >
+                سراسری
+              </span>
             </div>
             <div class="text-[11px] text-muted-foreground font-mono">
               ${{ Number(user.usedCostUsd ?? tokensToDollars(Number(user.usedTokens || 0))).toLocaleString('fa-IR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} مصرفی
+            </div>
+            <div v-if="user.effectiveMessageLimit || user.messageLimit" class="text-[10px] text-muted-foreground font-sans">
+              سقف پیام: {{ Number(user.effectiveMessageLimit || user.messageLimit).toLocaleString('fa-IR') }}
+              <span v-if="user.messageLimit" class="text-blue-500 font-semibold">(اختصاصی)</span>
+              <span v-else class="text-purple-500 font-semibold">(از نقش)</span>
             </div>
           </div>
         </td>
@@ -345,6 +374,8 @@ onMounted(loadUsers)
       :user="editingUser"
       :tokenRatePer1000="tokenRatePer1000"
       :isSaving="isSaving"
+      :inheritedTokenLimit="editingUser ? (roleTokenLimits[editingUser.role] ?? roleQuotas[editingUser.role]?.tokenLimit ?? globalTokenLimit) : null"
+      :inheritedMessageLimit="editingUser ? (roleQuotas[editingUser.role]?.messageLimit ?? null) : null"
       @close="isEditorModalOpen = false"
       @save="handleSaveUser"
     />

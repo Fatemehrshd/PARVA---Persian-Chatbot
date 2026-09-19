@@ -13,7 +13,12 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
-import { SettingsService, resolveEffectiveTokenLimit } from './settings.service';
+import {
+  SettingsService,
+  resolveEffectiveTokenLimit,
+  resolveLimitSource,
+  resolveEffectiveMessageLimit,
+} from './settings.service';
 import { UpdateUserAdminDto, UpdateUserStatusDto } from './dto';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { AdminGuard } from '../../shared/admin.guard';
@@ -30,7 +35,7 @@ export class AdminUsersController {
 
   @Get()
   async listUsers(@Query() query: Record<string, any>) {
-    const [all, roleLimits, globalLimit, multipliers, rate] = await Promise.all([
+    const [all, roleLimits, globalLimit, multipliers, rate, roleQuotas] = await Promise.all([
       this.users.listWithStats(),
       this.settings.getRoleTokenLimits(),
       this.settings.getGlobalTokenLimit(),
@@ -40,12 +45,17 @@ export class AdminUsersController {
       typeof this.settings.getTokenRatePer1000 === 'function'
         ? this.settings.getTokenRatePer1000().catch(() => 10)
         : Promise.resolve(10),
+      typeof this.settings.getRoleQuotas === 'function'
+        ? this.settings.getRoleQuotas().catch(() => ({}))
+        : Promise.resolve({}),
     ]);
     // سقف نقش/سراسری به صورت زنده روی هر کاربر resolve می‌شود تا جدول
     // کاربران پنل ادمین همیشه سقف مؤثر (اختصاصی ← نقش ← سراسری) را ببیند.
     const withEffective = all.map((u: any) => ({
       ...u,
       effectiveTokenLimit: resolveEffectiveTokenLimit(u, roleLimits, globalLimit),
+      effectiveMessageLimit: resolveEffectiveMessageLimit(u, (roleQuotas || {}) as any),
+      tokenLimitSource: resolveLimitSource(u, roleLimits),
       usedCostUsd: Number(
         Object.entries(u.usageByType || {})
           .reduce((sum, [type, tokens]) => {

@@ -216,6 +216,8 @@ export interface AdminUser extends User {
   tokenLimit?: number | null
   /** سقف مؤثر resolve شده در بک‌اند: اختصاصی ← نقش ← سراسری (null = نامحدود) */
   effectiveTokenLimit?: number | null
+  effectiveMessageLimit?: number | null
+  tokenLimitSource?: 'personal' | 'role' | 'global'
   conversationsCount: number
   filesCount?: number
   messageLimit?: number | null

@@ -438,7 +438,23 @@ onUnmounted(() => {
       </div>
 
       <div v-if="authStore.quota.blocked" class="stream-error-banner stream-error-banner--limit" data-testid="quota-block-banner" role="alert">
-        تا ساعت {{ formatResetTime(authStore.quota.resetAt) }} امکان ارسال پیام ندارید.
+        <div class="stream-error-content">
+          <svg class="stream-error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <span class="stream-error-text">
+            {{
+              authStore.quota.reason === 'messages'
+                ? 'سقف تعداد پیام‌های مجاز شما به پایان رسیده است.'
+                : 'سقف مجاز مصرف توکن شما به پایان رسیده است.'
+            }}
+            <template v-if="authStore.quota.resetAt">
+              (امکان ارسال پیام بعدی: تا ساعت {{ formatResetTime(authStore.quota.resetAt) }})
+            </template>
+          </span>
+        </div>
       </div>
 
       <!-- Transient Stream Error Alert (clears on refresh, new conversation or retry) -->

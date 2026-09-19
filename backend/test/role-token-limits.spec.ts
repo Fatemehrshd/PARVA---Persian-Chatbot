@@ -1,4 +1,9 @@
-import { SettingsService, resolveEffectiveTokenLimit } from '../src/modules/admin/settings.service';
+import {
+  SettingsService,
+  resolveEffectiveTokenLimit,
+  resolveLimitSource,
+  resolveEffectiveMessageLimit,
+} from '../src/modules/admin/settings.service';
 import { ChatService } from '../src/modules/chat/chat.service';
 import { BadRequestException } from '@nestjs/common';
 import { UsersService } from '../src/modules/users/users.service';
@@ -69,6 +74,24 @@ describe('Role-based token limits', () => {
 
     it('global 0 means unlimited', () => {
       expect(resolveEffectiveTokenLimit({ role: 'premium' }, roleLimits, 0)).toBeNull();
+    });
+
+    it('identifies source accurately (personal, role, global)', () => {
+      expect(resolveLimitSource({ tokenLimit: 50, role: 'user' }, roleLimits)).toBe('personal');
+      expect(resolveLimitSource({ role: 'user' }, roleLimits)).toBe('role');
+      expect(resolveLimitSource({ role: 'other' }, roleLimits)).toBe('global');
+    });
+
+    it('resolves effective message limit with personal override over role quota', () => {
+      const roleQuotas = {
+        user: { tokenLimit: 1000, messageLimit: 10, resetHours: 6 },
+      };
+      // Personal override wins
+      expect(resolveEffectiveMessageLimit({ messageLimit: 3, role: 'user' }, roleQuotas)).toBe(3);
+      // Inherits from role when no personal limit
+      expect(resolveEffectiveMessageLimit({ role: 'user' }, roleQuotas)).toBe(10);
+      // Null when neither has limit
+      expect(resolveEffectiveMessageLimit({ role: 'other' }, roleQuotas)).toBeNull();
     });
   });
 
@@ -252,6 +275,28 @@ describe('Role-based token limits', () => {
       };
       const state = await buildChatService(user, settings).getQuotaState('u1');
       expect(state.remainingPercent).toBe(71);
+    });
+
+    it('personal token limit overrides role quota and blocks when exhausted', async () => {
+      const user = { id: 'u1', role: 'user', tokenLimit: 50, usedTokens: 60 };
+      const settings: any = {
+        getRoleQuotas: async () => ({ user: { tokenLimit: 100000, messageLimit: null, resetHours: 6 } }),
+        getGlobalTokenLimit: async () => 100000,
+        getSystemPrompt: async () => 'p',
+      };
+      const gen = buildChatService(user, settings).generate('u1', 'c1', 'Hello');
+      await expect(gen.next()).rejects.toThrow('سقف مجاز مصرف توکن به پایان رسیده است');
+    });
+
+    it('personal message limit overrides role quota and blocks when exhausted', async () => {
+      const user = { id: 'u1', role: 'user', messageLimit: 2, periodUsedMessages: 2 };
+      const settings: any = {
+        getRoleQuotas: async () => ({ user: { tokenLimit: 100000, messageLimit: 10, resetHours: 6 } }),
+        getGlobalTokenLimit: async () => 100000,
+        getSystemPrompt: async () => 'p',
+      };
+      const gen = buildChatService(user, settings).generate('u1', 'c1', 'Hello');
+      await expect(gen.next()).rejects.toThrow('سقف تعداد پیام‌های شما در این دوره پر شده است');
     });
   });
 });

@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Token & Message Limit System Harmonization (Cascade Priority, Inheritance, & Chat Blocking)**:
+  - **Strict Priority Cascade**: Explicit per-user limits (`user.tokenLimit > 0` or `user.messageLimit > 0`) override role-based and global policies completely. If not set (stored as `null`), limits dynamically inherit from role quotas (`roleQuota.tokenLimit`, `roleQuota.messageLimit`) or the global token limit.
+  - **Dynamic Inheritance & Visual Badges in Users Table**: `AdminUsersSection.vue` displays effective limits (`effectiveTokenLimit`, `effectiveMessageLimit`) and origin badges: «اختصاصی» (Personal override), «از نقش» (Inherited from role), and «سراسری» (Inherited from global).
+  - **Inheritance Restoration in User Editor**: In `UserEditorModal.vue`, empty or cleared token/message limit fields save as `null` to restore dynamic inheritance instead of locking the user to zero. Added an explicit action button: «حذف سقف اختصاصی (بازگشت به ارث‌بری)» and contextual placeholders displaying the role's limit.
+  - **Full Chat Composer Input & Send Blocking**: When a user's token or message limit is exhausted (`chatStore.isTokenLimitExceeded` or `authStore.quota?.blocked`), both the textarea and send button are disabled, and a dedicated Persian banner informs the user whether tokens or messages were exhausted and when the quota resets.
 - **Merge feature branch `feat/thinking-adaptors` into `develop`**:
   - **Thinking Stream Parsing & Chain of Thought (CoT)**: Extracted reasoning content from upstream providers via `<think>...</think>` tags using `ThinkTagStreamParser` and structured deltas. Enhanced `ThinkingBlock.vue` with rich Markdown formatting, copy reasoning action, and pulsing progress indicator.
   - **Model Capabilities & Capability Badges**: Persisted `supportsThinking`, `supportsVision`, `supportsDocument`, and `thinkingBudgetTokens` in `AiModel` entity, migrations, and admin modal. Conditioned deep thinking toggles in `ChatComposer.vue` on `activeModel.supportsThinking` and displayed `CapabilityBadge` on the model picker button.
@@ -25,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Periodic Token/Message Quotas**: Periodic quotas with lazy hourly reset, role/user precedence, and structured `QUOTA_EXCEEDED` errors.
 
 ### Changed
+- **User Token Limit Nullability Behavior**: When editing a user, an empty input field emits `tokenLimit: null` to inherit dynamically from the role/global limit rather than saving `0` (which previously severed role inheritance and locked the user).
 - **All deletions are now soft-delete (production-ready)**: `users`, `ai_models`, and `ai_providers` gained an `isDeleted` flag; `DELETE /admin/users/:id`, `DELETE /admin/models/:id`, and `DELETE /admin/providers/:id` now flag rows instead of physically removing them.
 
 ### Fixed

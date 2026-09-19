@@ -380,15 +380,30 @@ export class ChatService {
       const legacyLimit = (await this.settings.getRoleTokenLimits())[user.role];
       roleQuota = { tokenLimit: legacyLimit ?? null };
     }
-    let tokenLimit = user.tokenLimit ?? roleQuota.tokenLimit ?? null;
-    if (tokenLimit === null && this.settings) tokenLimit = await this.settings.getGlobalTokenLimit();
+
+    let tokenLimit: number | null = null;
+    if (user.tokenLimit !== null && user.tokenLimit !== undefined) {
+      tokenLimit = user.tokenLimit > 0 ? user.tokenLimit : 0;
+    } else if (roleQuota.tokenLimit !== null && roleQuota.tokenLimit !== undefined) {
+      tokenLimit = roleQuota.tokenLimit > 0 ? roleQuota.tokenLimit : 0;
+    } else if (this.settings && typeof this.settings.getGlobalTokenLimit === 'function') {
+      tokenLimit = await this.settings.getGlobalTokenLimit();
+    }
+
+    let messageLimit: number | null = null;
+    if (user.messageLimit !== null && user.messageLimit !== undefined) {
+      messageLimit = user.messageLimit > 0 ? user.messageLimit : null;
+    } else if (roleQuota.messageLimit !== null && roleQuota.messageLimit !== undefined) {
+      messageLimit = roleQuota.messageLimit > 0 ? roleQuota.messageLimit : null;
+    }
+
     const resetHours = roleQuota.resetHours ?? DEFAULT_RESET_HOURS;
     const resetAt = resetHours > 0
       ? new Date((user.periodStart ? new Date(user.periodStart).getTime() : Date.now()) + resetHours * 3600_000)
       : null;
     return {
       tokenLimit: tokenLimit && tokenLimit > 0 ? tokenLimit : 0,
-      messageLimit: user.messageLimit ?? roleQuota.messageLimit ?? null,
+      messageLimit,
       resetHours,
       resetAt,
     };

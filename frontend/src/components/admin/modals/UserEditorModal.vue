@@ -11,6 +11,8 @@ const props = defineProps<{
   tokenRatePer1000: number
   isSaving?: boolean
   labels?: Record<string, string>
+  inheritedTokenLimit?: number | null
+  inheritedMessageLimit?: number | null
 }>()
 
 const emit = defineEmits<{
@@ -48,14 +50,15 @@ watch(
   () => props.user,
   (u) => {
     if (u) {
-      const limit = u.tokenLimit !== null && u.tokenLimit !== undefined ? Number(u.tokenLimit) : null
+      const limit = u.tokenLimit !== null && u.tokenLimit !== undefined && Number(u.tokenLimit) > 0 ? Number(u.tokenLimit) : null
+      const msgLimit = u.messageLimit !== null && u.messageLimit !== undefined && Number(u.messageLimit) > 0 ? Number(u.messageLimit) : null
       form.value = {
         displayName: u.displayName || '',
         email: u.email,
         role: u.role === 'admin' ? 'admin' : 'user',
         usedTokens: Number(u.usedTokens || 0),
         tokenLimit: limit,
-        messageLimit: u.messageLimit ?? null,
+        messageLimit: msgLimit,
       }
       creditDollarInput.value = limit !== null && limit > 0 ? tokensToDollars(limit) : null
     }
@@ -70,7 +73,7 @@ function onCreditDollarInput(val: string | number | null) {
     return
   }
   const num = typeof val === 'number' ? val : numericInputValue(val)
-  if (num === null || num < 0) {
+  if (num === null || num <= 0) {
     creditDollarInput.value = null
     form.value.tokenLimit = null
   } else {
@@ -81,13 +84,13 @@ function onCreditDollarInput(val: string | number | null) {
 
 function onTokenLimitInput(val: string | number | null) {
   if (val === '' || val === null || val === undefined) {
-    form.value.tokenLimit = 0
+    form.value.tokenLimit = null
     creditDollarInput.value = null
     return
   }
   const num = typeof val === 'number' ? val : numericInputValue(val)
-  if (num === null || num < 0) {
-    form.value.tokenLimit = 0
+  if (num === null || num <= 0) {
+    form.value.tokenLimit = null
     creditDollarInput.value = null
   } else {
     form.value.tokenLimit = Math.round(num)
@@ -96,7 +99,14 @@ function onTokenLimitInput(val: string | number | null) {
 }
 
 function onMessageLimitInput(val: string) {
-  form.value.messageLimit = numericInputValue(val)
+  const num = numericInputValue(val)
+  form.value.messageLimit = num !== null && num > 0 ? num : null
+}
+
+function clearPersonalLimits() {
+  form.value.tokenLimit = null
+  creditDollarInput.value = null
+  form.value.messageLimit = null
 }
 
 function quickRecharge(amountDollars: number) {
@@ -111,8 +121,8 @@ function handleSubmit() {
     displayName: form.value.displayName.trim() || undefined,
     email: form.value.email.trim(),
     role: form.value.role,
-    tokenLimit: form.value.tokenLimit === null ? 0 : form.value.tokenLimit,
-    messageLimit: form.value.messageLimit,
+    tokenLimit: form.value.tokenLimit === null || form.value.tokenLimit === undefined ? null : Number(form.value.tokenLimit),
+    messageLimit: form.value.messageLimit === null || form.value.messageLimit === undefined ? null : Number(form.value.messageLimit),
   })
 }
 </script>
@@ -131,8 +141,20 @@ function handleSubmit() {
           <input v-model="form.displayName" :disabled="isSaving" placeholder="نام و نام خانوادگی کاربر" />
         </label>
         <label>
-          <span class="field-label">حداکثر پیام در دوره</span>
-          <input :value="form.messageLimit ?? ''" type="text" inputmode="numeric" min="0" placeholder="خالی = سهمیه نقش" :disabled="isSaving" @input="onMessageLimitInput(($event.target as HTMLInputElement).value)" />
+          <div class="flex items-center justify-between mb-1">
+            <span class="field-label">حداکثر پیام در دوره</span>
+            <span v-if="form.messageLimit" class="text-[10px] text-blue-500 font-semibold">(اختصاصی کاربر)</span>
+            <span v-else-if="inheritedMessageLimit" class="text-[10px] text-muted-foreground font-mono">سقف نقش: {{ Number(inheritedMessageLimit).toLocaleString('fa-IR') }}</span>
+          </div>
+          <input
+            :value="form.messageLimit ?? ''"
+            type="text"
+            inputmode="numeric"
+            min="0"
+            :placeholder="inheritedMessageLimit ? `خالی = ارث‌بری (${Number(inheritedMessageLimit).toLocaleString('fa-IR')} پیام)` : 'خالی = سهمیه نقش یا نامحدود'"
+            :disabled="isSaving"
+            @input="onMessageLimitInput(($event.target as HTMLInputElement).value)"
+          />
         </label>
         <label>
           <span class="field-label">ایمیل <span class="req">*</span></span>
@@ -161,9 +183,30 @@ function handleSubmit() {
 
         <!-- فیلد تخصیص اعتبار دلاری و سهمیه معادل با دکمه‌های شارژ سریع -->
         <div class="col-span-full p-3.5 rounded-xl bg-secondary/70 border border-border space-y-3">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-foreground">شارژ و سقف اعتبار کاربر:</span>
-            <span class="text-[11px] text-muted-foreground mono font-medium">نرخ فعال: هر ۱۰۰۰ توکن = ${{ tokenRatePer1000 }}</span>
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold text-foreground">شارژ و سقف اعتبار کاربر:</span>
+              <span
+                v-if="form.tokenLimit"
+                class="text-[10px] px-2 py-0.5 rounded bg-blue-500/15 text-blue-500 border border-blue-500/25 font-bold"
+              >
+                سهمیه اختصاصی فعال است (اولویت بالاتر از سقف کلی)
+              </span>
+              <span
+                v-else
+                class="text-[10px] px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border"
+              >
+                ارث‌بری خودکار از سقف نقش یا سراسری
+              </span>
+            </div>
+            <button
+              v-if="form.tokenLimit || form.messageLimit"
+              type="button"
+              class="text-xs text-destructive hover:underline cursor-pointer flex items-center gap-1"
+              @click="clearPersonalLimits"
+            >
+              حذف سقف اختصاصی (بازگشت به ارث‌بری)
+            </button>
           </div>
 
           <!-- دکمه‌های شارژ سریع -->
@@ -203,12 +246,12 @@ function handleSubmit() {
             <label>
               <span class="field-label">شارژ سقف دلاری ($ USD)</span>
               <input
-                :value="creditDollarInput"
+                :value="creditDollarInput ?? ''"
                 type="text"
                 inputmode="decimal"
                 step="any"
                 min="0"
-                placeholder="مثال: 50"
+                :placeholder="inheritedTokenLimit ? `خالی = ارث‌بری ($${tokensToDollars(inheritedTokenLimit)})` : 'مثال: 50'"
                 :disabled="isSaving"
                 @input="onCreditDollarInput(($event.target as HTMLInputElement).value)"
               />
@@ -216,18 +259,18 @@ function handleSubmit() {
             <label>
               <span class="field-label">معادل سقف توکن</span>
               <input
-                :value="form.tokenLimit"
+                :value="form.tokenLimit ?? ''"
                 type="text"
                 inputmode="numeric"
                 min="0"
-                placeholder="خالی = سقف نقش یا سراسری سامانه"
+                :placeholder="inheritedTokenLimit ? `خالی = ارث‌بری (${Number(inheritedTokenLimit).toLocaleString('fa-IR')} توکن)` : 'خالی = سقف نقش یا سراسری سامانه'"
                 :disabled="isSaving"
                 @input="onTokenLimitInput(($event.target as HTMLInputElement).value)"
               />
             </label>
           </div>
           <small class="text-[11px] text-muted-foreground block leading-relaxed">
-            با تغییر هر یک از فیلدهای بالا (دلار یا توکن)، فیلد دیگر به صورت خودکار با نرخ برابری روزانه همگام می‌شود. برای حذف سقف اختصاصی، کادر را خالی بگذارید.
+            با تغییر هر یک از فیلدهای بالا (دلار یا توکن)، فیلد دیگر به صورت خودکار با نرخ برابری روزانه همگام می‌شود. در صورت تعیین عدد، این سهمیه مستقیماً بر سقف کلی اولویت داشته و اعمال می‌شود. برای حذف سقف اختصاصی و ارث‌بری، کادر را خالی بگذارید.
           </small>
         </div>
       </div>

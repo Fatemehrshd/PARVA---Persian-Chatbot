@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { Eye, Download, ExternalLink, Copy, Check, X, Loader2 } from '@lucide/vue'
 import type { FileAttachmentItem } from '../../types'
 import { buildUrl } from '../../services/api'
+import { fixUtf8MangledString } from '../../lib/filename'
 import MarkdownContent from './MarkdownContent.vue'
 
 const props = defineProps<{
@@ -81,8 +82,9 @@ const isUploading = computed(() => props.file.status === 'uploading')
 const isProcessing = computed(() => props.file.status === 'processing')
 const isError = computed(() => props.file.status === 'error')
 const isReady = computed(() => props.file.status === 'ready')
+const displayName = computed(() => fixUtf8MangledString(props.file.originalName))
 const isMarkdown = computed(() => {
-  const name = props.file.originalName?.toLowerCase() || ''
+  const name = displayName.value.toLowerCase()
   return name.endsWith('.md') || name.endsWith('.markdown')
 })
 
@@ -165,7 +167,7 @@ function closePreviewModal() {
   fetchError.value = null
 }
 
-async function copyText() {
+async function handleCopyText() {
   if (!displayText.value) return
   try {
     await navigator.clipboard.writeText(displayText.value)
@@ -226,14 +228,14 @@ function handleRetryClick(e: MouseEvent) {
         'is-viewable': isViewable,
       },
     ]"
-    :title="isViewable ? `مشاهده محتوا: ${file.originalName}` : file.originalName"
+    :title="isViewable ? `مشاهده محتوا: ${displayName}` : displayName"
     @click="handleCardClick"
   >
     <!-- Thumbnail / Icon Area -->
     <div
       class="card-media"
       :class="{ 'cursor-zoom': isViewable }"
-      :title="isViewable ? 'کلیک برای باز کردن و مشاهده فایل' : file.originalName"
+      :title="isViewable ? 'کلیک برای باز کردن و مشاهده فایل' : displayName"
     >
       <!-- Image Thumbnail -->
       <template v-if="file.fileType === 'image'">
@@ -357,7 +359,7 @@ function handleRetryClick(e: MouseEvent) {
     <!-- Info Area (Name & Size) -->
     <div v-if="!compact" class="card-info">
       <div class="name-row">
-        <span class="file-name" :title="file.originalName">{{ file.originalName }}</span>
+        <span class="file-name" :title="displayName">{{ displayName }}</span>
         <span v-if="isViewable" class="view-indicator" title="مشاهده فایل">
           <Eye :size="12" />
         </span>
@@ -420,7 +422,7 @@ function handleRetryClick(e: MouseEvent) {
               <span class="file-type-badge" :class="file.fileType">
                 {{ file.fileType.toUpperCase() }}
               </span>
-              <span class="file-modal-title" :title="file.originalName">{{ file.originalName }}</span>
+              <span class="file-modal-title" :title="displayName">{{ displayName }}</span>
               <span class="file-modal-size">{{ formattedSize }}</span>
             </div>
 
@@ -463,41 +465,39 @@ function handleRetryClick(e: MouseEvent) {
               </button>
             </div>
 
-            <!-- Actions -->
+            <!-- Right Actions: Copy / External / Download / Close -->
             <div class="topbar-actions">
-              <!-- Copy Text Button (Text / Markdown / Extracted Text) -->
+              <!-- Copy Text Button (for text files or PDF extracted text) -->
               <button
-                v-if="(file.fileType === 'text' || activeTab === 'extracted' || file.fileType === 'excel') && displayText"
+                v-if="(file.fileType === 'text' && displayText) || (file.fileType === 'pdf' && activeTab === 'extracted' && props.file.extractedText)"
                 type="button"
-                class="modal-btn copy-action-btn"
-                :class="{ copied: isCopied }"
+                class="modal-btn copy-btn copy-action-btn"
                 :title="isCopied ? 'کپی شد!' : 'کپی متن'"
-                @click="copyText"
+                @click="handleCopyText"
               >
-                <Check v-if="isCopied" :size="14" class="text-emerald-400" />
-                <Copy v-else :size="14" />
+                <component :is="isCopied ? Check : Copy" :size="14" :class="{ 'text-emerald-500': isCopied }" />
                 <span class="action-label">{{ isCopied ? 'کپی شد' : 'کپی متن' }}</span>
               </button>
 
-              <!-- Open in New Tab (PDF / Download URL) -->
+              <!-- Open in New Tab (PDF / Image) -->
               <a
-                v-if="fileDownloadUrl"
-                :href="fileDownloadUrl"
+                v-if="effectivePdfUrl && (file.fileType === 'pdf' || file.fileType === 'image')"
+                :href="effectivePdfUrl"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="modal-btn"
-                title="باز کردن در پنجره جدید"
+                title="باز کردن در تب جدید"
                 @click.stop
               >
                 <ExternalLink :size="14" />
-                <span class="action-label hidden sm:inline">پنجره جدید</span>
+                <span class="action-label hidden sm:inline">تب جدید</span>
               </a>
 
               <!-- Download Button -->
               <a
                 v-if="fileDownloadUrl"
                 :href="fileDownloadUrl"
-                :download="file.originalName"
+                :download="displayName"
                 class="modal-btn"
                 title="دانلود فایل"
                 @click.stop
@@ -525,7 +525,7 @@ function handleRetryClick(e: MouseEvent) {
               <div class="image-viewer-container" @click="closePreviewModal">
                 <img
                   :src="imageSource"
-                  :alt="file.originalName"
+                  :alt="displayName"
                   class="lightbox-image"
                   @click.stop
                 />
@@ -547,7 +547,7 @@ function handleRetryClick(e: MouseEvent) {
                   <a
                     v-if="fileDownloadUrl"
                     :href="fileDownloadUrl"
-                    :download="file.originalName"
+                    :download="displayName"
                     class="download-btn-primary mt-3"
                   >
                     <Download :size="14" />
@@ -582,7 +582,7 @@ function handleRetryClick(e: MouseEvent) {
                 <a
                   v-if="fileDownloadUrl"
                   :href="fileDownloadUrl"
-                  :download="file.originalName"
+                  :download="displayName"
                   class="download-btn-primary mt-3"
                 >
                   <Download :size="14" />
@@ -606,13 +606,13 @@ function handleRetryClick(e: MouseEvent) {
               <div class="excel-container">
                 <div class="excel-info-banner">
                   <div class="excel-banner-text">
-                    <strong>فایل اکسل ({{ file.originalName }})</strong>
+                    <strong>فایل اکسل ({{ displayName }})</strong>
                     <p>فایل شامل اطلاعات ساخت‌یافته و داده‌های جدولی است. می‌توانید داده‌های استخراج‌شده را در زیر مطالعه کرده یا فایل کامل را دانلود فرمایید.</p>
                   </div>
                   <a
                     v-if="fileDownloadUrl"
                     :href="fileDownloadUrl"
-                    :download="file.originalName"
+                    :download="displayName"
                     class="download-btn-primary"
                   >
                     <Download :size="14" />

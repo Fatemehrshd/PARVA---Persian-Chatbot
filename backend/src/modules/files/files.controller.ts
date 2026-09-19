@@ -39,7 +39,14 @@ export class FilesController {
     if (!file) {
       throw new BadRequestException('هیچ فایلی ارسال نشده است');
     }
-    return this.filesService.uploadFile(req.user.sub, file, conversationId);
+    let overrideName: string | undefined;
+    const headerName = req.headers['x-original-filename'] as string | undefined;
+    if (headerName) {
+      try {
+        overrideName = decodeURIComponent(headerName);
+      } catch {}
+    }
+    return this.filesService.uploadFile(req.user.sub, file, conversationId, overrideName);
   }
 
   @Post('upload-multiple')

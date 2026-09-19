@@ -13,11 +13,32 @@ import { QueueManagerService } from './queue-manager.service';
 import { SettingsService } from '../admin/settings.service';
 import { randomUUID } from 'crypto';
 
+const cp1252Map: Record<number, number> = {
+  0x20ac: 0x80, 0x201a: 0x82, 0x0192: 0x83, 0x201e: 0x84, 0x2026: 0x85,
+  0x2020: 0x86, 0x2021: 0x87, 0x02c6: 0x88, 0x2030: 0x89, 0x0160: 0x8a,
+  0x2039: 0x8b, 0x0152: 0x8c, 0x017d: 0x8e, 0x2018: 0x91, 0x2019: 0x92,
+  0x201c: 0x93, 0x201d: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97,
+  0x02dc: 0x98, 0x2122: 0x99, 0x0161: 0x9a, 0x203a: 0x9b, 0x0153: 0x9c,
+  0x017e: 0x9e, 0x0178: 0x9f,
+};
+
 export function fixUtf8MangledString(name: string): string {
   if (!name) return name;
   try {
-    const decoded = Buffer.from(name, 'latin1').toString('utf8');
-    if (!decoded.includes('\uFFFD') && decoded !== name) {
+    const bytes: number[] = [];
+    for (let i = 0; i < name.length; i++) {
+      const code = name.charCodeAt(i);
+      if (cp1252Map[code] !== undefined) {
+        bytes.push(cp1252Map[code]);
+      } else if (code <= 0xff) {
+        bytes.push(code);
+      } else {
+        return name;
+      }
+    }
+    const decoder = new TextDecoder('utf-8', { fatal: true });
+    const decoded = decoder.decode(new Uint8Array(bytes));
+    if (decoded && decoded !== name) {
       return decoded;
     }
   } catch {}
@@ -123,6 +144,7 @@ export class FilesService {
     userId: string,
     file: Express.Multer.File,
     conversationId?: string,
+    overrideOriginalName?: string,
   ): Promise<UploadedFileInfo> {
     const limits = await this.getUploadLimits();
 
@@ -135,7 +157,9 @@ export class FilesService {
       }
 
       // 2. Validate file type
-      const originalName = fixUtf8MangledString(file.originalname);
+      const originalName = overrideOriginalName
+        ? fixUtf8MangledString(overrideOriginalName)
+        : fixUtf8MangledString(file.originalname);
       const fileType = this.resolveFileType(file.mimetype, originalName);
 
       // 3. Pre-storage Security & Malware Scan Pipeline

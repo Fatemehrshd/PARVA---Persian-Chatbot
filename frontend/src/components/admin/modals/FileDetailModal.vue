@@ -3,6 +3,7 @@ import { Download } from '@lucide/vue'
 import AdminModal from '../AdminModal.vue'
 import BaseButton from '../../ui/BaseButton.vue'
 import { formatIranDateTime } from '../../../lib/date'
+import { fixUtf8MangledString } from '../../../lib/filename'
 import { buildUrl } from '../../../services/api'
 import type { AdminFileDetail } from '../../../types'
 
@@ -79,7 +80,7 @@ function getStatusClass(status: string): string {
             {{ file.fileType }}
           </span>
           <div>
-            <strong class="block text-sm font-semibold">{{ file.originalName }}</strong>
+            <strong class="block text-sm font-semibold">{{ fixUtf8MangledString(file.originalName) }}</strong>
             <span class="text-xs text-muted-foreground mono">{{ formatFileSize(file.fileSize) }} | {{ file.mimeType }}</span>
           </div>
         </div>
@@ -89,7 +90,7 @@ function getStatusClass(status: string): string {
           </span>
           <a
             :href="getFileDownloadUrl(file.id)"
-            :download="file.originalName"
+            :download="fixUtf8MangledString(file.originalName)"
             class="download-btn flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-foreground font-medium"
             title="دانلود فایل اصلی"
           >

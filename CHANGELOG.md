@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.3] - 2026-09-19
+
+### Fixed
+- **Persian/Arabic File Name & Content Encoding Fix (Mojibake Resolution)**:
+  - **Root Cause Resolution**: Resolved Mojibake encoding issues (e.g. `Ø§ÛŒÙ† ÛŒÙ‡ pdf ØªØ³Øª Ù‡Ø³Øª Ù†Ø¸Ø±Øª Ú†ÛŒÙ‡.pdf`) caused by multipart header decoding interpreting raw UTF-8 byte sequences as Windows-1252 / ISO-8859-1 (Latin-1).
+  - **Comprehensive Reverse Mapping**:
+    - Upgraded `fixUtf8MangledString` with a full CP1252 code table (`0x80` to `0x9F`, restoring special characters such as `Œ`, `†`, `‡`) and `TextDecoder('utf-8', { fatal: true })` in `backend/src/modules/files/files.service.ts` and `frontend/src/lib/filename.ts`.
+    - Correctly restores corrupted filenames back to clean Persian text (e.g. `این یه pdf تست هست نظرت چیه.pdf`).
+  - **Direct Client-Side Encoding Header**:
+    - Added `X-Original-Filename: encodeURIComponent(file.name)` in `frontend/src/services/files.service.ts` during file upload, bypassing multipart header interpretation variances across browsers, OS platforms, and proxies.
+    - Updated `FilesController.uploadSingle` to read `X-Original-Filename` with `decodeURIComponent` and pass `overrideOriginalName` to `FilesService.uploadFile`.
+  - **Database Migration for Existing Records**:
+    - Added TypeORM migration `backend/src/migrations/1761300000006-FixMangledFilenames.ts` to automatically scan and restore any existing mangled filenames in the `file_attachments` database table.
+  - **Clean Client-Side Display**:
+    - Wrapped filenames with `fixUtf8MangledString` in `AdminFilesSection.vue`, `FileDetailModal.vue`, and `FilePreviewCard.vue` so that tables, modal headers, preview cards, and download attributes always display Persian names cleanly.
+  - **Tests**:
+    - Added comprehensive unit tests in `backend/test/filename-encoding.spec.ts` and `frontend/tests/filename.spec.ts` verifying decoding for Windows-1252, Latin-1, ASCII, and already-valid UTF-8 strings.
+
 ## [1.4.2] - 2026-09-19
 
 ### Added

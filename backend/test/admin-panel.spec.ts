@@ -99,7 +99,7 @@ describe('Admin Panel Suite', () => {
       );
 
       const gen = chatService.generate('u1', 'c1', 'Hello');
-      await expect(gen.next()).rejects.toThrow('سقف مجاز مصرف توکن به پایان رسیده است');
+      await expect(gen.next()).rejects.toThrow('توکن مصرفی شما به پایان رسید');
     });
 
     it('throws BadRequestException when user reaches custom per-user token limit', async () => {
@@ -140,7 +140,7 @@ describe('Admin Panel Suite', () => {
       );
 
       const gen = chatService.generate('u1', 'c1', 'Hello');
-      await expect(gen.next()).rejects.toThrow('سقف مجاز مصرف توکن به پایان رسیده است');
+      await expect(gen.next()).rejects.toThrow('توکن مصرفی شما به پایان رسید');
     });
 
     it('increments user token usage and uses dynamic system prompt on chat generation', async () => {

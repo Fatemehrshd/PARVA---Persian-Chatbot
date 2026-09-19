@@ -534,6 +534,7 @@ onUnmounted(() => {
 }
 
 .lightbox-header {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -554,7 +555,8 @@ onUnmounted(() => {
   font-size: 13px;
   font-weight: 500;
   overflow: hidden;
-  max-width: 50%;
+  max-width: calc(50% - 65px);
+  min-width: 0;
 }
 
 .lightbox-filename {
@@ -567,18 +569,26 @@ onUnmounted(() => {
   font-size: 11px;
   color: #94a3b8;
   direction: ltr;
+  flex-shrink: 0;
 }
 
 .lightbox-counter {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 3px 10px;
+  padding: 3px 12px;
   background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 100px;
   font-size: 12px;
   font-weight: 500;
   color: #e2e8f0;
+  pointer-events: none;
+  z-index: 10;
 }
 
 .lightbox-actions {

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { Brain, ChevronDown } from '@lucide/vue'
+import { Brain, ChevronDown, Copy, Check } from '@lucide/vue'
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible'
+import MarkdownContent from './MarkdownContent.vue'
 
 interface Props {
   reasoning: string
@@ -87,6 +88,18 @@ const formattedDuration = computed(() => {
   const sec = (props.durationMs / 1000).toFixed(1).replace(/\.0$/, '')
   return `${toPersianDigits(sec)} ثانیه`
 })
+
+const copied = ref(false)
+async function copyReasoning() {
+  if (!props.reasoning) return
+  try {
+    await navigator.clipboard.writeText(props.reasoning)
+    copied.value = true
+    setTimeout(() => {
+      copied.value = false
+    }, 2000)
+  } catch {}
+}
 </script>
 
 <template>
@@ -95,7 +108,7 @@ const formattedDuration = computed(() => {
       <CollapsibleTrigger as-child>
         <button
           type="button"
-          class="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors py-1 px-2 rounded-md hover:bg-muted/50 select-none group w-full text-right"
+          class="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors py-1.5 px-2.5 rounded-lg hover:bg-purple-500/10 select-none group w-full text-right border border-transparent hover:border-purple-500/20"
           data-test="thinking-trigger"
         >
           <Brain
@@ -105,16 +118,16 @@ const formattedDuration = computed(() => {
             ]"
             aria-hidden="true"
           />
-          <span class="flex items-center gap-1 truncate">
+          <span class="flex items-center gap-1.5 truncate">
             <template v-if="isThinking">
-              در حال فکر کردن
-              <span v-if="liveSeconds > 0" class="text-muted-foreground/80">
+              <span class="font-semibold text-purple-600 dark:text-purple-400">در حال فکر کردن و تحلیل عمیق</span>
+              <span v-if="liveSeconds > 0" class="text-muted-foreground/80 font-mono text-[11px]">
                 ({{ toPersianDigits(liveSeconds) }} ثانیه)
               </span>...
             </template>
             <template v-else>
-              فرآیند تفکر
-              <span v-if="formattedDuration" class="text-muted-foreground/80">
+              <span class="font-medium">فرآیند تفکر عمیق</span>
+              <span v-if="formattedDuration" class="text-muted-foreground/80 font-mono text-[11px]">
                 ({{ formattedDuration }})
               </span>
             </template>
@@ -130,11 +143,38 @@ const formattedDuration = computed(() => {
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div
-          class="mt-1.5 p-3 rounded-lg bg-muted/40 dark:bg-zinc-800/40 border border-border/50 border-r-2 border-r-purple-500 text-xs text-muted-foreground font-mono leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto"
+          class="thinking-panel mt-2 rounded-xl bg-purple-500/[0.03] dark:bg-purple-950/[0.15] border border-purple-500/20 border-s-4 border-s-purple-500/70 p-3.5 shadow-sm text-xs leading-relaxed"
           data-test="thinking-content"
           dir="auto"
         >
-          {{ reasoning }}
+          <!-- Thinking Panel Header / Toolbar -->
+          <div class="flex items-center justify-between pb-2 mb-2 border-b border-purple-500/10 text-[11px] text-muted-foreground select-none">
+            <span class="flex items-center gap-1.5 font-medium text-purple-600 dark:text-purple-400">
+              <Brain class="w-3.5 h-3.5" />
+              <span>زنجیره تفکر و استدلال مدل (Chain of Thought)</span>
+            </span>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-purple-500/10 transition-colors"
+              title="کپی کردن متن استدلال"
+              @click.stop="copyReasoning"
+            >
+              <Check v-if="copied" class="w-3 h-3 text-emerald-500" />
+              <Copy v-else class="w-3 h-3" />
+              <span>{{ copied ? 'کپی شد' : 'کپی استدلال' }}</span>
+            </button>
+          </div>
+
+          <!-- Thinking Content with Rich Markdown -->
+          <div class="thinking-markdown max-h-80 overflow-y-auto pr-1 pl-1 text-muted-foreground leading-relaxed">
+            <MarkdownContent :content="reasoning" :streaming="isThinking" />
+          </div>
+
+          <!-- Pulsing dot indicator while actively thinking -->
+          <div v-if="isThinking" class="flex items-center gap-1.5 mt-2.5 pt-1.5 border-t border-purple-500/10 text-[11px] text-purple-500/90 font-medium">
+            <span class="w-1.5 h-1.5 rounded-full bg-purple-500 animate-ping"></span>
+            <span>در حال ادامه‌ی استنتاج و نتیجه‌گیری...</span>
+          </div>
         </div>
       </CollapsibleContent>
     </Collapsible>

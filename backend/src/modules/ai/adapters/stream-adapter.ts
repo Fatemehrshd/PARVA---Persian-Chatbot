@@ -13,5 +13,5 @@ export interface StreamRequestContext {
 export interface StreamAdapter {
   readonly name: string;
   buildRequest(ctx: StreamRequestContext): { url: string; init: RequestInit };
-  parseStreamChunk(payload: unknown): StreamChunk[];
+  parseStreamChunk(payload: unknown, parser?: any): StreamChunk[];
 }

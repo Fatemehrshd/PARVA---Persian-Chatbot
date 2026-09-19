@@ -14,10 +14,16 @@ const modelsStore = useModelsStore()
 const uiStore = useUiStore()
 
 const activeModel = computed(() => modelsStore.selectedModel)
-const activeModelSupportsThinking = computed(() => activeModel.value?.supportsThinking !== false)
+const activeModelSupportsThinking = computed(() => Boolean(activeModel.value?.supportsThinking))
 const activeModelSupportsVision = computed(() => Boolean(activeModel.value?.supportsVision))
 const activeModelSupportsDocument = computed(() => Boolean(activeModel.value?.supportsDocument))
 const activeModelSupportsAttachments = computed(() => activeModelSupportsVision.value || activeModelSupportsDocument.value)
+
+watch(activeModelSupportsThinking, (supported) => {
+  if (!supported && chatStore.getConvFlag(activeConvId.value).thinking) {
+    chatStore.setConvFlag(activeConvId.value, { thinking: false })
+  }
+})
 
 const inputContent = ref('')
 const inputDirection = ref<'rtl' | 'ltr'>('rtl')
@@ -297,7 +303,7 @@ function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
     if (chatStore.isTokenLimitExceeded) {
-      uiStore.showToast('سقف مجاز مصرف توکن به پایان رسیده است. لطفاً جهت افزایش اعتبار با مدیر سامانه تماس بگیرید.', 'error')
+      uiStore.showToast('توکن مصرفی شما به پایان رسید', 'error')
       return
     }
     if (isGenerating.value) return
@@ -307,7 +313,7 @@ function handleKeydown(event: KeyboardEvent) {
 
 async function handleSubmit() {
   if (chatStore.isTokenLimitExceeded) {
-    uiStore.showToast('سقف مجاز مصرف توکن به پایان رسیده است. امکان ارسال پیام وجود ندارد.', 'error')
+    uiStore.showToast('توکن مصرفی شما به پایان رسید', 'error')
     return
   }
   if (!canSend.value || isGenerating.value) return
@@ -409,7 +415,7 @@ onUnmounted(() => {
             <line x1="12" y1="8" x2="12" y2="12"/>
             <line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
-          <span class="stream-error-text">سقف مجاز مصرف توکن به پایان رسیده است. امکان ارسال پیام جدید وجود ندارد. لطفاً با مدیر سامانه تماس بگیرید.</span>
+          <span class="stream-error-text">توکن مصرفی شما به پایان رسید</span>
         </div>
         <div class="stream-error-actions">
           <button
@@ -505,7 +511,7 @@ onUnmounted(() => {
           v-model="inputContent"
           :class="['composer-textarea', inputDirection]"
           :dir="inputDirection"
-          :placeholder="chatStore.isTokenLimitExceeded ? 'سقف مجاز مصرف توکن شما به پایان رسیده است' : 'پیام خود را بنویسید... (Enter برای ارسال)'"
+          :placeholder="chatStore.isTokenLimitExceeded ? 'توکن مصرفی شما به پایان رسید' : 'پیام خود را بنویسید... (Enter برای ارسال)'"
           :disabled="chatStore.isTokenLimitExceeded"
           rows="1"
           @focus="isFocused = true; updateDirection()"
@@ -590,6 +596,7 @@ onUnmounted(() => {
                   </span>
                 </button>
                 <button
+                  v-if="activeModelSupportsThinking"
                   type="button"
                   class="attachment-menu-item"
                   data-testid="toggle-thinking"
@@ -627,6 +634,7 @@ onUnmounted(() => {
               >
                 <span class="model-dot"></span>
                 <span class="model-name">{{ modelsStore.selectedModel.name }}</span>
+                <CapabilityBadge v-if="activeModelSupportsThinking" capability="thinking" size="sm" />
                 <svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline :points="modelMenuOpen ? '6 15 12 9 18 15' : '18 15 12 9 6 15'"></polyline>
                 </svg>
@@ -646,6 +654,7 @@ onUnmounted(() => {
                 </svg>
               </button>
               <button
+                v-if="activeModelSupportsThinking"
                 type="button"
                 data-testid="modelbar-thinking-toggle"
                 class="flex h-7 items-center gap-1 rounded-full px-2 text-xs transition-colors"

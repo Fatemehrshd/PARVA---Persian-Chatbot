@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { AiModel } from '../models-admin/ai-model.entity';
 import { AiProvider } from '../models-admin/ai-provider.entity';
-import { OpenAiCompatAdapter } from './adapters/openai-compat.adapter';
+import { OpenAiCompatAdapter, ThinkTagStreamParser } from './adapters/openai-compat.adapter';
 
 export interface ChatMessage {
   role: string;
@@ -132,6 +132,7 @@ export class OpenAiCompatForwarder {
     let buf = '';
     let emitted = false;
 
+    const parser = new ThinkTagStreamParser();
     try {
       while (true) {
         if (options?.signal?.aborted) {
@@ -165,14 +166,26 @@ export class OpenAiCompatForwarder {
           buf = buf.slice(idx + 1);
           if (!line.startsWith('data:')) continue;
           const payload = line.slice(5).trim();
-          if (payload === '[DONE]') return;
+          if (payload === '[DONE]') {
+            const flushed = parser.flush();
+            for (const chunk of flushed) {
+              if (chunk.type === 'reasoning') {
+                emitted = true;
+                yield { reasoning: chunk.text };
+              } else if (chunk.type === 'content') {
+                emitted = true;
+                yield chunk.text;
+              }
+            }
+            return;
+          }
           let parsed: unknown;
           try {
             parsed = JSON.parse(payload);
           } catch {
             continue; // keep-alives / partial frames from the upstream
           }
-          const chunks = this.adapter.parseStreamChunk(parsed);
+          const chunks = this.adapter.parseStreamChunk(parsed, parser);
           for (const chunk of chunks) {
             if (chunk.type === 'reasoning') {
               emitted = true;
@@ -182,6 +195,17 @@ export class OpenAiCompatForwarder {
               yield chunk.text;
             }
           }
+        }
+      }
+
+      const flushed = parser.flush();
+      for (const chunk of flushed) {
+        if (chunk.type === 'reasoning') {
+          emitted = true;
+          yield { reasoning: chunk.text };
+        } else if (chunk.type === 'content') {
+          emitted = true;
+          yield chunk.text;
         }
       }
     } finally {

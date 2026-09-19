@@ -45,9 +45,22 @@ const formattedTime = computed(() => {
   return `${toPersianDigits(hours)}:${minutesStr} ${period}`
 })
 
-const displayContent = computed(() =>
-  stripTrailingSourcesLine(props.message.content, props.message.sources ?? null),
-)
+const effectiveReasoning = computed(() => {
+  if (props.message.reasoning_content) return props.message.reasoning_content
+  if (props.message.content?.startsWith('<think>')) {
+    const match = props.message.content.match(/^<think>([\s\S]*?)<\/think>/)
+    if (match) return match[1].trim()
+  }
+  return ''
+})
+
+const displayContent = computed(() => {
+  let text = stripTrailingSourcesLine(props.message.content, props.message.sources ?? null)
+  if (text.startsWith('<think>')) {
+    text = text.replace(/^<think>[\s\S]*?<\/think>\s*/, '')
+  }
+  return text
+})
 
 const imageAttachments = computed(() => {
   if (!props.message.attachments) return []
@@ -168,8 +181,8 @@ async function handleFeedback(type: 'like' | 'dislike') {
         <!-- Assistant: Rich Markdown -->
         <div v-else class="message-text">
           <ThinkingBlock
-            v-if="!isUser && message.reasoning_content"
-            :reasoning="message.reasoning_content"
+            v-if="!isUser && effectiveReasoning"
+            :reasoning="effectiveReasoning"
             :duration-ms="message.thinkingDurationMs"
             :is-thinking="false"
             :default-open="false"

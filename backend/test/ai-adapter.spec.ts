@@ -68,4 +68,58 @@ describe('OpenAiCompatAdapter', () => {
     expect(adapter.parseStreamChunk(null)).toEqual([]);
     expect(adapter.parseStreamChunk('not-json')).toEqual([]);
   });
+
+  describe('ThinkTagStreamParser & <think> tag extraction', () => {
+    it('extracts <think>...</think> from delta.content when parser is provided', () => {
+      const { ThinkTagStreamParser } = require('../src/modules/ai/adapters/openai-compat.adapter');
+      const parser = new ThinkTagStreamParser();
+
+      // Chunk 1: <think>Let's analyze
+      const c1 = adapter.parseStreamChunk(
+        { choices: [{ delta: { content: '<think>Let\'s analyze' } }] },
+        parser,
+      );
+      expect(c1).toEqual([{ type: 'reasoning', text: "Let's analyze" }]);
+
+      // Chunk 2:  step by step.</think>The answer is 42.
+      const c2 = adapter.parseStreamChunk(
+        { choices: [{ delta: { content: ' step by step.</think>The answer is 42.' } }] },
+        parser,
+      );
+      expect(c2).toEqual([
+        { type: 'reasoning', text: ' step by step.' },
+        { type: 'content', text: 'The answer is 42.' },
+      ]);
+    });
+
+    it('handles tags split across chunk boundaries', () => {
+      const { ThinkTagStreamParser } = require('../src/modules/ai/adapters/openai-compat.adapter');
+      const parser = new ThinkTagStreamParser();
+
+      // Split '<think>' into '<th' and 'ink>Reasoning'
+      const c1 = parser.feedContent('<th');
+      expect(c1).toEqual([]);
+
+      const c2 = parser.feedContent('ink>Reasoning');
+      expect(c2).toEqual([{ type: 'reasoning', text: 'Reasoning' }]);
+
+      // Split '</think>' into '</th' and 'ink>Final'
+      const c3 = parser.feedContent('</th');
+      expect(c3).toEqual([]);
+
+      const c4 = parser.feedContent('ink>Final');
+      expect(c4).toEqual([{ type: 'content', text: 'Final' }]);
+    });
+
+    it('flushes unclosed partial tag buffer cleanly at stream end', () => {
+      const { ThinkTagStreamParser } = require('../src/modules/ai/adapters/openai-compat.adapter');
+      const parser = new ThinkTagStreamParser();
+
+      const c1 = parser.feedContent('<think>Unfinished thoughts</th');
+      expect(c1).toEqual([{ type: 'reasoning', text: 'Unfinished thoughts' }]);
+
+      const flushed = parser.flush();
+      expect(flushed).toEqual([{ type: 'reasoning', text: '</th' }]);
+    });
+  });
 });

@@ -788,7 +788,7 @@ export const useChatStore = defineStore('chat', () => {
 
         if (isLimit) {
           isTokenLimitExceeded.value = true
-          uiStore.showToast('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است). لطفاً جهت افزایش اعتبار با مدیر سامانه تماس بگیرید.', 'error')
+          uiStore.showToast('توکن مصرفی شما به پایان رسید', 'error')
         }
 
         const errorMessage =
@@ -948,7 +948,7 @@ export const useChatStore = defineStore('chat', () => {
   // ─── Send message ──────────────────────────────────────────────────────────
   async function sendMessage(content: string, files?: FileAttachmentItem[], opts?: { useWebSearch?: boolean; useThinking?: boolean }) {
     if (isTokenLimitExceeded.value) {
-      uiStore.showToast('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است). امکان ارسال پیام جدید وجود ندارد.', 'error')
+      uiStore.showToast('توکن مصرفی شما به پایان رسید', 'error')
       return
     }
 

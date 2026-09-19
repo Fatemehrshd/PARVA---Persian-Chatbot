@@ -9,6 +9,7 @@ import { modelsService } from '../../services/models.service'
 import { useUiStore } from '../../stores/ui'
 import { useModelsStore } from '../../stores/models'
 import { markDefaultModel } from '../../utils/models'
+import CapabilityBadge from '../../components/chat/CapabilityBadge.vue'
 import type { Model, Provider } from '../../types'
 
 const props = defineProps<{
@@ -180,6 +181,7 @@ async function handleSaveModel(payload: { name: string; provider: string; provid
     }
     isEditorModalOpen.value = false
     await loadModels()
+    await modelsStore.fetchModels(true).catch(() => {})
   } catch (err: any) {
     uiStore.showToast(err?.message || 'ذخیره مدل با خطا مواجه شد', 'error')
   } finally {
@@ -272,6 +274,7 @@ onMounted(loadModels)
             >
               پیش‌فرض
             </span>
+            <CapabilityBadge v-if="model.supportsThinking" capability="thinking" size="sm" />
           </div>
         </td>
         <td data-label="ارائه‌دهنده">

@@ -212,6 +212,13 @@ export class ChatService {
               a.originalName = fixUtf8MangledString(a.originalName);
             }
           }
+          if (!m.reasoning_content && m.content && m.role === 'assistant') {
+            const thinkMatch = m.content.match(/^<think>([\s\S]*?)<\/think>\s*/);
+            if (thinkMatch) {
+              m.reasoning_content = thinkMatch[1].trim();
+              m.content = m.content.slice(thinkMatch[0].length);
+            }
+          }
         }
         return messages;
       });
@@ -339,12 +346,12 @@ export class ChatService {
       const usedTokens = user?.usedTokens || 0;
       if (user && user.tokenLimit !== null && user.tokenLimit !== undefined) {
         if (user.tokenLimit > 0 && usedTokens >= user.tokenLimit) {
-          throw new BadRequestException('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است)');
+          throw new BadRequestException('توکن مصرفی شما به پایان رسید');
         }
       } else if (this.settings) {
         const globalLimit = await this.settings.getGlobalTokenLimit();
         if (globalLimit > 0 && usedTokens >= globalLimit) {
-          throw new BadRequestException('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است)');
+          throw new BadRequestException('توکن مصرفی شما به پایان رسید');
         }
       }
     } else if (this.settings) {
@@ -352,7 +359,7 @@ export class ChatService {
       if (globalLimit > 0 && typeof this.users?.findById === 'function') {
         const user = await this.users.findById(userId);
         if ((user?.usedTokens || 0) >= globalLimit) {
-          throw new BadRequestException('اعتبار شما تمام شده است (سقف مجاز مصرف توکن به پایان رسیده است)');
+          throw new BadRequestException('توکن مصرفی شما به پایان رسید');
         }
       }
     }

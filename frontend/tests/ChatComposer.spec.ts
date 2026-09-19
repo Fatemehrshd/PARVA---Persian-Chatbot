@@ -125,7 +125,7 @@ describe('ChatComposer.vue', () => {
     // Alert banner exists with limit styling
     const limitBanner = wrapper.find('.stream-error-banner--limit')
     expect(limitBanner.exists()).toBe(true)
-    expect(limitBanner.text()).toContain('سقف مجاز مصرف توکن به پایان رسیده است')
+    expect(limitBanner.text()).toContain('توکن مصرفی شما به پایان رسید')
 
     // Retry button MUST NOT exist for quota limit errors
     const retryBtn = wrapper.find('.stream-error-retry-btn')

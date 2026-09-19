@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.3] - 2026-09-19
 
 ### Fixed
+- **شفاف‌سازی پیام اتمام توکن در زمان ارسال**:
+  - خطای backend و پیام‌های frontend همسان شدند تا هنگام تمام‌شدن موجودی، عبارت دقیق «توکن مصرفی شما به پایان رسید» در بنر کامپوزر و toast نمایش داده شود و ارسال پیام قفل بماند.
 - **Persian/Arabic File Name & Content Encoding Fix (Mojibake Resolution)**:
   - **Root Cause Resolution**: Resolved Mojibake encoding issues (e.g. `Ø§ÛŒÙ† ÛŒÙ‡ pdf ØªØ³Øª Ù‡Ø³Øª Ù†Ø¸Ø±Øª Ú†ÛŒÙ‡.pdf`) caused by multipart header decoding interpreting raw UTF-8 byte sequences as Windows-1252 / ISO-8859-1 (Latin-1).
   - **Comprehensive Reverse Mapping**:

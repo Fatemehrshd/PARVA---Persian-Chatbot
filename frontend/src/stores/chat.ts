@@ -28,9 +28,6 @@ interface ConvStreamState {
   thinkingDurationMs: number | null
 }
 
-// Delay between rendered characters during streaming — small enough to feel
-// real-time but visible enough to give a smooth typing effect.
-const STREAM_CHAR_DELAY_MS = 8
 
 function makeDefaultState(): ConvStreamState {
   return {
@@ -740,24 +737,12 @@ export const useChatStore = defineStore('chat', () => {
         streamedAny = true
         userMessage.status = 'sent'
         s.streamError = null
-        // Buffer the characters and release them slowly so the response
-        // streams in like a human is typing rather than dumping instantly.
+        // Append streamed tokens directly as they arrive from SSE.
+        // The backend already paces chunks by words (25ms), keeping the frontend
+        // 100% in sync with the backend stream and preventing character queue lag
+        // or abrupt dumps at the end of long responses.
         if (token) {
-          s.charBuffer.push(...token.split(''))
-          if (!s.releaseTimer) {
-            const release = () => {
-              const cur = ensureState(convId)
-              if (cur.charBuffer.length > 0) {
-                cur.currentStreamingText += cur.charBuffer.shift()!
-                convStreamStates.value.set(convId, { ...cur })
-                cur.releaseTimer = setTimeout(release, STREAM_CHAR_DELAY_MS)
-              } else {
-                cur.releaseTimer = null
-                convStreamStates.value.set(convId, { ...cur })
-              }
-            }
-            s.releaseTimer = setTimeout(release, STREAM_CHAR_DELAY_MS)
-          }
+          s.currentStreamingText += token
         }
         convStreamStates.value.set(convId, { ...s })
         resetWatchdog(convId, 25000)

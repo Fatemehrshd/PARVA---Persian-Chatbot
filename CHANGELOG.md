@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Wrapped filenames with `fixUtf8MangledString` in `AdminFilesSection.vue`, `FileDetailModal.vue`, and `FilePreviewCard.vue` so that tables, modal headers, preview cards, and download attributes always display Persian names cleanly.
   - **Tests**:
     - Added comprehensive unit tests in `backend/test/filename-encoding.spec.ts` and `frontend/tests/filename.spec.ts` verifying decoding for Windows-1252, Latin-1, ASCII, and already-valid UTF-8 strings.
+- **Real-Time Streaming Synchronization & Elimination of Sudden End Jumps**:
+  - **Root Cause Resolution**: Resolved an issue where long streaming messages would type line-by-line initially but then suddenly jump to the end all at once. The frontend previously queued incoming characters into a bottlenecked buffer with a fixed `setTimeout` (8ms per character, clamped to 10-16ms by the browser), creating a severe bottleneck (~60-100 chars/sec). Because the backend streams at ~200-400 chars/sec, long responses accumulated thousands of characters in the queue. Upon receiving `event: done`, `finishStream` flushed the entire queue in a single tick, causing a violent visual jump to the end of the message.
+  - **Direct Synchronous Token Appending**: Updated `onToken` in `frontend/src/stores/chat.ts` to append tokens directly to `currentStreamingText` as they arrive over SSE. Since the backend already splits chunks into words and spaces them with 25ms pacing (`STREAM_DELAY_MS = 25`), tokens appear smoothly in real-time, 100% in sync with the backend, without artificial lag, buffer backlog, or sudden end dumps.
+  - **Tests**: Added dedicated unit test suite in `frontend/tests/chat-stream-sync.spec.ts` verifying synchronous token accumulation and seamless transition to saved message state without character queue lag.
 
 ## [1.4.2] - 2026-09-19
 

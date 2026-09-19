@@ -207,5 +207,27 @@ describe('MessageBubble.vue', () => {
     // First button is like, second is dislike
     expect(feedbackBtns[0].classes()).toContain('text-emerald-500')
   })
+
+  it('renders ThinkingBlock when assistant message has reasoning_content', () => {
+    const assistantMessage: Message = {
+      id: 'm-ai-reasoning-1',
+      conversationId: 'c-1',
+      role: 'assistant',
+      content: 'Here is the final answer.',
+      reasoning_content: 'Let me think step by step...',
+      thinkingDurationMs: 2500,
+      createdAt: new Date().toISOString(),
+    }
+
+    const wrapper = mount(MessageBubble, {
+      props: { message: assistantMessage }
+    })
+
+    const thinkingBlock = wrapper.findComponent({ name: 'ThinkingBlock' })
+    expect(thinkingBlock.exists()).toBe(true)
+    expect(thinkingBlock.props('reasoning')).toBe('Let me think step by step...')
+    expect(thinkingBlock.props('durationMs')).toBe(2500)
+    expect(thinkingBlock.props('isThinking')).toBe(false)
+  })
 })
 

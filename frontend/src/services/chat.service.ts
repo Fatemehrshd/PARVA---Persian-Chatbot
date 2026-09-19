@@ -20,6 +20,8 @@ export interface SseCallbacks {
   onSearchStatus?: (state: string) => void
   onSources?: (sources: WebSource[]) => void
   onSourcesError?: (message: string) => void
+  onThinking?: (content: string) => void
+  onThinkingStatus?: (status: { state: 'thinking' | 'done'; durationMs?: number }) => void
   onActivity?: () => void
 }
 
@@ -47,6 +49,10 @@ export function dispatchSseEvent(
     cb.onSources?.(data.sources)
   } else if (currentEvent === 'sources-error') {
     cb.onSourcesError?.(data.message || 'خطا در جستجو')
+  } else if (currentEvent === 'thinking' && data.content !== undefined) {
+    cb.onThinking?.(data.content)
+  } else if (currentEvent === 'thinking-status' && data.state) {
+    cb.onThinkingStatus?.(data)
   } else if (currentEvent === 'error') {
     cb.onError?.(new Error(data.error || data.message || 'خطا در برقراری ارتباط'))
     return 'error'
@@ -251,7 +257,9 @@ export const chatService = {
     onTitle?: (title: string) => void,
     onSearchStatus?: (state: string) => void,
     onSources?: (sources: WebSource[]) => void,
-    onSourcesError?: (message: string) => void
+    onSourcesError?: (message: string) => void,
+    onThinking?: (content: string) => void,
+    onThinkingStatus?: (status: { state: 'thinking' | 'done'; durationMs?: number }) => void
   ): Promise<void> {
     const token = localStorage.getItem('token')
     const headers: Record<string, string> = {
@@ -276,7 +284,7 @@ export const chatService = {
       if (!response.ok) {
         throw new Error(`Reconnection failed: ${response.status}`)
       }
-      await readSseStream(response, { onToken, onSync, onTitle, onDone, onError, onSearchStatus, onSources, onSourcesError }, internalAbort.signal)
+      await readSseStream(response, { onToken, onSync, onTitle, onDone, onError, onSearchStatus, onSources, onSourcesError, onThinking, onThinkingStatus }, internalAbort.signal)
     } catch (err: any) {
       if (isTimeout) {
         onError?.(new Error('زمان انتظار برای دریافت پاسخ به پایان رسید (Timeout)'))
@@ -308,7 +316,9 @@ export const chatService = {
     onSearchStatus?: (state: string) => void,
     onSources?: (sources: WebSource[]) => void,
     onSourcesError?: (message: string) => void,
-    opts?: { useWebSearch?: boolean }
+    opts?: { useWebSearch?: boolean; useThinking?: boolean },
+    onThinking?: (content: string) => void,
+    onThinkingStatus?: (status: { state: 'thinking' | 'done'; durationMs?: number }) => void
   ): Promise<void> {
     const token = localStorage.getItem('token')
     const headers: Record<string, string> = {
@@ -349,6 +359,9 @@ export const chatService = {
       if (opts?.useWebSearch) {
         payload.useWebSearch = true
       }
+      if (opts?.useThinking) {
+        payload.useThinking = true
+      }
       const response = await fetch(url, {
         method: 'POST',
         headers,
@@ -380,7 +393,7 @@ export const chatService = {
 
       const streamRes = await readSseStream(
         response,
-        { onToken, onSync, onTitle, onDone, onError, onSearchStatus, onSources, onSourcesError, onActivity: armInactivityTimer },
+        { onToken, onSync, onTitle, onDone, onError, onSearchStatus, onSources, onSourcesError, onThinking, onThinkingStatus, onActivity: armInactivityTimer },
         internalAbort.signal
       )
 
@@ -400,7 +413,9 @@ export const chatService = {
           onTitle,
           onSearchStatus,
           onSources,
-          onSourcesError
+          onSourcesError,
+          onThinking,
+          onThinkingStatus
         )
       }
     } catch (error: any) {

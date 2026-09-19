@@ -8,6 +8,7 @@ import { getTextDirection, getLineDirection } from '../../utils/textDirection'
 import MarkdownContent from './MarkdownContent.vue'
 import FilePreviewCard from './FilePreviewCard.vue'
 import SourcesBlock from './SourcesBlock.vue'
+import ThinkingBlock from './ThinkingBlock.vue'
 import { stripTrailingSourcesLine } from '../../utils/citations'
 
 const props = defineProps<{
@@ -148,6 +149,14 @@ async function handleFeedback(type: 'like' | 'dislike') {
 
         <!-- Assistant: Rich Markdown -->
         <div v-else class="message-text">
+          <ThinkingBlock
+            v-if="!isUser && message.reasoning_content"
+            :reasoning="message.reasoning_content"
+            :duration-ms="message.thinkingDurationMs"
+            :is-thinking="false"
+            :default-open="false"
+            class="mb-3"
+          />
           <MarkdownContent :content="displayContent" :sources="message.sources ?? null" />
         </div>
 

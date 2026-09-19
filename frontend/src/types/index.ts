@@ -118,6 +118,8 @@ export interface Message {
   sources?: WebSource[] | null
   searchFailed?: boolean
   feedback?: 'like' | 'dislike' | null
+  reasoning_content?: string | null
+  thinkingDurationMs?: number | null
 }
 
 export interface ActiveStreamStatus {
@@ -126,12 +128,17 @@ export interface ActiveStreamStatus {
   accumulatedText: string
   title?: string
   messageId?: string
+  sources?: WebSource[]
+  reasoningText?: string
+  thinkingDurationMs?: number
+  isThinkingComplete?: boolean
 }
 
 export interface SendMessageRequest {
   content: string
   fileIds?: string[]
   useWebSearch?: boolean
+  useThinking?: boolean
 }
 
 export interface SearchResult {
@@ -249,6 +256,10 @@ export interface Model {
   isActive: boolean
   isDefault: boolean
   createdAt?: string
+  supportsThinking?: boolean
+  supportsVision?: boolean
+  supportsDocument?: boolean
+  thinkingBudgetTokens?: number | null
 }
 
 export interface CreateModelRequest {
@@ -259,6 +270,10 @@ export interface CreateModelRequest {
   apiKey?: string
   baseUrl?: string
   isActive?: boolean
+  supportsThinking?: boolean
+  supportsVision?: boolean
+  supportsDocument?: boolean
+  thinkingBudgetTokens?: number | null
 }
 
 export interface UpdateModelStatusRequest {

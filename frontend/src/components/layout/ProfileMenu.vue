@@ -6,17 +6,53 @@ import {
   LogOut,
   Moon,
   Sun,
+  Sparkles,
+  Receipt,
 } from '@lucide/vue'
-import { onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import { useUiStore } from '../../stores/ui'
+import { subscriptionService } from '../../services/subscription.service'
 
+let router: any = null
+try {
+  router = useRouter()
+} catch {
+  router = null
+}
 const authStore = useAuthStore()
 const uiStore = useUiStore()
+const currentPlanName = ref<string>('')
+const hasActivePurchasedPlan = ref<boolean>(false)
 
-function refreshUserState() {
+async function refreshUserState() {
   void authStore.refreshIdentity()
   void authStore.refreshQuota()
+  try {
+    const sub = await subscriptionService.getCurrentSubscription()
+    if (sub?.entitlements?.isAdmin) {
+      currentPlanName.value = 'مدیر'
+      hasActivePurchasedPlan.value = false
+    } else {
+      const activeSub = sub?.activeSubscription
+      if (
+        activeSub &&
+        activeSub.status === 'ACTIVE' &&
+        !activeSub.plan?.isDefault &&
+        Number(activeSub.plan?.price) > 0
+      ) {
+        hasActivePurchasedPlan.value = true
+      } else {
+        hasActivePurchasedPlan.value = false
+      }
+      if (sub?.entitlements?.plan?.name) {
+        currentPlanName.value = sub.entitlements.plan.name
+      }
+    }
+  } catch {
+    // fallback
+  }
 }
 
 onMounted(refreshUserState)
@@ -24,10 +60,26 @@ onMounted(refreshUserState)
 const emit = defineEmits<{
   close: []
   openProfile: []
+  openPayments: []
+  openSubscription: []
   openSettings: []
   openAdminPanel: []
   openLogout: []
 }>()
+
+function handleOpenSubscription() {
+  emit('close')
+  if (hasActivePurchasedPlan.value) {
+    uiStore.showToast('شما در حال حاضر دارای اشتراک فعال هستید و امکان تغییر آن وجود ندارد.', 'info')
+    return
+  }
+  emit('openSubscription')
+  try {
+    router?.push?.('/subscription')
+  } catch {
+    // fallback if router not provided
+  }
+}
 </script>
 
 <template>
@@ -40,15 +92,41 @@ const emit = defineEmits<{
         role="presentation"
         aria-readonly="true"
       >
-        <span :class="authStore.quotaStatusColor">
-          {{ authStore.quota.remainingPercent === null ? '∞' : `${Number(authStore.quota.remainingPercent).toLocaleString('fa-IR')}٪` }} باقی‌مانده
-        </span>
+        <div class="quota-summary-header">
+          <span class="quota-summary-title">
+            {{ authStore.quota.planName || (authStore.isAdmin ? 'مدیر سیستم' : 'سهمیه دوره') }}
+          </span>
+          <span :class="authStore.quotaStatusColor" class="quota-summary-pct">
+            {{ authStore.quota.remainingPercent === null ? '∞' : `${Number(authStore.quota.remainingPercent).toLocaleString('fa-IR')}٪` }}
+          </span>
+        </div>
+        <div v-if="authStore.quota.remainingTokens !== null || authStore.quota.remainingMessages !== null" class="quota-summary-detail">
+          <span v-if="authStore.quota.remainingTokens !== null">
+            {{ Number(authStore.quota.remainingTokens).toLocaleString('fa-IR') }} توکن باقی‌مانده
+          </span>
+          <span v-if="authStore.quota.remainingMessages !== null">
+            · {{ Number(authStore.quota.remainingMessages).toLocaleString('fa-IR') }} پیام
+          </span>
+        </div>
       </div>
 
       <!-- Profile -->
       <button class="menu-item" role="menuitem" @click="emit('openProfile')">
         <User :size="15" class="menu-icon" />
         <span class="menu-label">نمایه کاربری</span>
+      </button>
+
+      <!-- Payments History -->
+      <button class="menu-item" role="menuitem" @click="emit('openPayments')">
+        <Receipt :size="15" class="menu-icon text-emerald-500" />
+        <span class="menu-label">سوابق پرداخت</span>
+      </button>
+
+      <!-- Subscription -->
+      <button class="menu-item menu-item--subscription" role="menuitem" @click="handleOpenSubscription">
+        <Sparkles :size="15" class="menu-icon text-amber-500" />
+        <span class="menu-label">ارتقا و خرید اشتراک</span>
+        <span v-if="currentPlanName" class="plan-tag">{{ currentPlanName }}</span>
       </button>
 
       <!-- Customization & Theme -->
@@ -121,13 +199,41 @@ const emit = defineEmits<{
 
 .quota-summary {
   padding: 8px 10px;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   border-radius: 9px;
   background: color-mix(in srgb, var(--secondary) 55%, transparent);
   border: 1px solid var(--border);
-  text-align: center;
   font-size: 12px;
+}
+
+.quota-summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.quota-summary-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quota-summary-pct {
   font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.quota-summary-detail {
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
 }
 
 .menu-item:hover {
@@ -158,6 +264,17 @@ const emit = defineEmits<{
   background-color: var(--secondary);
   color: var(--muted-foreground);
   border: 1px solid var(--border);
+}
+
+.plan-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background-color: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  margin-inline-start: 6px;
 }
 
 .menu-item:hover .theme-badge {

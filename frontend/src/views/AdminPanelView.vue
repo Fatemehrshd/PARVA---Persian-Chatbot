@@ -14,6 +14,10 @@ import {
   Menu,
   Search,
   Loader2,
+  CreditCard,
+  UserCheck,
+  Receipt,
+  Tag,
 } from '@lucide/vue'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
@@ -30,6 +34,10 @@ import AdminChatsSection from './admin/AdminChatsSection.vue'
 import AdminFilesSection from './admin/AdminFilesSection.vue'
 import AdminFileSettingsSection from './admin/AdminFileSettingsSection.vue'
 import AdminPromptsSection from './admin/AdminPromptsSection.vue'
+import AdminPlansSection from './admin/AdminPlansSection.vue'
+import AdminSubscriptionsSection from './admin/AdminSubscriptionsSection.vue'
+import AdminPaymentsSection from './admin/AdminPaymentsSection.vue'
+import AdminCouponsSection from './admin/AdminCouponsSection.vue'
 
 import type { AdminUser } from '../types'
 
@@ -42,6 +50,11 @@ export type AdminSection =
   | 'chats'
   | 'files'
   | 'file-settings'
+  | 'plans'
+  | 'subscriptions'
+  | 'payments'
+  | 'coupons'
+  | 'audit-logs'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -57,7 +70,8 @@ watch(
     const segments = newPath.replace(/\/$/, '').split('/')
     const lastSeg = segments[segments.length - 1]
     const validSections: AdminSection[] = [
-      'dashboard', 'providers', 'models', 'users', 'prompts', 'chats', 'files', 'file-settings'
+      'dashboard', 'providers', 'models', 'users', 'prompts', 'chats', 'files', 'file-settings',
+      'plans', 'subscriptions', 'payments', 'coupons', 'audit-logs'
     ]
     if (validSections.includes(lastSeg as AdminSection)) {
       activeSection.value = lastSeg as AdminSection
@@ -84,6 +98,11 @@ const labels = {
   chats: 'تاریخچه گفتگوها',
   files: 'مدیریت فایل‌ها',
   fileSettings: 'تنظیمات فایل و آپلود',
+  plans: 'طرح‌های اشتراک',
+  subscriptions: 'اشتراک کاربران',
+  payments: 'تراکنش‌های مالی',
+  coupons: 'کدهای تخفیف',
+  auditLogs: 'لاگ‌های امنیتی',
   back: 'بازگشت به چت',
 }
 
@@ -92,6 +111,10 @@ const navItems = computed(() => [
   { id: 'providers', label: labels.providers, icon: Network },
   { id: 'models', label: labels.models, icon: Boxes },
   { id: 'users', label: labels.users, icon: Users },
+  { id: 'plans', label: labels.plans, icon: CreditCard },
+  { id: 'subscriptions', label: labels.subscriptions, icon: UserCheck },
+  { id: 'payments', label: labels.payments, icon: Receipt },
+  { id: 'coupons', label: labels.coupons, icon: Tag },
   { id: 'prompts', label: labels.prompts, icon: Sparkles },
   { id: 'chats', label: labels.chats, icon: MessageSquare },
   { id: 'files', label: labels.files, icon: FileText },
@@ -366,7 +389,27 @@ async function confirmDelete() {
           v-else-if="activeSection === 'file-settings'"
         />
 
-        <!-- 8. System Prompts & Global Quota -->
+        <!-- 8. Plans -->
+        <AdminPlansSection
+          v-else-if="activeSection === 'plans'"
+        />
+
+        <!-- 9. Subscriptions -->
+        <AdminSubscriptionsSection
+          v-else-if="activeSection === 'subscriptions'"
+        />
+
+        <!-- 10. Payments -->
+        <AdminPaymentsSection
+          v-else-if="activeSection === 'payments'"
+        />
+
+        <!-- 11. Coupons -->
+        <AdminCouponsSection
+          v-else-if="activeSection === 'coupons'"
+        />
+
+        <!-- 12. System Prompts & Global Quota -->
         <AdminPromptsSection
           v-else-if="activeSection === 'prompts'"
         />

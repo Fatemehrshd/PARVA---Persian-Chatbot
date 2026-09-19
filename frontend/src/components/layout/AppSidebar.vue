@@ -15,6 +15,7 @@ import {
   MoreVertical,
   Pin,
   PinOff,
+  Share2,
 } from '@lucide/vue'
 import { useUiStore } from '../../stores/ui'
 import { useChatStore } from '../../stores/chat'
@@ -23,6 +24,7 @@ import { useThemeLogo } from '../../composables/useThemeLogo'
 import ProfileMenu from './ProfileMenu.vue'
 import EditConversationModal from '../chat/EditConversationModal.vue'
 import DeleteConversationModal from '../chat/DeleteConversationModal.vue'
+import ShareConversationModal from '../chat/ShareConversationModal.vue'
 import LogoutModal from '../auth/LogoutModal.vue'
 import SearchModal from '../chat/SearchModal.vue'
 import ProfileModal from './ProfileModal.vue'
@@ -41,12 +43,16 @@ const isEditModalOpen = ref(false)
 const deletingConversation = ref<Conversation | null>(null)
 const isDeleteModalOpen = ref(false)
 
+const sharingConversation = ref<Conversation | null>(null)
+const isShareModalOpen = ref(false)
+
 const activeMenuConvId = ref<string | null>(null)
 const menuPosition = ref<'bottom' | 'top'>('bottom')
 
 const isLogoutModalOpen = ref(false)
 const isSearchModalOpen = ref(false)
 const isProfileModalOpen = ref(false)
+const profileModalTab = ref<'profile' | 'email' | 'password' | 'payments'>('profile')
 const profileMenuOpen = ref(false)
 
 // Sidebar toggle icons for RTL layout (sidebar sits on the right)
@@ -122,6 +128,13 @@ function openEditModal(event: Event, conv: Conversation) {
   isEditModalOpen.value = true
 }
 
+function openShareModal(event: Event, conv: Conversation) {
+  event.stopPropagation()
+  activeMenuConvId.value = null
+  sharingConversation.value = conv
+  isShareModalOpen.value = true
+}
+
 async function handleSaveTitle(id: string, newTitle: string) {
   try {
     await chatStore.updateConversationTitle(id, newTitle)
@@ -189,7 +202,8 @@ function openSettings() {
   profileMenuOpen.value = false
 }
 
-function openProfile() {
+function openProfile(tab: 'profile' | 'email' | 'password' | 'payments' = 'profile') {
+  profileModalTab.value = tab
   isProfileModalOpen.value = true
   profileMenuOpen.value = false
 }
@@ -219,6 +233,13 @@ const userInitial = computed(() => {
   if (authStore.user?.displayName) return authStore.user.displayName.charAt(0).toUpperCase()
   if (authStore.user?.email) return authStore.user.email.charAt(0).toUpperCase()
   return 'U'
+})
+
+onMounted(() => {
+  if (authStore.isAuthenticated) {
+    void authStore.refreshIdentity()
+    void authStore.refreshQuota()
+  }
 })
 </script>
 
@@ -343,6 +364,14 @@ const userInitial = computed(() => {
                       <span>ویرایش عنوان</span>
                     </button>
 
+                    <button
+                      class="sb-dropdown-item"
+                      @click="openShareModal($event, conv)"
+                    >
+                      <Share2 :size="13" class="sb-dropdown-icon" />
+                      <span>اشتراک‌گذاری گفتگو</span>
+                    </button>
+
                     <div class="sb-dropdown-divider"></div>
 
                     <button
@@ -386,7 +415,8 @@ const userInitial = computed(() => {
           <ProfileMenu
             v-if="profileMenuOpen"
             @close="profileMenuOpen = false"
-            @open-profile="openProfile"
+            @open-profile="() => openProfile('profile')"
+            @open-payments="() => openProfile('payments')"
             @open-settings="openSettings"
             @open-admin-panel="openAdminPanel"
             @open-logout="openLogoutModal"
@@ -402,6 +432,10 @@ const userInitial = computed(() => {
             <div v-else class="sb-avatar">{{ userInitial }}</div>
             <div class="sb-user-info">
               <span class="sb-user-name">{{ authStore.user?.displayName || authStore.user?.email }}</span>
+              <span v-if="authStore.quotaLoaded" class="sb-user-quota-hint" :class="authStore.quotaStatusColor">
+                {{ authStore.quota.remainingPercent === null ? '∞' : `${Number(authStore.quota.remainingPercent).toLocaleString('fa-IR')}٪` }}
+                <span v-if="authStore.quota.planName" class="text-muted-foreground font-normal"> · {{ authStore.quota.planName }}</span>
+              </span>
             </div>
                         <ChevronUp :size="13" class="sb-chevron" :class="{ 'is-flipped': profileMenuOpen }" />
           </button>
@@ -465,7 +499,8 @@ const userInitial = computed(() => {
         <div v-if="profileMenuOpen" class="sb-collapsed-menu-wrapper">
           <ProfileMenu
             @close="profileMenuOpen = false"
-            @open-profile="openProfile"
+            @open-profile="() => openProfile('profile')"
+            @open-payments="() => openProfile('payments')"
             @open-settings="openSettings"
             @open-admin-panel="openAdminPanel"
             @open-logout="openLogoutModal"
@@ -509,7 +544,13 @@ const userInitial = computed(() => {
   />
   <ProfileModal
     :is-open="isProfileModalOpen"
+    :default-tab="profileModalTab"
     @close="isProfileModalOpen = false"
+  />
+  <ShareConversationModal
+    :is-open="isShareModalOpen"
+    :conversation="sharingConversation"
+    @close="isShareModalOpen = false"
   />
 </template>
 
@@ -1087,6 +1128,15 @@ const userInitial = computed(() => {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--primary);
+}
+
+.sb-user-quota-hint {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .sb-chevron {

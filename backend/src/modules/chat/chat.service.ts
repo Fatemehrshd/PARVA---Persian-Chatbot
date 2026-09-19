@@ -10,6 +10,7 @@ import { DEFAULT_RESET_HOURS, SettingsService } from '../admin/settings.service'
 import { UsersService } from '../users/users.service';
 import { ActiveStreamService, ActiveStreamStatus } from './active-stream.service';
 import { WebSearchService } from '../web-search/web-search.service';
+import { EntitlementService } from '../subscriptions/entitlement.service';
 import { FA } from '../../shared/messages.fa';
 import { fixUtf8MangledString } from '../files/files.service';
 
@@ -68,8 +69,8 @@ const paceToken = () =>
  * محاسبه توکن‌های مصرفی برای فایل‌های پیوست‌شده (عکس، ابعاد و حجم)
  * طبق استانداردهای پیشرفته مدل‌های چندوجهی (Multimodal Vision Tokens):
  * ۱. اگر ابعاد تصویر مشخص باشد: تصویر به کاشی‌های ۵۱۲×۵۱۲ تقسیم شده و به ازای هر تایل ۱۷۰ توکن + ۸۵ توکن پایه محاسبه می‌شود.
- * ۲. اگر ابعاد مشخص نباشد: پایه ۸۵ توکن + ۶۵ توکن به ازای هر ۱۲۸ کیلوبایت حجم فایل تصویر محاسبه می‌گردد.
- * ۳. فایل‌های غیر تصویری از این محاسبه تایل مستثنی هستند و توکن متنی آن‌ها جداگانه محاسبه می‌شود.
+ * ۲. در صورت نامشخص بودن ابعاد، بر اساس حجم تخمین زده می‌شود.
+ * ۳. اسناد و متن‌ها: هر ۵۰۰ بایت معادل تقریباً ۱۰۰ توکن در نظر گرفته می‌شود.
  */
 export function calculateAttachmentTokens(
   attachments: Array<{ fileType?: string; fileSize?: number | string; metadata?: any }>,
@@ -125,6 +126,7 @@ export class ChatService {
     @Optional() private activeStream?: ActiveStreamService,
     @Optional() @InjectRepository(FileAttachment) private fileRepo?: Repository<FileAttachment>,
     @Optional() private webSearch?: WebSearchService,
+    @Optional() private entitlements?: EntitlementService,
   ) {}
 
   list(userId: string, limit: number = 50, page: number = 1) {
@@ -373,6 +375,38 @@ export class ChatService {
   }
 
   private async resolveQuota(user: any) {
+    if (this.entitlements && typeof this.entitlements.getUserEntitlements === 'function' && user?.id) {
+      try {
+        const ent = await this.entitlements.getUserEntitlements(user.id);
+        if (ent.isAdmin) {
+          return {
+            tokenLimit: 0,
+            messageLimit: null,
+            resetHours: DEFAULT_RESET_HOURS,
+            resetAt: null,
+            isAdmin: true,
+            planName: 'سازمانی (مدیر)',
+            limitSource: 'admin',
+          };
+        }
+        const resetHours = ent.plan?.resetHours ?? DEFAULT_RESET_HOURS;
+        const resetAt = resetHours > 0
+          ? new Date((user.periodStart ? new Date(user.periodStart).getTime() : Date.now()) + resetHours * 3600_000)
+          : null;
+        return {
+          tokenLimit: ent.effectiveTokenLimit && ent.effectiveTokenLimit > 0 ? ent.effectiveTokenLimit : 0,
+          messageLimit: ent.effectiveMessageLimit,
+          resetHours,
+          resetAt,
+          isAdmin: false,
+          planName: ent.plan?.name || null,
+          limitSource: ent.limitSource || 'global',
+        };
+      } catch {
+        // fallback to legacy resolution below if entitlement check throws
+      }
+    }
+
     let roleQuota: { tokenLimit?: number | null; messageLimit?: number | null; resetHours?: number | null } = {};
     if (typeof this.settings?.getRoleQuotas === 'function') {
       roleQuota = (await this.settings.getRoleQuotas())[user.role] || {};
@@ -382,13 +416,17 @@ export class ChatService {
     }
 
     let tokenLimit: number | null = null;
+    let limitSource = 'global';
     if (user.tokenLimit !== null && user.tokenLimit !== undefined) {
       tokenLimit = user.tokenLimit > 0 ? user.tokenLimit : 0;
+      limitSource = 'personal';
     } else if (roleQuota.tokenLimit !== null && roleQuota.tokenLimit !== undefined && Number(roleQuota.tokenLimit) > 0) {
       tokenLimit = Number(roleQuota.tokenLimit);
+      limitSource = 'role';
     } else if (this.settings && typeof this.settings.getGlobalTokenLimit === 'function') {
       const global = await this.settings.getGlobalTokenLimit();
       tokenLimit = global > 0 ? global : 0;
+      limitSource = 'global';
     }
 
     let messageLimit: number | null = null;
@@ -407,11 +445,15 @@ export class ChatService {
       messageLimit,
       resetHours,
       resetAt,
+      isAdmin: user.role === 'admin',
+      planName: user.role === 'admin' ? 'سازمانی (مدیر)' : null,
+      limitSource: user.role === 'admin' ? 'admin' : limitSource,
     };
   }
 
   private async assertQuota(user: any): Promise<void> {
     const quota = await this.resolveQuota(user);
+    if (quota.isAdmin) return;
     if (typeof this.users?.syncPeriod === 'function') await this.users.syncPeriod(user, quota.resetHours);
     const usedTokens = user.periodUsedTokens ?? user.usedTokens ?? 0;
     const usedMessages = user.periodUsedMessages || 0;
@@ -426,24 +468,59 @@ export class ChatService {
   async getQuotaState(userId: string) {
     const user = await this.users?.findById(userId);
     if (!user) {
-      return { blocked: false, reason: null, remainingTokens: null, remainingMessages: null, remainingPercent: null, resetAt: null };
+      return {
+        blocked: false,
+        reason: null,
+        remainingTokens: null,
+        remainingMessages: null,
+        remainingPercent: null,
+        resetAt: null,
+        tokenLimit: null,
+        usedTokens: 0,
+        periodUsedTokens: 0,
+        messageLimit: null,
+        usedMessages: 0,
+        planName: null,
+        limitSource: null,
+        isAdmin: false,
+      };
     }
     const quota = await this.resolveQuota(user);
     if (typeof this.users?.syncPeriod === 'function') await this.users.syncPeriod(user, quota.resetHours);
     const usedTokens = user.periodUsedTokens ?? user.usedTokens ?? 0;
     const displayUsedTokens = user.usedTokens ?? usedTokens;
     const usedMessages = user.periodUsedMessages || 0;
-    const blockedTokens = quota.tokenLimit > 0 && usedTokens >= quota.tokenLimit;
-    const blockedMessages = !!quota.messageLimit && quota.messageLimit > 0 && usedMessages >= quota.messageLimit;
+    const blockedTokens = !quota.isAdmin && quota.tokenLimit > 0 && usedTokens >= quota.tokenLimit;
+    const blockedMessages = !quota.isAdmin && !!quota.messageLimit && quota.messageLimit > 0 && usedMessages >= quota.messageLimit;
+
+    let remainingPercent: number | null = null;
+    if (quota.isAdmin) {
+      remainingPercent = null;
+    } else if (quota.tokenLimit > 0 && quota.messageLimit && quota.messageLimit > 0) {
+      const tokenPct = Math.max(0, Math.min(100, Math.round(((quota.tokenLimit - displayUsedTokens) / quota.tokenLimit) * 100)));
+      const msgPct = Math.max(0, Math.min(100, Math.round(((quota.messageLimit - usedMessages) / quota.messageLimit) * 100)));
+      remainingPercent = Math.min(tokenPct, msgPct);
+    } else if (quota.tokenLimit > 0) {
+      remainingPercent = Math.max(0, Math.min(100, Math.round(((quota.tokenLimit - displayUsedTokens) / quota.tokenLimit) * 100)));
+    } else if (quota.messageLimit && quota.messageLimit > 0) {
+      remainingPercent = Math.max(0, Math.min(100, Math.round(((quota.messageLimit - usedMessages) / quota.messageLimit) * 100)));
+    }
+
     return {
       blocked: blockedTokens || blockedMessages,
       reason: blockedMessages ? 'messages' : blockedTokens ? 'tokens' : null,
-      remainingTokens: quota.tokenLimit > 0 ? Math.max(0, quota.tokenLimit - usedTokens) : null,
-      remainingMessages: quota.messageLimit && quota.messageLimit > 0 ? Math.max(0, quota.messageLimit - usedMessages) : null,
-      // Keep the profile/sidebar percentage consistent with the admin users table,
-      // which displays lifetime usage while quota blocking remains period-based.
-      remainingPercent: quota.tokenLimit > 0 ? Math.max(0, Math.round(((quota.tokenLimit - displayUsedTokens) / quota.tokenLimit) * 100)) : null,
+      remainingTokens: quota.isAdmin || quota.tokenLimit <= 0 ? null : Math.max(0, quota.tokenLimit - usedTokens),
+      remainingMessages: quota.isAdmin || !quota.messageLimit || quota.messageLimit <= 0 ? null : Math.max(0, quota.messageLimit - usedMessages),
+      remainingPercent,
       resetAt: quota.resetAt?.toISOString() ?? null,
+      tokenLimit: quota.tokenLimit > 0 ? quota.tokenLimit : null,
+      usedTokens: user.usedTokens || 0,
+      periodUsedTokens: usedTokens,
+      messageLimit: quota.messageLimit || null,
+      usedMessages,
+      planName: quota.planName ?? null,
+      limitSource: quota.limitSource ?? null,
+      isAdmin: !!quota.isAdmin,
     };
   }
 

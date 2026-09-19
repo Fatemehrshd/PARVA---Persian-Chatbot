@@ -77,6 +77,7 @@ npm run start:dev
 2. Upgrade an existing database: `npm run seed:providers` backfills provider rows from the legacy free-text `provider` labels (idempotent).
 3. With at least one real key configured, chat hits the actual upstream (`stream:true`, token-by-token SSE). If NOTHING is configured the server logs a WARN and answers with the offline echo so local dev still works — provider errors are never silently echoed anymore.
 4. `/v1/models` and `/v1/chat/completions` (OpenAI-compatible facade) require a bearer token and forward to real models.
+5. Seed default subscription tiers and assign subscriptions to existing users: `npm run seed:subscriptions` (creates `free`, `pro`, `enterprise` plans, links models, and assigns active subscriptions).
 
 ### Infrastructure (Docker Compose)
 Run PostgreSQL and MinIO services locally using Docker Compose:

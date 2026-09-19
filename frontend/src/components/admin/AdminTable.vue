@@ -15,7 +15,8 @@ export interface TableColumn {
 const props = withDefaults(
   defineProps<{
     columns: TableColumn[]
-    items: any[]
+    items?: any[]
+    data?: any[]
     emptyText?: string
     tableClass?: string
     // قابلیت‌های پیشرفته دیتاگرید (MUI DataGrid Style)
@@ -31,6 +32,8 @@ const props = withDefaults(
     searchQuery?: string
   }>(),
   {
+    items: () => [],
+    data: undefined,
     emptyText: 'هیچ موردی برای نمایش یافت نشد.',
     tableClass: '',
     paginated: false,
@@ -108,11 +111,12 @@ const activeFiltersCount = computed(() => {
 })
 
 const filteredItems = computed(() => {
+  const sourceList = (props.items && props.items.length) ? props.items : (props.data || [])
   if (props.serverSide) {
-    return props.items || []
+    return sourceList
   }
 
-  let res = props.items || []
+  let res = [...sourceList]
 
   // ۱. اعمال جستجوی سراسری / فیلدی
   if (props.searchable && searchQuery.value.trim()) {
@@ -424,7 +428,9 @@ function formatCellValue(value: unknown): unknown {
                   :data-label="col.label"
                   :class="col.align === 'left' ? 'text-left' : col.align === 'center' ? 'text-center' : 'text-right'"
                 >
-                  {{ formatCellValue(item[col.key]) }}
+                  <slot :name="`cell-${col.key}`" :row="item" :col="col" :value="item[col.key]">
+                    {{ formatCellValue(item[col.key]) }}
+                  </slot>
                 </td>
               </slot>
             </tr>

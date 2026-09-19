@@ -18,6 +18,8 @@ import { AdminGuard } from '../../shared/admin.guard';
 
 import { FileAttachment } from '../files/file-attachment.entity';
 
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -31,6 +33,7 @@ import { FileAttachment } from '../files/file-attachment.entity';
     ]),
     JwtModule.register({ secret: process.env.JWT_SECRET ?? 'dev-secret' }),
     forwardRef(() => UsersModule),
+    forwardRef(() => SubscriptionsModule),
   ],
   controllers: [
     AdminSettingsController,

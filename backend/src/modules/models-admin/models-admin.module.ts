@@ -13,6 +13,8 @@ import { AdminGuard } from '../../shared/admin.guard';
 import { AiModule } from '../ai/ai.module';
 import { AdminModule } from '../admin/admin.module';
 import { UsersModule } from '../users/users.module';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([AiModel, AiProvider]),
@@ -21,6 +23,7 @@ import { UsersModule } from '../users/users.module';
     // SettingsService supplies the role → model-access map used to filter models.
     forwardRef(() => AdminModule),
     forwardRef(() => UsersModule),
+    forwardRef(() => SubscriptionsModule),
   ],
   controllers: [ModelsAdminController, ProvidersAdminController, ModelsController],
   providers: [ModelsAdminService, ProvidersAdminService, JwtAuthGuard, AdminGuard],

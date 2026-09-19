@@ -1,13 +1,14 @@
-              ${{ Number(user.usedCostUsd ?? tokensToDollars(Number(user.usedTokens || 0))).toLocaleString('fa-IR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} مصرفی
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
-import { Edit, FileText } from '@lucide/vue'
+import { Edit, FileText, CreditCard } from '@lucide/vue'
 import AdminTable, { type TableColumn } from '../../components/admin/AdminTable.vue'
 import AdminTableSkeleton from '../../components/admin/AdminTableSkeleton.vue'
 import BaseButton from '../../components/ui/BaseButton.vue'
 import BaseToggle from '../../components/ui/BaseToggle.vue'
 import UserEditorModal from '../../components/admin/modals/UserEditorModal.vue'
+import AssignSubscriptionModal from '../../components/admin/modals/AssignSubscriptionModal.vue'
 import { adminService } from '../../services/admin.service'
+import { subscriptionService } from '../../services/subscription.service'
 import { useUiStore } from '../../stores/ui'
 import type { AdminUser } from '../../types'
 
@@ -49,32 +50,38 @@ function tokensToDollars(tokens: number): number {
 }
 
 /** منبع سقف مؤثر کاربر برای نمایش تگ در جدول. */
-function limitSourceFor(user: AdminUser): 'personal' | 'role' | 'global' {
+function limitSourceFor(user: AdminUser): 'personal' | 'plan' | 'role' | 'global' | 'admin' {
+  if (user.role === 'admin' || user.tokenLimitSource === 'admin') return 'admin'
   if (user.tokenLimit !== null && user.tokenLimit !== undefined && Number(user.tokenLimit) > 0) return 'personal'
+  if (user.tokenLimitSource === 'plan') return 'plan'
   const rl = roleQuotas.value[user.role || '']?.tokenLimit ?? roleTokenLimits.value[user.role || '']
   if (rl !== undefined && rl !== null && Number(rl) > 0) return 'role'
-  if (user.tokenLimitSource && (user.tokenLimitSource === 'personal' || (user.tokenLimitSource === 'role' && rl && Number(rl) > 0))) {
+  if (user.tokenLimitSource && ['personal', 'plan', 'role', 'global', 'admin'].includes(user.tokenLimitSource)) {
     return user.tokenLimitSource
   }
   return 'global'
 }
 
-/** سقف مؤثر: با اولویت آبشاری: اختصاصی ← سقف نقش ← سقف سراسری */
+/** سقف مؤثر: با اولویت آبشاری: مدیر ← اختصاصی ← طرح اشتراک ← سقف نقش ← سقف سراسری */
 function effectiveLimitFor(user: AdminUser): number | null {
-  // ۱. سهمیه اختصاصی کاربر
+  // ۱. مدیر سیستم همیشه نامحدود است
+  if (user.role === 'admin' || user.tokenLimitSource === 'admin') {
+    return null
+  }
+  // ۲. سهمیه اختصاصی کاربر
   if (user.tokenLimit !== null && user.tokenLimit !== undefined && Number(user.tokenLimit) > 0) {
     return Number(user.tokenLimit)
   }
-  // ۲. سهمیه مشخص نقش کاربر (در صورت وجود مقدار مثبت)
+  // ۳. سقف محاسبه شده مؤثر از بک‌اند (که اشتراک و نقش را مد نظر دارد)
+  if (user.effectiveTokenLimit !== null && user.effectiveTokenLimit !== undefined) {
+    return Number(user.effectiveTokenLimit) > 0 ? Number(user.effectiveTokenLimit) : null
+  }
+  // ۴. سهمیه مشخص نقش کاربر (در صورت وجود مقدار مثبت)
   const rl = roleQuotas.value[user.role || '']?.tokenLimit ?? roleTokenLimits.value[user.role || '']
   if (rl !== undefined && rl !== null && Number(rl) > 0) {
     return Number(rl)
   }
-  // ۳. سقف محاسبه شده مؤثر از بک‌اند
-  if (user.effectiveTokenLimit !== null && user.effectiveTokenLimit !== undefined && Number(user.effectiveTokenLimit) > 0) {
-    return Number(user.effectiveTokenLimit)
-  }
-  // ۴. ارث‌بری از سقف سراسری سامانه
+  // ۵. ارث‌بری از سقف سراسری سامانه
   const global = Number(globalTokenLimit.value)
   return global > 0 ? global : null
 }
@@ -206,18 +213,60 @@ function openEditModal(user: AdminUser) {
   isEditorModalOpen.value = true
 }
 
-async function handleSaveUser(payload: { displayName?: string; email?: string; role?: 'user' | 'admin'; tokenLimit?: number | null }) {
+async function handleSaveUser(payload: {
+  displayName?: string
+  email?: string
+  role?: 'user' | 'admin'
+  tokenLimit?: number | null
+  messageLimit?: number | null
+  newPlanId?: string
+  durationDays?: number
+}) {
   if (!editingUser.value) return
   isSaving.value = true
   try {
-    await adminService.updateUser(editingUser.value.id, payload)
-    uiStore.showToast('اطلاعات کاربر با موفقیت ویرایش شد.', 'success')
+    const { newPlanId, durationDays, ...userFields } = payload
+    await adminService.updateUser(editingUser.value.id, userFields)
+
+    if (newPlanId) {
+      await subscriptionService.assignSubscription({
+        userId: editingUser.value.id,
+        planId: newPlanId,
+        durationDays,
+      })
+    }
+
+    uiStore.showToast('اطلاعات کاربر با موفقیت به‌روزرسانی شد.', 'success')
     isEditorModalOpen.value = false
     await loadUsers()
   } catch (err: any) {
     uiStore.showToast(err?.message || 'خطا در ویرایش کاربر', 'error')
   } finally {
     isSaving.value = false
+  }
+}
+
+const isAssignModalOpen = ref(false)
+const assigningUser = ref<AdminUser | null>(null)
+const isAssigning = ref(false)
+
+function openAssignSubscriptionModal(user: AdminUser) {
+  assigningUser.value = user
+  isAssignModalOpen.value = true
+}
+
+async function handleAssignSubscription(data: { userId: string; planId: string; durationDays?: number }) {
+  isAssigning.value = true
+  try {
+    await subscriptionService.assignSubscription(data)
+    uiStore.showToast('اشتراک کاربر با موفقیت اختصاص داده شد.', 'success')
+    isAssignModalOpen.value = false
+    assigningUser.value = null
+    await loadUsers()
+  } catch (err: any) {
+    uiStore.showToast(err?.message || 'خطا در تخصیص اشتراک کاربر', 'error')
+  } finally {
+    isAssigning.value = false
   }
 }
 
@@ -307,15 +356,29 @@ onMounted(loadUsers)
                 </span>
               </span>
               <span
-                v-if="getUserStats(user).limitSource === 'personal'"
+                v-if="getUserStats(user).limitSource === 'admin'"
+                class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 border border-amber-500/25 font-sans font-medium"
+                title="دسترسی نامحدود مدیر سیستم"
+              >
+                مدیر
+              </span>
+              <span
+                v-else-if="getUserStats(user).limitSource === 'personal'"
                 class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-500 border border-blue-500/25 font-sans font-medium"
                 title="سهمیه اختصاصی تعیین‌شده برای این کاربر"
               >
                 اختصاصی
               </span>
               <span
-                v-else-if="getUserStats(user).limitSource === 'role'"
+                v-else-if="getUserStats(user).limitSource === 'plan'"
                 class="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-500 border border-purple-500/25 font-sans font-medium"
+                :title="user.planName ? `طرح اشتراک فعال: ${user.planName}` : 'ارث‌بری از طرح اشتراک'"
+              >
+                {{ user.planName || 'طرح اشتراک' }}
+              </span>
+              <span
+                v-else-if="getUserStats(user).limitSource === 'role'"
+                class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-500 border border-indigo-500/25 font-sans font-medium"
                 title="ارث‌بری خودکار از سقف نقش"
               >
                 از نقش
@@ -334,7 +397,8 @@ onMounted(loadUsers)
             <div v-if="user.effectiveMessageLimit || user.messageLimit" class="text-[10px] text-muted-foreground font-sans">
               سقف پیام: {{ Number(user.effectiveMessageLimit || user.messageLimit).toLocaleString('fa-IR') }}
               <span v-if="user.messageLimit" class="text-blue-500 font-semibold">(اختصاصی)</span>
-              <span v-else class="text-purple-500 font-semibold">(از نقش)</span>
+              <span v-else-if="user.tokenLimitSource === 'plan'" class="text-purple-500 font-semibold">(از طرح)</span>
+              <span v-else class="text-indigo-500 font-semibold">(از نقش)</span>
             </div>
           </div>
         </td>
@@ -366,6 +430,9 @@ onMounted(loadUsers)
         <!-- عملیات -->
         <td data-label="عملیات" class="text-center">
           <div class="flex items-center justify-center gap-1.5">
+            <BaseButton variant="ghost" size="sm" @click="openAssignSubscriptionModal(user)" title="تغییر یا تخصیص اشتراک">
+              <CreditCard :size="14" class="text-purple-500" />
+            </BaseButton>
             <BaseButton variant="ghost" size="sm" @click="openEditModal(user)" title="ویرایش و شارژ">
               <Edit :size="14" />
             </BaseButton>
@@ -393,6 +460,17 @@ onMounted(loadUsers)
       ) : null"
       @close="isEditorModalOpen = false"
       @save="handleSaveUser"
+    />
+
+    <!-- Assign Subscription Modal Component -->
+    <AssignSubscriptionModal
+      :open="isAssignModalOpen"
+      :is-saving="isAssigning"
+      :initial-user-id="assigningUser?.id"
+      :initial-plan-id="assigningUser?.planId || undefined"
+      :user-name="assigningUser?.displayName ? `${assigningUser.displayName} (${assigningUser.email})` : assigningUser?.email"
+      @close="isAssignModalOpen = false; assigningUser = null"
+      @save="handleAssignSubscription"
     />
   </div>
 </template>

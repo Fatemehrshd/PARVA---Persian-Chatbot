@@ -17,6 +17,17 @@ import { AiModel } from './modules/models-admin/ai-model.entity';
 import { AiProvider } from './modules/models-admin/ai-provider.entity';
 import { SystemSetting } from './modules/admin/system-setting.entity';
 import { FileAttachment } from './modules/files/file-attachment.entity';
+import { SubscriptionPlan } from './modules/subscriptions/subscription-plan.entity';
+import { PlanModel } from './modules/subscriptions/plan-model.entity';
+import { Subscription } from './modules/subscriptions/subscription.entity';
+import { Payment } from './modules/payments/payment.entity';
+import { Coupon } from './modules/payments/coupon.entity';
+import { CouponUsage } from './modules/payments/coupon-usage.entity';
+import { AuditLog } from './modules/audit/audit-log.entity';
+import { ChatShare } from './modules/chat/chat-share.entity';
+import { AuditModule } from './modules/audit/audit.module';
+import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 import { ResponseEnvelopeInterceptor } from './shared/response-envelope.interceptor';
 
 @Module({
@@ -28,7 +39,23 @@ import { ResponseEnvelopeInterceptor } from './shared/response-envelope.intercep
       username: process.env.DB_USER || 'postgres',
       password: process.env.DB_PASS || 'postgres',
       database: process.env.DB_NAME || 'codeless',
-      entities: [User, Conversation, Message, AiModel, AiProvider, SystemSetting, FileAttachment],
+      entities: [
+        User,
+        Conversation,
+        Message,
+        AiModel,
+        AiProvider,
+        SystemSetting,
+        FileAttachment,
+        SubscriptionPlan,
+        PlanModel,
+        Subscription,
+        Payment,
+        Coupon,
+        CouponUsage,
+        AuditLog,
+        ChatShare,
+      ],
       migrations: [__dirname + '/migrations/*{.ts,.js}'],
       synchronize: (process.env.DB_SYNC ?? 'true') === 'true',
     }),
@@ -39,6 +66,9 @@ import { ResponseEnvelopeInterceptor } from './shared/response-envelope.intercep
     StorageModule,
     AdminModule,
     FilesModule,
+    AuditModule,
+    SubscriptionsModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [

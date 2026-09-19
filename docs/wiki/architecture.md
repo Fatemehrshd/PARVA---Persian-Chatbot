@@ -50,9 +50,16 @@ backend/src/
     │                                 ChatController (SSE + JSON), OpenAiCompatController (/v1/*, JWT-protected)
     ├── web-search/                ← WebSearchService (Serper): sources injected into prompt; SSE search-status/sources/sources-error
     ├── ai/                        ← OpenAiCompatForwarder: credential resolution + SSE parsing via global fetch
-    └── models-admin/              ← AiModel + AiProvider entities, ModelsAdminService,
-                                      ProvidersAdminService (CRUD/status/default/cascade), admin controllers,
-                                      and the public ModelsController (GET /models, active only)
+    ├── models-admin/              ← AiModel + AiProvider entities, ModelsAdminService,
+    │                                 ProvidersAdminService (CRUD/status/default/cascade), admin controllers,
+    │                                 and the public ModelsController (GET /models, active only)
+    ├── subscriptions/             ← SubscriptionPlan, PlanModel, Subscription entities; PlansService,
+    │                                 SubscriptionsService, EntitlementService (quota cascade & feature gating),
+    │                                 public/admin controllers
+    ├── payments/                  ← Payment entity, PaymentsService (pessimistic lock transactions),
+    │                                 PaymentGatewayProvider interface, SandboxPaymentGateway
+    └── audit/                     ← AuditLog entity, AuditService (auto-redaction & sanitization),
+                                      AdminAuditController
 ```
 
 ### Chat resolution chain
@@ -108,4 +115,26 @@ backend/src/
     - پاراگراف‌های فارسی بر اساس `getTextDirection` به صورت راست‌به‌چپ (RTL) رندر می‌شوند در حالی که جداول و کدها LTR باقی می‌مانند.
   - **مدیریت استریم ناقص:**
     - در حالت `streaming: true`، در صورتی که یک بلوک کد سه بک‌تیک در حال دریافت باشد و هنوز بسته نشده باشد، سیستم به صورت موقت آن را بسته تلقی می‌کند تا کاربر فرمت تمیز کد را از همان ابتدای تولید مشاهده کند.
+
+---
+
+## ۶. معماری فاز تجاری‌سازی و مدیریت اشتراک‌ها (Commercialization & Entitlements)
+
+### الف) تفکیک نقش‌های سیستمی و پلن‌های اشتراک (RBAC vs Subscriptions):
+- **نقش‌های سراسری (`Role: admin / user`)**: صرفاً مرزهای امنیتی و اختیارات اجرایی را معین می‌کنند. نقش `admin` دسترسی کامل به پنل ادمین داشته و از تمامی سهمیه‌های مصرف و قفل‌های دسترسی به مدل‌ها مصون است.
+- **اشتراک‌ها (`Subscriptions`)**: دسترسی محصولی کاربر (دسترسی به پلن‌های رایگان یا پرو، مدل‌های تخصصی هوش مصنوعی، سقف‌های ماهانه مصرف توکن و پیام، و قابلیت‌های ویژه مثل وب‌سرچ و دیپ تینکینگ) را کنترل می‌کنند.
+
+### ب) سلسله‌مراتب سه‌لایه حل سهمیه (Quota Cascade Priority):
+```
+1. سهمیه اختصاصی کاربر (User Personal Override)  → user.tokenLimit > 0
+2. سهمیه پلن اشتراک فعال (Active Subscription)     → plan.tokenQuota > 0
+3. سقف پیش‌فرض سراسری (Global System Limit)        → globalTokenLimit > 0
+```
+
+### ج) چرخه پرداخت امن و قفل بدبینانه (Pessimistic Locking):
+1. **شروع فرایند:** کاربر در صفحه `/subscription` روی ارتقای پلن کلیک می‌کند.
+2. **سرویس پرداخت:** رکورد پرداخت در وضعیت `pending` ایجاد شده و در محیط تست به درگاه شبیه‌ساز سندباکس منتقل می‌شود.
+3. **تایید تراکنش (Verification):** در یک تراکنش دیتابیس تحت قفل بدبینانه (`pessimistic_write`) وضعیت پرداخت بررسی و به `completed` تغییر می‌یابد و اشتراک کاربر فعال می‌گردد. این قفل تضمین می‌کند ارسال‌های مکرر یا تکرار پاسخ درگاه هرگز باعث اعمال دوبرابری تراکنش نشود.
+4. **ثبت ممیزی (Audit Logging):** کلیه تغییرات مالی و مدیریتی پس از حذف خودکار فیلدهای محرمانه و حساس در جدول `audit_logs` ماندگار می‌شوند.
+
 

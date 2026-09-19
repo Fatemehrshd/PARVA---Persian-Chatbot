@@ -75,7 +75,7 @@ export class QuotaInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest();
     const response = context.switchToHttp().getResponse();
-    const userId = request?.user?.sub;
+    const userId = request?.user?.id || request?.user?.sub;
     if (!userId || !this.chat || typeof (this.chat as any).getQuotaState !== 'function') return next.handle();
 
     return next.handle().pipe(

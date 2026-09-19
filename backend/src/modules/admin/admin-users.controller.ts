@@ -24,6 +24,8 @@ import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { AdminGuard } from '../../shared/admin.guard';
 import { CurrentUser } from '../../shared/current-user.decorator';
 import { ApiFeatures } from '../../shared/api-features';
+import { EntitlementService } from '../subscriptions/entitlement.service';
+import { Inject, Optional, forwardRef } from '@nestjs/common';
 
 @UseGuards(JwtAuthGuard, AdminGuard)
 @Controller('admin/users')
@@ -31,6 +33,9 @@ export class AdminUsersController {
   constructor(
     private users: UsersService,
     private settings: SettingsService,
+    @Optional()
+    @Inject(forwardRef(() => EntitlementService))
+    private entitlements?: EntitlementService,
   ) {}
 
   @Get()
@@ -49,22 +54,54 @@ export class AdminUsersController {
         ? this.settings.getRoleQuotas().catch(() => ({}))
         : Promise.resolve({}),
     ]);
-    // سقف نقش/سراسری به صورت زنده روی هر کاربر resolve می‌شود تا جدول
-    // کاربران پنل ادمین همیشه سقف مؤثر (اختصاصی ← نقش ← سراسری) را ببیند.
-    const withEffective = all.map((u: any) => ({
-      ...u,
-      effectiveTokenLimit: resolveEffectiveTokenLimit(u, roleLimits, globalLimit, (roleQuotas || {}) as any),
-      effectiveMessageLimit: resolveEffectiveMessageLimit(u, (roleQuotas || {}) as any),
-      tokenLimitSource: resolveLimitSource(u, roleLimits, (roleQuotas || {}) as any),
-      usedCostUsd: Number(
-        Object.entries(u.usageByType || {})
-          .reduce((sum, [type, tokens]) => {
-            const multiplier = type === 'normal' ? 1 : (multipliers as Record<string, number>)[type] ?? 1;
-            return sum + (Number(tokens) * rate * multiplier) / 1000;
-          }, 0)
-          .toFixed(4),
-      ),
-    }));
+    // سقف نقش/سراسری/اشتراک به صورت زنده روی هر کاربر resolve می‌شود تا جدول
+    // کاربران پنل ادمین همیشه سقف مؤثر (مدیر ← اختصاصی ← اشتراک ← نقش ← سراسری) را ببیند.
+    const withEffective = await Promise.all(
+      all.map(async (u: any) => {
+        let effectiveTokenLimit = resolveEffectiveTokenLimit(u, roleLimits, globalLimit, (roleQuotas || {}) as any);
+        let effectiveMessageLimit = resolveEffectiveMessageLimit(u, (roleQuotas || {}) as any);
+        let tokenLimitSource = resolveLimitSource(u, roleLimits, (roleQuotas || {}) as any);
+        let planName: string | null = null;
+        let planId: string | null = null;
+
+        if (this.entitlements && typeof this.entitlements.getUserEntitlements === 'function') {
+          try {
+            const ent = await this.entitlements.getUserEntitlements(u.id);
+            if (ent.isAdmin) {
+              effectiveTokenLimit = null;
+              effectiveMessageLimit = null;
+              tokenLimitSource = 'admin' as any;
+              planName = 'سازمانی (مدیر)';
+            } else {
+              if (ent.effectiveTokenLimit !== undefined) effectiveTokenLimit = ent.effectiveTokenLimit;
+              if (ent.effectiveMessageLimit !== undefined) effectiveMessageLimit = ent.effectiveMessageLimit;
+              if (ent.limitSource) tokenLimitSource = ent.limitSource as any;
+              planName = ent.plan?.name || null;
+              planId = ent.plan?.id || null;
+            }
+          } catch {
+            // fallback
+          }
+        }
+
+        return {
+          ...u,
+          effectiveTokenLimit,
+          effectiveMessageLimit,
+          tokenLimitSource,
+          planName,
+          planId,
+          usedCostUsd: Number(
+            Object.entries(u.usageByType || {})
+              .reduce((sum, [type, tokens]) => {
+                const multiplier = type === 'normal' ? 1 : (multipliers as Record<string, number>)[type] ?? 1;
+                return sum + (Number(tokens) * rate * multiplier) / 1000;
+              }, 0)
+              .toFixed(4),
+          ),
+        };
+      }),
+    );
     if (!query || Object.keys(query).length === 0) {
       return withEffective;
     }

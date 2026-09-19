@@ -53,9 +53,9 @@ export class AdminUsersController {
     // کاربران پنل ادمین همیشه سقف مؤثر (اختصاصی ← نقش ← سراسری) را ببیند.
     const withEffective = all.map((u: any) => ({
       ...u,
-      effectiveTokenLimit: resolveEffectiveTokenLimit(u, roleLimits, globalLimit),
+      effectiveTokenLimit: resolveEffectiveTokenLimit(u, roleLimits, globalLimit, (roleQuotas || {}) as any),
       effectiveMessageLimit: resolveEffectiveMessageLimit(u, (roleQuotas || {}) as any),
-      tokenLimitSource: resolveLimitSource(u, roleLimits),
+      tokenLimitSource: resolveLimitSource(u, roleLimits, (roleQuotas || {}) as any),
       usedCostUsd: Number(
         Object.entries(u.usageByType || {})
           .reduce((sum, [type, tokens]) => {

@@ -384,10 +384,11 @@ export class ChatService {
     let tokenLimit: number | null = null;
     if (user.tokenLimit !== null && user.tokenLimit !== undefined) {
       tokenLimit = user.tokenLimit > 0 ? user.tokenLimit : 0;
-    } else if (roleQuota.tokenLimit !== null && roleQuota.tokenLimit !== undefined) {
-      tokenLimit = roleQuota.tokenLimit > 0 ? roleQuota.tokenLimit : 0;
+    } else if (roleQuota.tokenLimit !== null && roleQuota.tokenLimit !== undefined && Number(roleQuota.tokenLimit) > 0) {
+      tokenLimit = Number(roleQuota.tokenLimit);
     } else if (this.settings && typeof this.settings.getGlobalTokenLimit === 'function') {
-      tokenLimit = await this.settings.getGlobalTokenLimit();
+      const global = await this.settings.getGlobalTokenLimit();
+      tokenLimit = global > 0 ? global : 0;
     }
 
     let messageLimit: number | null = null;

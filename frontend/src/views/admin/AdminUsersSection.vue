@@ -50,24 +50,33 @@ function tokensToDollars(tokens: number): number {
 
 /** منبع سقف مؤثر کاربر برای نمایش تگ در جدول. */
 function limitSourceFor(user: AdminUser): 'personal' | 'role' | 'global' {
-  if (user.tokenLimitSource) return user.tokenLimitSource
   if (user.tokenLimit !== null && user.tokenLimit !== undefined && Number(user.tokenLimit) > 0) return 'personal'
-  if (user.role && (roleTokenLimits.value[user.role] !== undefined || roleQuotas.value[user.role]?.tokenLimit !== undefined)) return 'role'
+  const rl = roleQuotas.value[user.role || '']?.tokenLimit ?? roleTokenLimits.value[user.role || '']
+  if (rl !== undefined && rl !== null && Number(rl) > 0) return 'role'
+  if (user.tokenLimitSource && (user.tokenLimitSource === 'personal' || (user.tokenLimitSource === 'role' && rl && Number(rl) > 0))) {
+    return user.tokenLimitSource
+  }
   return 'global'
 }
 
-/** سقف مؤثر: backend resolve می‌کند؛ در نبودش، محلی با همان اولویت. */
+/** سقف مؤثر: با اولویت آبشاری: اختصاصی ← سقف نقش ← سقف سراسری */
 function effectiveLimitFor(user: AdminUser): number | null {
-  if (user.effectiveTokenLimit !== null && user.effectiveTokenLimit !== undefined) {
-    return Number(user.effectiveTokenLimit) > 0 ? Number(user.effectiveTokenLimit) : null
+  // ۱. سهمیه اختصاصی کاربر
+  if (user.tokenLimit !== null && user.tokenLimit !== undefined && Number(user.tokenLimit) > 0) {
+    return Number(user.tokenLimit)
   }
-  const source = limitSourceFor(user)
-  if (source === 'personal') return Number(user.tokenLimit) > 0 ? Number(user.tokenLimit) : null
-  if (source === 'role') {
-    const rl = roleTokenLimits.value[user.role || ''] ?? roleQuotas.value[user.role || '']?.tokenLimit
-    return rl && rl > 0 ? rl : null
+  // ۲. سهمیه مشخص نقش کاربر (در صورت وجود مقدار مثبت)
+  const rl = roleQuotas.value[user.role || '']?.tokenLimit ?? roleTokenLimits.value[user.role || '']
+  if (rl !== undefined && rl !== null && Number(rl) > 0) {
+    return Number(rl)
   }
-  return globalTokenLimit.value > 0 ? globalTokenLimit.value : null
+  // ۳. سقف محاسبه شده مؤثر از بک‌اند
+  if (user.effectiveTokenLimit !== null && user.effectiveTokenLimit !== undefined && Number(user.effectiveTokenLimit) > 0) {
+    return Number(user.effectiveTokenLimit)
+  }
+  // ۴. ارث‌بری از سقف سراسری سامانه
+  const global = Number(globalTokenLimit.value)
+  return global > 0 ? global : null
 }
 
 function getUserStats(user: AdminUser) {
@@ -374,8 +383,14 @@ onMounted(loadUsers)
       :user="editingUser"
       :tokenRatePer1000="tokenRatePer1000"
       :isSaving="isSaving"
-      :inheritedTokenLimit="editingUser ? (roleTokenLimits[editingUser.role] ?? roleQuotas[editingUser.role]?.tokenLimit ?? globalTokenLimit) : null"
-      :inheritedMessageLimit="editingUser ? (roleQuotas[editingUser.role]?.messageLimit ?? null) : null"
+      :inheritedTokenLimit="editingUser ? (
+        (roleQuotas[editingUser.role]?.tokenLimit && Number(roleQuotas[editingUser.role]?.tokenLimit) > 0 ? Number(roleQuotas[editingUser.role]?.tokenLimit) : null)
+        ?? (roleTokenLimits[editingUser.role] && Number(roleTokenLimits[editingUser.role]) > 0 ? Number(roleTokenLimits[editingUser.role]) : null)
+        ?? (Number(globalTokenLimit) > 0 ? Number(globalTokenLimit) : null)
+      ) : null"
+      :inheritedMessageLimit="editingUser ? (
+        (roleQuotas[editingUser.role]?.messageLimit && Number(roleQuotas[editingUser.role]?.messageLimit) > 0 ? Number(roleQuotas[editingUser.role]?.messageLimit) : null)
+      ) : null"
       @close="isEditorModalOpen = false"
       @save="handleSaveUser"
     />

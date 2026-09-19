@@ -32,35 +32,55 @@ export type RoleQuota = {
 };
 
 /**
- * سقف مؤثر توکن یک کاربر با همان اولویت اعمال در ChatService:
- * سقف اختصاصی کاربر ← سقف نقش ← سقف سراسری. مقدار 0 هر لایه یعنی
- * «نامحدود» و لایه‌های بعدی را نادیده می‌گیرد. null = نامحدود.
+ * سقف مؤثر توکن یک کاربر با اولویت آبشاری:
+ * ۱. سقف اختصاصی کاربر (در صورت تعیین مقدار مثبت > 0)
+ * ۲. سقف نقش کاربر (در صورت تعیین مقدار مثبت در roleQuotas یا roleLimits)
+ * ۳. ارث‌بری از سقف سراسری سامانه (globalLimit)
  */
 export function resolveEffectiveTokenLimit(
   user: { tokenLimit?: number | null; role?: string },
-  roleLimits: Record<string, number>,
-  globalLimit: number,
+  roleLimits: Record<string, number> = {},
+  globalLimit: number = 0,
+  roleQuotas?: Record<string, RoleQuota>,
 ): number | null {
+  // ۱. سهمیه اختصاصی کاربر
   if (user.tokenLimit !== null && user.tokenLimit !== undefined) {
-    return user.tokenLimit > 0 ? user.tokenLimit : null;
+    return Number(user.tokenLimit) > 0 ? Number(user.tokenLimit) : null;
+  }
+  // ۲. سهمیه مشخص نقش کاربر (از roleQuotas یا roleLimits)
+  const roleQuotaLimit = user.role && roleQuotas ? roleQuotas[user.role]?.tokenLimit : undefined;
+  if (roleQuotaLimit !== undefined && roleQuotaLimit !== null && Number(roleQuotaLimit) > 0) {
+    return Number(roleQuotaLimit);
   }
   const roleLimit = user.role ? roleLimits[user.role] : undefined;
   if (roleLimit !== undefined && roleLimit !== null) {
-    return roleLimit > 0 ? roleLimit : null;
+    if (Number(roleLimit) > 0) return Number(roleLimit);
+    // اگر صراحتاً نقش معاف/vip با مقدار 0 باشد و سهمیه سراسری نخواهد
+    if (user.role && user.role !== 'user' && Number(roleLimit) === 0) {
+      return null;
+    }
   }
-  return globalLimit > 0 ? globalLimit : null;
+  // ۳. ارث‌بری از سقف سراسری سیستم
+  const global = Number(globalLimit);
+  return global > 0 ? global : null;
 }
 
 export function resolveLimitSource(
   user: { tokenLimit?: number | null; role?: string },
-  roleLimits: Record<string, number>,
+  roleLimits: Record<string, number> = {},
+  roleQuotas?: Record<string, RoleQuota>,
 ): 'personal' | 'role' | 'global' {
-  if (user.tokenLimit !== null && user.tokenLimit !== undefined) {
+  if (user.tokenLimit !== null && user.tokenLimit !== undefined && Number(user.tokenLimit) > 0) {
     return 'personal';
+  }
+  const roleQuotaLimit = user.role && roleQuotas ? roleQuotas[user.role]?.tokenLimit : undefined;
+  if (roleQuotaLimit !== undefined && roleQuotaLimit !== null && Number(roleQuotaLimit) > 0) {
+    return 'role';
   }
   const roleLimit = user.role ? roleLimits[user.role] : undefined;
   if (roleLimit !== undefined && roleLimit !== null) {
-    return 'role';
+    if (Number(roleLimit) > 0) return 'role';
+    if (user.role && user.role !== 'user' && Number(roleLimit) === 0) return 'role';
   }
   return 'global';
 }

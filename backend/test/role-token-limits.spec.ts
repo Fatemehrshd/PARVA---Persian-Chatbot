@@ -72,6 +72,14 @@ describe('Role-based token limits', () => {
       expect(resolveEffectiveTokenLimit({ role: 'premium' }, roleLimits, 1000)).toBe(1000);
     });
 
+    it('falls back to global when role quota has null or 0 token limit', () => {
+      const roleQuotas = {
+        user: { tokenLimit: null, messageLimit: null, resetHours: 6 },
+      };
+      expect(resolveEffectiveTokenLimit({ role: 'user' }, {}, 5000, roleQuotas)).toBe(5000);
+      expect(resolveEffectiveTokenLimit({ role: 'user' }, { user: 0 }, 5000)).toBe(5000);
+    });
+
     it('global 0 means unlimited', () => {
       expect(resolveEffectiveTokenLimit({ role: 'premium' }, roleLimits, 0)).toBeNull();
     });
@@ -80,6 +88,9 @@ describe('Role-based token limits', () => {
       expect(resolveLimitSource({ tokenLimit: 50, role: 'user' }, roleLimits)).toBe('personal');
       expect(resolveLimitSource({ role: 'user' }, roleLimits)).toBe('role');
       expect(resolveLimitSource({ role: 'other' }, roleLimits)).toBe('global');
+      // When role has null or 0 quota, source is global
+      expect(resolveLimitSource({ role: 'user' }, {}, { user: { tokenLimit: null, messageLimit: null, resetHours: 6 } })).toBe('global');
+      expect(resolveLimitSource({ role: 'user' }, { user: 0 })).toBe('global');
     });
 
     it('resolves effective message limit with personal override over role quota', () => {

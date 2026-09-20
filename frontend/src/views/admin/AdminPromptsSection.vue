@@ -92,11 +92,6 @@ function formatPersianNumber(value: number, fractionDigits = 0): string {
   })
 }
 
-function effectiveMultiplierRate(type: string): string {
-  const rate = (Number(form.value.tokenRatePer1000) || 10) * (Number(taskMultipliers.value[type]) || 1)
-  return formatPersianNumber(rate, 2)
-}
-
 function normalizeMultiplierInput(value: string): number | undefined {
   const normalized = normalizeNumericInput(value).trim()
   if (!normalized) return undefined
@@ -293,26 +288,6 @@ onMounted(loadSettings)
       <!-- Card: Per-Role Token Limits -->
       <div class="settings-card p-5 rounded-2xl border border-border bg-card shadow-sm space-y-4">
         <div class="flex items-center gap-2.5 pb-3 border-b border-border">
-          <div class="p-2 rounded-lg bg-rose-500/10 text-rose-500">
-            <Coins :size="18" />
-          </div>
-          <div>
-            <h4 class="text-sm font-bold text-foreground">ضریب هزینه بر اساس نوع کار</h4>
-            <span class="text-xs text-muted-foreground">نرخ مؤثر هر نوع کار از نرخ عادی و ضریب آن محاسبه می‌شود.</span>
-          </div>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-          <label v-for="item in [{ key: 'image', label: 'کار با تصویر' }, { key: 'document', label: 'کار با سند' }, { key: 'thinking', label: 'تفکر' }]" :key="item.key" class="space-y-1.5">
-            <span class="font-medium text-foreground block">{{ item.label }}</span>
-            <input :value="taskMultipliers[item.key] ?? ''" type="text" inputmode="decimal" autocomplete="off" placeholder="۱.۰" class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary" :disabled="isSaving" @input="updateTaskMultiplier(item.key, $event)" />
-            <span class="text-[11px] text-muted-foreground block">نرخ مؤثر: ${{ effectiveMultiplierRate(item.key) }} / ۱۰۰۰ توکن</span>
-          </label>
-        </div>
-      </div>
-
-      <!-- Card: Per-Role Token Limits -->
-      <div class="settings-card p-5 rounded-2xl border border-border bg-card shadow-sm space-y-4">
-        <div class="flex items-center gap-2.5 pb-3 border-b border-border">
           <div class="p-2 rounded-lg bg-sky-500/10 text-sky-500">
             <Users :size="18" />
           </div>
@@ -421,13 +396,14 @@ onMounted(loadSettings)
           </div>
           <div>
             <h4 class="text-sm font-bold text-foreground">تعرفه و ضرایب مصرف توکن (Feature Tariffs)</h4>
-            <span class="text-xs text-muted-foreground">تعیین ضریب محاسبه توکن‌ها هنگام استفاده از جستجوی وب یا تفکر</span>
+            <span class="text-xs text-muted-foreground">ضریب محاسبه توکن به ازای هر قابلیت — مقدار پیش‌فرض ۱.۰ یعنی بدون ضریب اضافه</span>
           </div>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          <!-- جستجوی وب -->
           <label class="space-y-1.5">
-            <span class="font-medium text-foreground block">ضریب مصرف جستجوی وب (Web Search Multiplier)</span>
+            <span class="font-medium text-foreground block">ضریب جستجوی وب (Web Search)</span>
             <input
               v-model.number="form.webSearchMultiplier"
               type="number"
@@ -438,11 +414,12 @@ onMounted(loadSettings)
               class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary"
               :disabled="isSaving"
             />
-            <span class="text-[11px] text-muted-foreground block">مثال: ۱.۲ یعنی ۲۰٪ توکن بیشتر برای هر پیام با جستجوی وب محاسبه می‌شود.</span>
+            <span class="text-[11px] text-muted-foreground block">مثال: ۱.۲ یعنی ۲۰٪ توکن بیشتر برای هر پیام با جستجوی وب.</span>
           </label>
 
+          <!-- تفکر عمیق -->
           <label class="space-y-1.5">
-            <span class="font-medium text-foreground block">ضریب مصرف تفکر (Thinking Multiplier)</span>
+            <span class="font-medium text-foreground block">ضریب تفکر عمیق (Thinking)</span>
             <input
               v-model.number="form.thinkingMultiplier"
               type="number"
@@ -453,7 +430,39 @@ onMounted(loadSettings)
               class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary"
               :disabled="isSaving"
             />
-            <span class="text-[11px] text-muted-foreground block">مثال: ۱.۳ یعنی ۳۰٪ توکن بیشتر برای پیام‌های همراه با تفکر محاسبه می‌شود.</span>
+            <span class="text-[11px] text-muted-foreground block">مثال: ۱.۳ یعنی ۳۰٪ توکن بیشتر برای پیام‌های همراه با تفکر.</span>
+          </label>
+
+          <!-- عکس -->
+          <label class="space-y-1.5">
+            <span class="font-medium text-foreground block">ضریب پیوست تصویر (Image)</span>
+            <input
+              :value="taskMultipliers['image'] ?? ''"
+              type="text"
+              inputmode="decimal"
+              autocomplete="off"
+              placeholder="۱.۰"
+              class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary"
+              :disabled="isSaving"
+              @input="updateTaskMultiplier('image', $event)"
+            />
+            <span class="text-[11px] text-muted-foreground block">روی توکن‌های محاسبه‌شده برای هر تصویر پیوست اعمال می‌شود.</span>
+          </label>
+
+          <!-- سند -->
+          <label class="space-y-1.5">
+            <span class="font-medium text-foreground block">ضریب پیوست سند (Document)</span>
+            <input
+              :value="taskMultipliers['document'] ?? ''"
+              type="text"
+              inputmode="decimal"
+              autocomplete="off"
+              placeholder="۱.۰"
+              class="w-full p-2.5 rounded-lg border border-border bg-background text-foreground font-mono outline-none focus:border-primary"
+              :disabled="isSaving"
+              @input="updateTaskMultiplier('document', $event)"
+            />
+            <span class="text-[11px] text-muted-foreground block">روی توکن‌های محاسبه‌شده برای هر فایل PDF، اکسل یا متن اعمال می‌شود.</span>
           </label>
         </div>
       </div>

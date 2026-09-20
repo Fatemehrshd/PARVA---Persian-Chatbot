@@ -387,12 +387,25 @@ describe('Payments & Sandbox Gateway Flow', () => {
     expect(subscriptionRepo.rows.length).toBe(1);
   });
 
-  it('failed gateway callback marks payment as FAILED and does not activate plan', async () => {
+  it('cancelled gateway callback marks payment as CANCELLED and does not activate plan', async () => {
     const checkout = await paymentsService.initiateCheckout('u1', { planId: 'plan_pro' });
     const verifyRes = await paymentsService.verifyPayment({
       authority: checkout.authority,
       status: 'NOK',
       payload: { cancel: true },
+    });
+
+    expect(verifyRes.success).toBe(false);
+    expect(paymentRepo.rows[0].status).toBe(PaymentStatus.CANCELLED);
+    expect(subscriptionRepo.rows.length).toBe(0);
+  });
+
+  it('technical failure callback marks payment as FAILED and does not activate plan', async () => {
+    const checkout = await paymentsService.initiateCheckout('u2', { planId: 'plan_pro' });
+    const verifyRes = await paymentsService.verifyPayment({
+      authority: checkout.authority,
+      status: 'ERROR',
+      payload: { status: 'FAILED', message: 'خطای سیستمی درگاه' },
     });
 
     expect(verifyRes.success).toBe(false);

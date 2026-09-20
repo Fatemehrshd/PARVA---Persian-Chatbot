@@ -12,12 +12,16 @@ export interface GetAuditLogsParams {
   page?: number;
   limit?: number;
   search?: string;
+  id?: string;
   traceId?: string;
   status?: string;
   type?: string;
   action?: string;
   entityType?: string;
   actorId?: string;
+  actorEmail?: string;
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface AuditLogsResponse {
@@ -36,12 +40,16 @@ export const auditService = {
       if (params.page) sp.set('page', String(params.page));
       if (params.limit) sp.set('limit', String(params.limit));
       if (params.search) sp.set('search', params.search);
+      if (params.id) sp.set('id', params.id);
       if (params.traceId) sp.set('traceId', params.traceId);
       if (params.status) sp.set('status', params.status);
       if (params.type) sp.set('type', params.type);
       if (params.action) sp.set('action', params.action);
       if (params.entityType) sp.set('entityType', params.entityType);
       if (params.actorId) sp.set('actorId', params.actorId);
+      if (params.actorEmail) sp.set('actorEmail', params.actorEmail);
+      if (params.startDate) sp.set('startDate', params.startDate);
+      if (params.endDate) sp.set('endDate', params.endDate);
     }
     const qs = sp.toString();
     return request<any>(`/admin/audit-logs${qs ? `?${qs}` : ''}`);

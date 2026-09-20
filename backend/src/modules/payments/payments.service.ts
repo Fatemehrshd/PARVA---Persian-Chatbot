@@ -253,12 +253,25 @@ export class PaymentsService {
       });
 
       if (!verifyResult.success) {
-        payment.status = PaymentStatus.FAILED;
-        payment.metadata = { ...payment.metadata, failureReason: verifyResult.message };
+        const isCancellation =
+          dto.status?.toUpperCase() === 'NOK' ||
+          dto.payload?.cancel === true ||
+          dto.payload?.status?.toUpperCase() === 'NOK' ||
+          dto.payload?.Status?.toUpperCase() === 'NOK' ||
+          verifyResult.message?.includes('لغو') ||
+          verifyResult.message?.includes('انصراف');
+
+        payment.status = isCancellation ? PaymentStatus.CANCELLED : PaymentStatus.FAILED;
+        payment.metadata = {
+          ...payment.metadata,
+          failureReason: verifyResult.message,
+          cancelledAt: isCancellation ? new Date() : undefined,
+        };
         await paymentRepo.save(payment);
 
         return {
           failed: true,
+          isCancellation,
           verifyResult,
           payment,
         };
@@ -294,6 +307,7 @@ export class PaymentsService {
       return {
         success: true,
         refId: txResult.payment.refId,
+        status: PaymentStatus.SUCCESS,
         message: 'این تراکنش قبلاً با موفقیت تأیید شده است.',
         alreadyVerified: true,
         payment: txResult.payment,
@@ -304,25 +318,37 @@ export class PaymentsService {
       return {
         success: false,
         refId: null,
-        message: 'این تراکنش قبلاً لغو شده یا ناموفق بوده است.',
+        status: txResult.payment.status,
+        message:
+          txResult.payment.status === PaymentStatus.CANCELLED
+            ? 'این تراکنش قبلاً لغو شده است.'
+            : 'این تراکنش قبلاً ناموفق بوده است.',
         payment: txResult.payment,
       };
     }
 
     if (txResult.failed) {
+      const actionName = txResult.isCancellation ? 'payment.cancelled' : 'payment.failed';
       await this.auditService.log({
         actorId: actorId || txResult.payment.userId,
         actorType: 'user',
-        action: 'payment.failed',
+        action: actionName,
         entityType: 'payment',
         entityId: txResult.payment.id,
-        metadata: { authority: dto.authority, reason: txResult.verifyResult.message },
+        metadata: {
+          authority: dto.authority,
+          reason: txResult.verifyResult.message,
+          status: txResult.payment.status,
+        },
       });
 
       return {
         success: false,
         refId: null,
-        message: txResult.verifyResult.message || 'پرداخت ناموفق بود.',
+        status: txResult.payment.status,
+        message:
+          txResult.verifyResult.message ||
+          (txResult.isCancellation ? 'تراکنش توسط کاربر لغو شد.' : 'پرداخت ناموفق بود.'),
         payment: txResult.payment,
       };
     }
@@ -357,6 +383,29 @@ export class PaymentsService {
     };
   }
 
+  /**
+   * Automatically transition stale PENDING payments older than 20 minutes (standard gateway expiration window)
+   * to CANCELLED status so abandoned sessions don't remain PENDING indefinitely.
+   */
+  async expireStalePendingPayments(): Promise<void> {
+    try {
+      const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000);
+      await this.paymentRepo
+        .createQueryBuilder()
+        .update(Payment)
+        .set({
+          status: PaymentStatus.CANCELLED,
+        })
+        .where('status = :pending AND "createdAt" < :cutoff', {
+          pending: PaymentStatus.PENDING,
+          cutoff: twentyMinutesAgo,
+        })
+        .execute();
+    } catch {
+      // Fail-soft for in-memory mock or testing environments
+    }
+  }
+
   async getPaymentByAuthority(authority: string): Promise<Payment> {
     const payment = await this.paymentRepo.findOne({
       where: { authority },
@@ -365,10 +414,23 @@ export class PaymentsService {
     if (!payment) {
       throw new NotFoundException('تراکنش یافت نشد.');
     }
+    if (
+      payment.status === PaymentStatus.PENDING &&
+      payment.createdAt &&
+      Date.now() - new Date(payment.createdAt).getTime() > 20 * 60 * 1000
+    ) {
+      payment.status = PaymentStatus.CANCELLED;
+      payment.metadata = {
+        ...payment.metadata,
+        failureReason: 'انقضای مهلت پرداخت در درگاه بانکی',
+      };
+      await this.paymentRepo.save(payment).catch(() => {});
+    }
     return payment;
   }
 
   async findUserPayments(userId: string): Promise<Payment[]> {
+    await this.expireStalePendingPayments();
     return this.paymentRepo.find({
       where: { userId },
       relations: ['plan'],
@@ -382,6 +444,7 @@ export class PaymentsService {
     userId?: string;
     status?: PaymentStatus;
   }) {
+    await this.expireStalePendingPayments();
     const page = Math.max(1, Number(options.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(options.limit) || 20));
     const skip = (page - 1) * limit;

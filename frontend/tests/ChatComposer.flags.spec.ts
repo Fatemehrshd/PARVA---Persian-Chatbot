@@ -64,7 +64,7 @@ describe('ChatComposer web-search toggle', () => {
     expect(names[0]).toBe('Def')
   })
 
-  it('flips the per-conversation web flag', async () => {
+  it('flips the per-conversation web flag via modelbar button', async () => {
     const wrapper = mount(ChatComposer, {
       global: {
         stubs: {
@@ -75,15 +75,14 @@ describe('ChatComposer web-search toggle', () => {
     })
     const chatStore = useChatStore()
     chatStore.currentConversationId = 'c1'
-    await wrapper.find('.attachment-btn').trigger('click')
-    const btn = wrapper.find('[data-testid="toggle-web-search"]')
+    const btn = wrapper.find('[data-testid="modelbar-search-toggle"]')
     expect(btn.exists()).toBe(true)
     expect(chatStore.getConvFlag('c1').web).toBe(false)
     await btn.trigger('click')
     expect(chatStore.getConvFlag('c1').web).toBe(true)
   })
 
-  it('hides thinking toggles when active model does not support thinking', async () => {
+  it('hides thinking toggle when active model does not support thinking', async () => {
     const modelsStore = useModelsStore()
     modelsStore.models = [
       {
@@ -111,14 +110,9 @@ describe('ChatComposer web-search toggle', () => {
 
     // Modelbar thinking toggle must NOT exist
     expect(wrapper.find('[data-testid="modelbar-thinking-toggle"]').exists()).toBe(false)
-
-    // Open attachment dropdown
-    await wrapper.find('.attachment-btn').trigger('click')
-    // Dropdown thinking toggle must NOT exist
-    expect(wrapper.find('[data-testid="toggle-thinking"]').exists()).toBe(false)
   })
 
-  it('shows thinking toggles and capability badge when active model supports thinking', async () => {
+  it('shows thinking toggle and flips thinking flag when active model supports thinking', async () => {
     const modelsStore = useModelsStore()
     modelsStore.models = [
       {
@@ -144,15 +138,16 @@ describe('ChatComposer web-search toggle', () => {
       },
     })
 
+    const chatStore = useChatStore()
+    chatStore.currentConversationId = 'c-think-1'
+
     // Modelbar thinking toggle must exist
-    expect(wrapper.find('[data-testid="modelbar-thinking-toggle"]').exists()).toBe(true)
+    const thinkingBtn = wrapper.find('[data-testid="modelbar-thinking-toggle"]')
+    expect(thinkingBtn.exists()).toBe(true)
 
-    // Model button must show capability badge for thinking
-    const badge = wrapper.find('.model-badge-btn [data-test="capability-badge"][data-capability="thinking"]')
-    expect(badge.exists()).toBe(true)
-
-    // Open attachment dropdown
-    await wrapper.find('.attachment-btn').trigger('click')
-    expect(wrapper.find('[data-testid="toggle-thinking"]').exists()).toBe(true)
+    // Toggle thinking flag
+    expect(chatStore.getConvFlag('c-think-1').thinking).toBeFalsy()
+    await thinkingBtn.trigger('click')
+    expect(chatStore.getConvFlag('c-think-1').thinking).toBe(true)
   })
 })

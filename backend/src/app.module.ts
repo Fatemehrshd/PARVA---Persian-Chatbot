@@ -25,6 +25,7 @@ import { Coupon } from './modules/payments/coupon.entity';
 import { CouponUsage } from './modules/payments/coupon-usage.entity';
 import { AuditLog } from './modules/audit/audit-log.entity';
 import { ChatShare } from './modules/chat/chat-share.entity';
+import { RefreshToken } from './modules/auth/refresh-token.entity';
 import { AuditModule } from './modules/audit/audit.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { PaymentsModule } from './modules/payments/payments.module';
@@ -58,6 +59,7 @@ import { TraceContextMiddleware } from './shared/trace-context.service';
         CouponUsage,
         AuditLog,
         ChatShare,
+        RefreshToken,
       ],
       migrations: [__dirname + '/migrations/*{.ts,.js}'],
       synchronize: (process.env.DB_SYNC ?? 'true') === 'true',

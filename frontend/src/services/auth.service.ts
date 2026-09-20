@@ -46,5 +46,16 @@ export const authService = {
       method: 'POST',
       body: JSON.stringify(payload)
     })
+  },
+
+  /**
+   * Refresh access token using stored refresh token.
+   * POST /auth/refresh
+   */
+  async refreshToken(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
+    return request<{ accessToken: string; refreshToken: string }>('/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken })
+    })
   }
 }

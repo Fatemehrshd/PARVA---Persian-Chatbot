@@ -170,6 +170,12 @@ function formatDate(iso?: string): string {
               در انتظار
             </span>
             <span
+              v-else-if="payment.status === 'CANCELLED'"
+              class="px-2 py-0.5 text-[11px] font-medium rounded-full bg-slate-500/10 text-slate-400 border border-slate-500/20"
+            >
+              لغو شده
+            </span>
+            <span
               v-else-if="payment.status === 'FAILED'"
               class="px-2 py-0.5 text-[11px] font-medium rounded-full bg-destructive/10 text-destructive border border-destructive/20"
             >

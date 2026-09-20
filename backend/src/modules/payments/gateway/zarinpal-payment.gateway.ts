@@ -5,7 +5,6 @@ import {
   VerifyPaymentResult,
 } from './payment-gateway.interface';
 import { tracedFetch } from '../../../shared/traced-fetch';
-
 @Injectable()
 export class ZarinpalPaymentGateway implements PaymentGatewayProvider {
   readonly name = 'zarinpal';

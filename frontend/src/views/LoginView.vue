@@ -21,13 +21,16 @@ const { activeLogo } = useThemeLogo()
 const isSignup = ref(false)
 const email = ref('')
 const password = ref('')
+const confirmPassword = ref('')
 const displayName = ref('')
 const showPassword = ref(false)
+const showConfirmPassword = ref(false)
 const formError = ref<string | null>(null)
 
 function switchMode(signup: boolean) {
   isSignup.value = signup
   formError.value = null
+  confirmPassword.value = ''
 }
 
 const { isSubmitting: isLoading, submit: submitAuth } = useFormSubmit(async () => {
@@ -64,9 +67,22 @@ async function handleSubmit() {
     return
   }
 
-  if (isSignup.value && password.value.length < 8) {
-    formError.value = 'رمز عبور باید حداقل ۸ کاراکتر باشد.'
-    return
+  if (isSignup.value) {
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]).{8,}$/
+    if (!passwordRegex.test(password.value)) {
+      formError.value = 'رمز عبور باید حداقل ۸ کاراکتر و شامل حروف بزرگ، کوچک، عدد و نماد خاص باشد.'
+      return
+    }
+
+    if (!confirmPassword.value) {
+      formError.value = 'لطفاً تکرار رمز عبور را وارد کنید.'
+      return
+    }
+
+    if (password.value !== confirmPassword.value) {
+      formError.value = 'رمز عبور و تکرار آن یکسان نیستند.'
+      return
+    }
   }
 
   await submitAuth()
@@ -92,7 +108,7 @@ async function handleSubmit() {
       <div class="form-wrapper">
         
         <!-- Brand Logo & Name Header -->
-        <div class="flex items-center gap-3 mb-8">
+        <div class="flex items-center gap-3 mb-8 h-11">
           <div class="w-11 h-11 flex-shrink-0">
             <img :src="activeLogo" alt="پروا" class="w-full h-full object-cover" />
           </div>
@@ -102,7 +118,7 @@ async function handleSubmit() {
         </div>
 
         <!-- Tabs Switcher (Sign In / Sign Up) -->
-        <div class="flex bg-secondary/80 p-1 rounded-xl border border-border/60 mb-6">
+        <div class="flex bg-secondary/80 p-1 rounded-xl border border-border/60 mb-6 h-11 items-center">
           <button 
             :class="[
               'flex-1 py-2 text-xs font-semibold rounded-lg transition-all duration-200 cursor-pointer',
@@ -131,8 +147,8 @@ async function handleSubmit() {
           </button>
         </div>
 
-        <!-- Section Title & Description -->
-        <div class="mb-6 text-start">
+        <!-- Section Title & Description (Fixed height to prevent vertical jitter) -->
+        <div class="mb-6 text-start min-h-[36px] flex items-center">
           <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
             {{ isSignup ? 'ساخت حساب کاربری' : 'ورود به حساب کاربری' }}
           </h1>
@@ -154,30 +170,32 @@ async function handleSubmit() {
         <!-- Form Elements -->
         <form @submit.prevent="handleSubmit" class="space-y-4 text-start">
           
-          <!-- Display Name (Signup Only) -->
-          <div v-if="isSignup" class="space-y-1.5">
-            <Label for="displayName" class="text-xs font-medium text-foreground/90">
-              نام و نام‌خانوادگی
-            </Label>
-            <div class="relative">
-              <span class="absolute inset-y-0 start-3 flex items-center pointer-events-none text-muted-foreground">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="12" cy="7" r="4"></circle>
-                </svg>
-              </span>
-              <Input 
-                id="displayName"
-                v-model="displayName" 
-                type="text" 
-                :disabled="isLoading"
-                :loading="isLoading"
-                class="ps-9 h-11 text-sm bg-secondary/40 border-border/60 focus-visible:ring-primary/40 focus-visible:border-primary transition-all"
-                placeholder="نام شما" 
-                @input="formError = null"
-              />
+          <!-- Display Name (Signup Only) with smooth expansion -->
+          <Transition name="field-expand">
+            <div v-if="isSignup" class="space-y-1.5 overflow-hidden">
+              <Label for="displayName" class="text-xs font-medium text-foreground/90">
+                نام و نام‌خانوادگی
+              </Label>
+              <div class="relative">
+                <span class="absolute inset-y-0 start-3 flex items-center pointer-events-none text-muted-foreground">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                  </svg>
+                </span>
+                <Input 
+                  id="displayName"
+                  v-model="displayName" 
+                  type="text" 
+                  :disabled="isLoading"
+                  :loading="isLoading"
+                  class="ps-9 h-11 text-sm bg-secondary/40 border-border/60 focus-visible:ring-primary/40 focus-visible:border-primary transition-all"
+                  placeholder="نام شما" 
+                  @input="formError = null"
+                />
+              </div>
             </div>
-          </div>
+          </Transition>
 
           <!-- Email Input -->
           <div class="space-y-1.5">
@@ -247,7 +265,56 @@ async function handleSubmit() {
                 </svg>
               </button>
             </div>
+            <Transition name="field-expand">
+              <p v-if="isSignup" class="text-[11px] text-muted-foreground mt-1 leading-relaxed overflow-hidden">
+                رمز عبور باید حداقل ۸ کاراکتر و شامل حروف بزرگ (A-Z)، کوچک (a-z)، عدد (0-9) و نماد خاص باشد.
+              </p>
+            </Transition>
           </div>
+
+          <!-- Confirm Password Input with Show/Hide Toggle (Signup Only) -->
+          <Transition name="field-expand">
+            <div v-if="isSignup" class="space-y-1.5 overflow-hidden">
+              <Label for="confirmPassword" class="text-xs font-medium text-foreground/90">
+                تکرار رمز عبور
+              </Label>
+              <div class="relative">
+                <span class="absolute inset-y-0 start-3 flex items-center pointer-events-none text-muted-foreground">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                </span>
+                <Input 
+                  id="confirmPassword"
+                  v-model="confirmPassword" 
+                  :type="showConfirmPassword ? 'text' : 'password'" 
+                  :required="isSignup" 
+                  :disabled="isLoading"
+                  :loading="isLoading"
+                  class="ps-9 pe-10 h-11 text-sm bg-secondary/40 border-border/60 focus-visible:ring-primary/40 focus-visible:border-primary transition-all font-mono"
+                  placeholder="••••••••" 
+                  @input="formError = null"
+                />
+                <button 
+                  type="button" 
+                  class="absolute inset-y-0 end-2.5 flex items-center text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer"
+                  @click="showConfirmPassword = !showConfirmPassword"
+                  title="نمایش یا پنهان‌سازی تکرار رمز عبور"
+                  tabindex="-1"
+                >
+                  <svg v-if="!showConfirmPassword" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                  <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </Transition>
 
           <!-- Submit Button -->
           <Button 
@@ -325,9 +392,32 @@ async function handleSubmit() {
   z-index: 10;
 }
 
+/* Form Wrapper: Centered vertically and horizontally, perfectly aligned with the artwork image */
 .form-wrapper {
   width: 100%;
   max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Smooth expansion transitions for signup-only fields */
+.field-expand-enter-active,
+.field-expand-leave-active {
+  transition: all 220ms ease-out;
+  max-height: 90px;
+  opacity: 1;
+  overflow: hidden;
+}
+
+.field-expand-enter-from,
+.field-expand-leave-to {
+  max-height: 0;
+  opacity: 0;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  transform: translateY(-4px);
 }
 
 .login-clean-logo {

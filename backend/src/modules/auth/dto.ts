@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength, IsOptional } from 'class-validator';
+import { IsEmail, IsString, MinLength, IsOptional, Matches } from 'class-validator';
 import { FA } from '../../shared/messages.fa';
 
 export class SignupDto {
@@ -7,6 +7,9 @@ export class SignupDto {
 
   @IsString({ message: FA.passwordRequired })
   @MinLength(8, { message: FA.passwordMin })
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]).{8,}$/, {
+    message: FA.passwordComplexity,
+  })
   password: string;
 
   @IsOptional()
@@ -22,9 +25,12 @@ export class LoginDto {
   password: string;
 }
 
+export class RefreshTokenDto {
+  @IsString({ message: FA.refreshTokenRequired })
+  refreshToken: string;
+}
+
 export class LogoutDto {
-  // Body is preserved for forward-compat but logout is identified by the bearer token,
-  // so this field is intentionally unvalidated beyond being a string when present.
   @IsOptional()
   @IsString({ message: FA.string('refreshToken') })
   refreshToken?: string;

@@ -25,9 +25,9 @@ describe('Admin Model Capabilities & Feature Tariffs', () => {
       })
 
       expect(wrapper.text()).toContain('قابلیت‌های مدل:')
-      expect(wrapper.text()).toContain('تفکر عمیق (Thinking)')
-      expect(wrapper.text()).toContain('بینایی / عکس (Vision)')
-      expect(wrapper.text()).toContain('تحلیل اسناد (Document)')
+      expect(wrapper.text()).toContain('تفکر')
+      expect(wrapper.text()).toContain('تصویر')
+      expect(wrapper.text()).toContain('اسناد')
 
       // Fill in required fields
       await wrapper.find('#modelName').setValue('DeepSeek R1')

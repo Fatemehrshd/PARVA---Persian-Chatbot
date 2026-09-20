@@ -443,6 +443,6 @@ describe('MessageList streaming scroll behavior', () => {
       }
     })
 
-    expect(wrapper.text()).toContain('درحال تفکر...')
+    expect(wrapper.text()).toContain('درحال تفکر')
   })
 })

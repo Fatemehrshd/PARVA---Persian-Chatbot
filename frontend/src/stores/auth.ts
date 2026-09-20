@@ -7,7 +7,8 @@ import { isTokenExpired } from '../lib/jwt'
 
 export const useAuthStore = defineStore('auth', () => {
   const rawToken = localStorage.getItem('token')
-  if (rawToken && isTokenExpired(rawToken)) {
+  const rawRefreshToken = localStorage.getItem('refreshToken')
+  if (rawToken && isTokenExpired(rawToken) && !rawRefreshToken) {
     localStorage.removeItem('user')
     localStorage.removeItem('token')
     localStorage.removeItem('refreshToken')
@@ -184,8 +185,20 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Proactive token expiration monitor
   if (typeof window !== 'undefined') {
-    const checkExpiry = () => {
+    const checkExpiry = async () => {
       if (token.value && isTokenExpired(token.value)) {
+        if (refreshToken.value) {
+          try {
+            const res = await authService.refreshToken(refreshToken.value)
+            token.value = res.accessToken
+            refreshToken.value = res.refreshToken
+            localStorage.setItem('token', res.accessToken)
+            localStorage.setItem('refreshToken', res.refreshToken)
+            return
+          } catch {
+            // Refresh failed, fall through to logout
+          }
+        }
         void logout()
         if (window.location.pathname !== '/login' && (!import.meta.env || import.meta.env.MODE !== 'test')) {
           window.location.href = '/login'
@@ -205,6 +218,7 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     user,
     token,
+    refreshToken,
     loading,
     error,
     isAuthenticated,

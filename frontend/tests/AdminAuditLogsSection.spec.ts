@@ -130,4 +130,70 @@ describe('AdminAuditLogsSection.vue', () => {
     expect(wrapper.text()).toContain('abcdef1234567890abcdef1234567890')
     expect(wrapper.text()).toContain('مشاهده ردپا در SigNoz')
   })
+
+  it('renders "همه لاگ‌ها" tab and architecture strategy callout', async () => {
+    const wrapper = mount(AdminAuditLogsSection)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('همه لاگ‌ها')
+    expect(wrapper.text()).toContain('جداسازی هوشمند بار لاگ‌ها')
+    expect(wrapper.text()).toContain('ClickHouse با TTL انقضا')
+  })
+
+  it('filters logs by date range using PersianDatePicker', async () => {
+    const wrapper = mount(AdminAuditLogsSection)
+    await flushPromises()
+
+    // Initially called with undefined startDate and endDate
+    expect(auditService.getAuditLogs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        page: 1,
+        limit: 20,
+        type: 'all',
+        status: 'all',
+        startDate: undefined,
+        endDate: undefined,
+      }),
+    )
+
+    // Find the two PersianDatePicker components (start date and end date)
+    const datePickers = wrapper.findAllComponents({ name: 'PersianDatePicker' })
+    expect(datePickers.length).toBe(2)
+
+    // Select start date
+    await datePickers[0].vm.$emit('update:modelValue', '2026-09-19T08:00')
+    await flushPromises()
+
+    expect(auditService.getAuditLogs).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        startDate: '2026-09-19T08:00',
+        endDate: undefined,
+      }),
+    )
+
+    // Select end date
+    await datePickers[1].vm.$emit('update:modelValue', '2026-09-19T18:00')
+    await flushPromises()
+
+    expect(auditService.getAuditLogs).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        startDate: '2026-09-19T08:00',
+        endDate: '2026-09-19T18:00',
+      }),
+    )
+
+    // Clear filters button should now be visible
+    const clearBtn = wrapper.find('button[title="حذف تمام فیلترها و نمایش همه"]')
+    expect(clearBtn.exists()).toBe(true)
+
+    await clearBtn.trigger('click')
+    await flushPromises()
+
+    expect(auditService.getAuditLogs).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        startDate: undefined,
+        endDate: undefined,
+      }),
+    )
+  })
 })

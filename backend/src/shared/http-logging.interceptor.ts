@@ -68,12 +68,20 @@ export class HttpLoggingInterceptor implements NestInterceptor {
       },
     );
 
-    const actor = (req as any).user;
-    const actorId = actor?.id ?? null;
-    const actorType = actor?.role === 'admin' ? 'admin' : actor ? 'user' : 'system';
     const ip =
       (req.headers['x-forwarded-for'] as string) || req.socket?.remoteAddress || null;
     const userAgent = req.headers['user-agent'] || null;
+
+    const resolveActorInfo = () => {
+      const user = (req as any).user;
+      const actorId = user?.id ?? null;
+      const actorEmail =
+        user?.email ??
+        (req.body && typeof req.body.email === 'string' ? req.body.email : null);
+      const actorName = user?.displayName || user?.username || null;
+      const actorType = user?.role === 'admin' ? 'admin' : user ? 'user' : 'system';
+      return { actorId, actorEmail, actorName, actorType };
+    };
 
     return next.handle().pipe(
       tap({
@@ -82,12 +90,35 @@ export class HttpLoggingInterceptor implements NestInterceptor {
           const statusCode = res.statusCode || 200;
           span.end('ok');
 
+          const { actorId, actorEmail, actorName, actorType } = resolveActorInfo();
+
+          // 1. Dispatch OTLP Log to SigNoz Logs Engine (ClickHouse)
+          telemetry.sendLog(
+            statusCode >= 400 ? 'WARN' : 'INFO',
+            `${method} ${path} - ${statusCode} (${durationMs}ms)`,
+            {
+              'http.method': method,
+              'http.url': rawUrl,
+              'http.route': path,
+              'http.status_code': statusCode,
+              'http.duration_ms': durationMs,
+              'client.ip': ip,
+              'user.id': actorId,
+              'user.email': actorEmail,
+            },
+            span.traceId,
+            span.spanId,
+          );
+
+          // 2. Persist business audit log in PostgreSQL
           if (this.auditService) {
             this.auditService
               .log({
                 traceId: span.traceId || traceContextService.getTraceId(),
                 spanId: span.spanId || traceContextService.getSpanId(),
                 actorId,
+                actorEmail,
+                actorName,
                 actorType,
                 action: `${method} ${path}`,
                 entityType: 'http_request',
@@ -112,12 +143,36 @@ export class HttpLoggingInterceptor implements NestInterceptor {
           const errorMessage = err?.message || String(err);
           span.end('error', errorMessage);
 
+          const { actorId, actorEmail, actorName, actorType } = resolveActorInfo();
+
+          // 1. Dispatch OTLP Error Log to SigNoz Logs Engine (ClickHouse)
+          telemetry.sendLog(
+            'ERROR',
+            `${method} ${path} FAILED (${statusCode}): ${errorMessage}`,
+            {
+              'http.method': method,
+              'http.url': rawUrl,
+              'http.route': path,
+              'http.status_code': statusCode,
+              'http.duration_ms': durationMs,
+              'error.message': errorMessage,
+              'client.ip': ip,
+              'user.id': actorId,
+              'user.email': actorEmail,
+            },
+            span.traceId,
+            span.spanId,
+          );
+
+          // 2. Persist error audit log in PostgreSQL
           if (this.auditService) {
             this.auditService
               .log({
                 traceId: span.traceId || traceContextService.getTraceId(),
                 spanId: span.spanId || traceContextService.getSpanId(),
                 actorId,
+                actorEmail,
+                actorName,
                 actorType,
                 action: `${method} ${path} (FAILED)`,
                 entityType: 'http_request',

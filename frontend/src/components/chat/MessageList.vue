@@ -8,15 +8,9 @@ import MarkdownContent from './MarkdownContent.vue'
 import EmptyState from './EmptyState.vue'
 import ThinkingIndicator from './ThinkingIndicator.vue'
 import ThinkingBlock from './ThinkingBlock.vue'
-import { useTextToSpeech } from '../../composables/useTextToSpeech'
 
 const chatStore = useChatStore()
 const { activeLogo } = useThemeLogo()
-const { stop: stopTts } = useTextToSpeech()
-
-watch(() => chatStore.currentConversationId, () => {
-  stopTts()
-})
 
 const containerRef = ref<HTMLElement | null>(null)
 const contentRef = ref<HTMLElement | null>(null)
@@ -39,7 +33,7 @@ const hasReasoningPanel = computed(() => {
   return Boolean(chatStore.currentReasoning || chatStore.isActivelyThinking)
 })
 const isThinkingOnly = computed(() => {
-  return currentConversationFlags.value.thinking === true && currentConversationFlags.value.web !== true && isThinkingActive.value && !hasReasoningPanel.value
+  return (currentConversationFlags.value.thinking === true || chatStore.isThinking) && currentConversationFlags.value.web !== true && isThinkingActive.value && !hasReasoningPanel.value
 })
 const isSearchOnly = computed(() => {
   return currentConversationFlags.value.web === true && currentConversationFlags.value.thinking !== true && isSearching.value

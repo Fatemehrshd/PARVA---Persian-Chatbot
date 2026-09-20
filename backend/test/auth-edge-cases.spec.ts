@@ -83,7 +83,7 @@ describe('POST /auth/signup + /auth/login — contract invariants & edge cases',
   it('signup with valid payload returns 201 with user + both tokens', async () => {
     const res = await request(app.getHttpServer())
       .post('/auth/signup')
-      .send({ email: 'new@example.com', password: 'password123', displayName: 'New' });
+      .send({ email: 'new@example.com', password: 'Pass1234!', displayName: 'New' });
     expect(res.status).toBe(201);
     expect(res.body).toHaveProperty('success', true);
     expect(res.body.data).toHaveProperty('user');
@@ -107,7 +107,7 @@ describe('POST /auth/signup + /auth/login — contract invariants & edge cases',
   it('signup response never contains passwordHash', async () => {
     const res = await request(app.getHttpServer())
       .post('/auth/signup')
-      .send({ email: 'bob@example.com', password: 'password123' });
+      .send({ email: 'bob@example.com', password: 'Pass1234!' });
     expect(res.status).toBe(201);
     expect(JSON.stringify(res.body)).not.toMatch(/passwordHash|password/i);
   });
@@ -117,7 +117,7 @@ describe('POST /auth/signup + /auth/login — contract invariants & edge cases',
   it('access token carries sub/email/role; refresh token carries type=refresh', async () => {
     const res = await request(app.getHttpServer())
       .post('/auth/signup')
-      .send({ email: 'carol@example.com', password: 'password123' });
+      .send({ email: 'carol@example.com', password: 'Pass1234!' });
     expect(res.status).toBe(201);
     const access = JSON.parse(res.body.data.accessToken);
     const refresh = JSON.parse(res.body.data.refreshToken);
@@ -138,7 +138,7 @@ describe('POST /auth/signup + /auth/login — contract invariants & edge cases',
   it('signup with malformed email returns 400 with contract envelope', async () => {
     const res = await request(app.getHttpServer())
       .post('/auth/signup')
-      .send({ email: 'not-an-email', password: 'password123' });
+      .send({ email: 'not-an-email', password: 'Pass1234!' });
     expect(res.status).toBe(400);
     expect(res.body).toHaveProperty('statusCode', 400);
     expect(res.body).toHaveProperty('message');
@@ -152,6 +152,13 @@ describe('POST /auth/signup + /auth/login — contract invariants & edge cases',
     expect(res.status).toBe(400);
   });
 
+  it('signup with weak password (missing symbols/uppercase) returns 400', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/auth/signup')
+      .send({ email: 'weak@example.com', password: 'password123' });
+    expect(res.status).toBe(400);
+  });
+
   it('signup with empty body returns 400', async () => {
     const res = await request(app.getHttpServer()).post('/auth/signup').send({});
     expect(res.status).toBe(400);
@@ -162,10 +169,10 @@ describe('POST /auth/signup + /auth/login — contract invariants & edge cases',
   it('signup with already-registered email returns 409', async () => {
     await request(app.getHttpServer())
       .post('/auth/signup')
-      .send({ email: 'eve@example.com', password: 'password123' });
+      .send({ email: 'eve@example.com', password: 'Pass1234!' });
     const res = await request(app.getHttpServer())
       .post('/auth/signup')
-      .send({ email: 'eve@example.com', password: 'password123' });
+      .send({ email: 'eve@example.com', password: 'Pass1234!' });
     expect(res.status).toBe(409);
     expect(res.body).toEqual(expect.objectContaining({ statusCode: 409 }));
   });

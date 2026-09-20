@@ -32,6 +32,49 @@ export function buildUrl(endpoint: string): string {
   return `${base}${cleanEndpoint}`
 }
 
+let refreshPromise: Promise<string | null> | null = null
+
+async function silentRefreshToken(): Promise<string | null> {
+  const currentRefreshToken = localStorage.getItem('refreshToken')
+  if (!currentRefreshToken) return null
+
+  try {
+    const url = buildUrl('/auth/refresh')
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ refreshToken: currentRefreshToken })
+    })
+
+    if (!res.ok) {
+      return null
+    }
+
+    const json = await res.json()
+    const data = (json && typeof json === 'object' && 'data' in json) ? json.data : json
+    if (data?.accessToken && data?.refreshToken) {
+      localStorage.setItem('token', data.accessToken)
+      localStorage.setItem('refreshToken', data.refreshToken)
+
+      try {
+        const { useAuthStore } = await import('../stores/auth')
+        const store = useAuthStore()
+        store.token = data.accessToken
+        store.refreshToken = data.refreshToken
+      } catch {
+        // Auth store may not be initialized yet
+      }
+
+      return data.accessToken
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 export async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('token')
   const headers = new Headers(options.headers || {})
@@ -79,8 +122,31 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
       ? json.message.join(', ')
       : (typeof json.message === 'string' && json.message ? json.message : 'An unexpected error occurred')
 
-    // Global 401 Unauthorized handling (session expired or invalid token)
-    if (response.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/signup')) {
+    // Global 401 Unauthorized handling with silent Refresh Token rotation
+    const isAuthRoute = endpoint.includes('/auth/login') || endpoint.includes('/auth/signup') || endpoint.includes('/auth/refresh')
+    if (response.status === 401 && !isAuthRoute) {
+      const storedRefreshToken = localStorage.getItem('refreshToken')
+      if (storedRefreshToken) {
+        if (!refreshPromise) {
+          refreshPromise = silentRefreshToken().finally(() => {
+            refreshPromise = null
+          })
+        }
+        const newToken = await refreshPromise
+        if (newToken) {
+          // Retry original request with fresh access token
+          const retryHeaders = new Headers(options.headers || {})
+          if (!retryHeaders.has('Content-Type') && !(options.body instanceof FormData)) {
+            retryHeaders.set('Content-Type', 'application/json')
+          }
+          retryHeaders.set('Authorization', `Bearer ${newToken}`)
+          return request<T>(endpoint, {
+            ...options,
+            headers: retryHeaders
+          })
+        }
+      }
+
       localStorage.removeItem('token')
       localStorage.removeItem('user')
       localStorage.removeItem('refreshToken')

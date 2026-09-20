@@ -19,6 +19,11 @@ class TelemetryService {
     process.env.SIGNOZ_OTLP_URL ||
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
     'http://localhost:4318/v1/traces';
+  private readonly otlpLogsUrl =
+    process.env.SIGNOZ_OTLP_LOGS_URL ||
+    (this.otlpUrl.includes('/v1/traces')
+      ? this.otlpUrl.replace('/v1/traces', '/v1/logs')
+      : 'http://localhost:4318/v1/logs');
   // Enabled by default unless explicitly set to 'false'
   private readonly isEnabled = process.env.ENABLE_TELEMETRY !== 'false';
 
@@ -165,6 +170,78 @@ class TelemetryService {
       }
     } catch (err: any) {
       this.logger.debug(`Failed to dispatch span to SigNoz: ${err?.message}`);
+    }
+  }
+
+  async sendLog(
+    level: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR',
+    message: string,
+    attributes: Record<string, any> = {},
+    traceId?: string,
+    spanId?: string,
+  ) {
+    if (!this.isEnabled) return;
+    if (process.env.NODE_ENV === 'test' && !process.env.FORCE_TELEMETRY_IN_TEST) return;
+
+    try {
+      const activeTraceId = traceId || traceContextService.getTraceId();
+      const activeSpanId = spanId || traceContextService.getSpanId();
+      const now = Date.now();
+      const severityNumberMap: Record<string, number> = {
+        DEBUG: 5,
+        INFO: 9,
+        WARN: 13,
+        ERROR: 17,
+      };
+
+      const logRecord: any = {
+        timeUnixNano: String(BigInt(now) * BigInt(1_000_000)),
+        observedTimeUnixNano: String(BigInt(now) * BigInt(1_000_000)),
+        severityNumber: severityNumberMap[level] || 9,
+        severityText: level,
+        body: { stringValue: message },
+        attributes: Object.entries(attributes).map(([k, v]) => ({
+          key: k,
+          value:
+            typeof v === 'number'
+              ? { intValue: v }
+              : typeof v === 'boolean'
+                ? { boolValue: v }
+                : { stringValue: String(v ?? '') },
+        })),
+      };
+
+      if (activeTraceId) logRecord.traceId = activeTraceId;
+      if (activeSpanId) logRecord.spanId = activeSpanId;
+
+      const payload = {
+        resourceLogs: [
+          {
+            resource: {
+              attributes: [
+                { key: 'service.name', value: { stringValue: 'codeless-backend' } },
+                { key: 'service.environment', value: { stringValue: process.env.NODE_ENV || 'development' } },
+              ],
+            },
+            scopeLogs: [
+              {
+                scope: { name: 'codeless-logger', version: '1.0.0' },
+                logRecords: [logRecord],
+              },
+            ],
+          },
+        ],
+      };
+
+      if (typeof fetch === 'function') {
+        fetch(this.otlpLogsUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }).catch(() => {});
+      }
+    } catch {
+      // Non-blocking log dispatch
     }
   }
 }

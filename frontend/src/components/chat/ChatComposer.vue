@@ -5,6 +5,7 @@ import { useModelsStore } from '../../stores/models'
 import { useUiStore } from '../../stores/ui'
 import { useAuthStore } from '../../stores/auth'
 import { getActiveTypingDirection } from '../../utils/textDirection'
+import type { QueuedMessage } from '../../types'
 import { useFileUpload } from '../../composables/useFileUpload'
 import { useSpeechRecognition } from '../../composables/useSpeechRecognition'
 import FilePreviewCard from './FilePreviewCard.vue'
@@ -104,10 +105,6 @@ const docInputRef = ref<HTMLInputElement | null>(null)
 const isGenerating = computed(() => chatStore.isStreaming || chatStore.isThinking)
 
 function toggleAttachmentMenu() {
-  if (isGenerating.value) {
-    uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
-    return
-  }
   if (attachedFiles.value.length >= limits.value.maxFileCount) {
     uiStore.showToast(`حداکثر ${limits.value.maxFileCount} فایل می‌توانید انتخاب کنید`, 'error')
     return
@@ -116,10 +113,6 @@ function toggleAttachmentMenu() {
 }
 
 function pickImages() {
-  if (isGenerating.value) {
-    uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
-    return
-  }
   if (!activeModelSupportsVision.value) {
     uiStore.showToast('این مدل از پردازش تصویر پشتیبانی نمی‌کند', 'warning')
     return
@@ -129,10 +122,6 @@ function pickImages() {
 }
 
 function pickDocuments() {
-  if (isGenerating.value) {
-    uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
-    return
-  }
   if (!activeModelSupportsDocument.value) {
     uiStore.showToast('این مدل از پردازش اسناد پشتیبانی نمی‌کند', 'warning')
     return
@@ -161,11 +150,6 @@ function toggleThinking() {
 
 function handleImageChange(e: Event) {
   const target = e.target as HTMLInputElement
-  if (isGenerating.value) {
-    uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
-    target.value = ''
-    return
-  }
   if (!activeModelSupportsVision.value) {
     uiStore.showToast('این مدل از پردازش تصویر پشتیبانی نمی‌کند', 'error')
     target.value = ''
@@ -195,11 +179,6 @@ function handleImageChange(e: Event) {
 
 function handleDocChange(e: Event) {
   const target = e.target as HTMLInputElement
-  if (isGenerating.value) {
-    uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
-    target.value = ''
-    return
-  }
   if (!activeModelSupportsDocument.value) {
     uiStore.showToast('این مدل از پردازش اسناد پشتیبانی نمی‌کند', 'error')
     target.value = ''
@@ -235,11 +214,6 @@ function handleDocChange(e: Event) {
 
 function handlePaste(e: ClipboardEvent) {
   if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
-    if (isGenerating.value) {
-      e.preventDefault()
-      uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
-      return
-    }
     if (!activeModelSupportsAttachments.value) {
       e.preventDefault()
       uiStore.showToast('این مدل از فایل پیوست پشتیبانی نمی‌کند', 'warning')
@@ -251,16 +225,10 @@ function handlePaste(e: ClipboardEvent) {
 }
 
 function onDragOver(e: DragEvent) {
-  if (isGenerating.value) return
   handleDragOver(e)
 }
 
 function onDrop(e: DragEvent) {
-  if (isGenerating.value) {
-    e.preventDefault()
-    uiStore.showToast('در حال دریافت پاسخ، امکان پیوست فایل وجود ندارد', 'warning')
-    return
-  }
   if (!activeModelSupportsAttachments.value) {
     e.preventDefault()
     uiStore.showToast('این مدل از فایل پیوست پشتیبانی نمی‌کند', 'warning')
@@ -315,12 +283,63 @@ watch(
   }
 )
 
-const canSend = computed(() => {
-  // کاربر می‌تواند پیام متنی یا فایل پیوست (بدون متن) ارسال کند
+const queuedMessages = computed<QueuedMessage[]>(() => chatStore.currentQueuedMessages)
+const isQueueDropdownOpen = ref(true)
+
+function toggleQueueDropdown() {
+  isQueueDropdownOpen.value = !isQueueDropdownOpen.value
+}
+
+const hasInput = computed(() => {
   const hasText = inputContent.value.trim().length > 0
   const hasFiles = attachedFiles.value.length > 0
-  return (hasText || hasFiles) && !chatStore.isStreaming && !chatStore.isTokenLimitExceeded && !authStore.quota.blocked
+  return (hasText || hasFiles) && !chatStore.isTokenLimitExceeded && !authStore.quota.blocked
 })
+
+const canSend = computed(() => {
+  // کاربر می‌تواند پیام متنی یا فایل پیوست (بدون متن) ارسال کند
+  return hasInput.value && !chatStore.isStreaming
+})
+
+function editQueuedMessage(item: QueuedMessage) {
+  if (inputContent.value.trim().length > 0) {
+    inputContent.value = inputContent.value + '\n' + item.content
+  } else {
+    inputContent.value = item.content
+  }
+
+  if (item.files && item.files.length > 0) {
+    for (const f of item.files) {
+      if (!attachedFiles.value.some((existing) => existing.id === f.id)) {
+        attachedFiles.value.push(f)
+      }
+    }
+  }
+
+  if (item.options?.useWebSearch !== undefined) {
+    chatStore.setConvFlag(activeConvId.value, { web: item.options.useWebSearch })
+  }
+  if (item.options?.useThinking !== undefined) {
+    chatStore.setConvFlag(activeConvId.value, { thinking: item.options.useThinking })
+  }
+
+  chatStore.removeFromQueue(item.id, activeConvId.value)
+  updateDirection()
+  adjustHeight()
+  nextTick(() => {
+    textareaRef.value?.focus()
+  })
+}
+
+function cancelQueuedMessage(id: string) {
+  chatStore.removeFromQueue(id, activeConvId.value)
+  uiStore.showToast('پیام از صف حذف شد', 'info')
+}
+
+async function handleSendQueued() {
+  chatStore.dismissStreamError()
+  await chatStore.processNextInQueue(activeConvId.value)
+}
 
 function formatResetTime(resetAt: string | null): string {
   if (!resetAt) return 'پایان دوره'
@@ -353,7 +372,6 @@ function handleKeydown(event: KeyboardEvent) {
       uiStore.showToast('توکن مصرفی شما به پایان رسید', 'error')
       return
     }
-    if (isGenerating.value) return
     handleSubmit()
   }
 }
@@ -367,7 +385,7 @@ async function handleSubmit() {
     uiStore.showToast('توکن مصرفی شما به پایان رسید', 'error')
     return
   }
-  if (!canSend.value || isGenerating.value) return
+  if (!hasInput.value) return
 
   // If in-flight file byte uploads are active, wait for completion
   if (hasUploadingFiles.value) {
@@ -389,6 +407,16 @@ async function handleSubmit() {
   if (textareaRef.value) {
     textareaRef.value.style.height = 'auto'
   }
+
+  if (isGenerating.value) {
+    chatStore.addToQueue(text, files, {
+      useWebSearch: chatStore.getConvFlag(activeConvId.value).web,
+      useThinking: Boolean(chatStore.getConvFlag(activeConvId.value).thinking),
+    })
+    uiStore.showToast('پیام به صف ارسال اضافه شد', 'info')
+    return
+  }
+
   chatStore.sendMessage(text, files, {
     useWebSearch: chatStore.getConvFlag(activeConvId.value).web,
     useThinking: Boolean(chatStore.getConvFlag(activeConvId.value).thinking),
@@ -552,6 +580,150 @@ onUnmounted(() => {
         @change="handleDocChange"
       />
 
+      <!-- Queued Messages Dropdown / Scrollable Container -->
+      <div
+        v-if="queuedMessages.length > 0"
+        class="queued-messages-container"
+        data-testid="queued-messages-container"
+      >
+        <!-- Compact Summary Header Bar (Always visible when queue has items) -->
+        <div
+          class="queued-summary-bar"
+          :class="{ 'is-open': isQueueDropdownOpen }"
+          @click="toggleQueueDropdown"
+        >
+          <div class="queued-summary-main">
+            <span class="queued-pulse-dot"></span>
+            <svg class="queued-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span class="queued-summary-title">پیام در صف ارسال</span>
+            <span class="queued-count-badge">{{ queuedMessages.length }}</span>
+            <span
+              v-if="!isQueueDropdownOpen && queuedMessages[0]?.content"
+              class="queued-summary-preview"
+              :dir="getActiveTypingDirection(queuedMessages[0].content)"
+            >
+              — {{ queuedMessages[0].content }}
+            </span>
+          </div>
+
+          <div class="queued-summary-actions" @click.stop>
+            <button
+              v-if="chatStore.streamError"
+              type="button"
+              class="queued-action-btn queued-send-btn"
+              data-testid="queued-send-btn"
+              @click="handleSendQueued"
+              title="ارسال پیام صف"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 19V5M12 5L5 12M12 5L19 12"/>
+              </svg>
+              <span>ارسال پیام</span>
+            </button>
+            <button
+              type="button"
+              class="queued-toggle-btn"
+              :class="{ 'is-open': isQueueDropdownOpen }"
+              @click.stop="toggleQueueDropdown"
+              :title="isQueueDropdownOpen ? 'بستن کشو' : 'مشاهده پیام‌ها'"
+              aria-label="تغییر وضعیت نمایش پیام‌های در صف"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Scrollable Dropdown List of Cards -->
+        <div
+          v-show="isQueueDropdownOpen"
+          class="queued-dropdown-scrollable"
+        >
+          <div
+            v-for="(item, index) in queuedMessages"
+            :key="item.id"
+            class="queued-message-card"
+            :data-testid="`queued-message-card-${item.id}`"
+          >
+            <div class="queued-message-header">
+              <div class="queued-badge-wrapper">
+                <span class="queued-card-num">#{{ index + 1 }}</span>
+                <span class="queued-badge-text">
+                  پیام در صف ارسال
+                  <span v-if="queuedMessages.length > 1" class="queued-index">({{ index + 1 }} از {{ queuedMessages.length }})</span>
+                </span>
+              </div>
+              <div class="queued-actions">
+                <button
+                  v-if="chatStore.streamError"
+                  type="button"
+                  class="queued-action-btn queued-send-btn"
+                  data-testid="queued-send-btn"
+                  @click="handleSendQueued"
+                  title="ارسال پیام صف"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 19V5M12 5L5 12M12 5L19 12"/>
+                  </svg>
+                  <span>ارسال پیام</span>
+                </button>
+                <button
+                  type="button"
+                  class="queued-action-btn queued-edit-btn"
+                  data-testid="queued-edit-btn"
+                  @click="editQueuedMessage(item)"
+                  title="ویرایش پیام"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                  <span>ویرایش</span>
+                </button>
+                <button
+                  type="button"
+                  class="queued-action-btn queued-delete-btn"
+                  data-testid="queued-delete-btn"
+                  @click="cancelQueuedMessage(item.id)"
+                  title="حذف از صف"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                  <span>حذف</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="queued-message-body">
+              <p class="queued-message-text" :dir="getActiveTypingDirection(item.content)">{{ item.content || '(بدون متن)' }}</p>
+              <div v-if="item.files && item.files.length > 0" class="queued-message-files">
+                <span v-for="f in item.files" :key="f.id" class="queued-file-badge">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                  {{ f.originalName }}
+                </span>
+              </div>
+              <div v-if="item.options?.useWebSearch || item.options?.useThinking" class="queued-options-row">
+                <span v-if="item.options?.useWebSearch" class="queued-option-badge web">
+                  🌐 جستجوی وب
+                </span>
+                <span v-if="item.options?.useThinking" class="queued-option-badge thinking">
+                  🧠 تفکر عمیق
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div
         :class="['composer-card', { focused: isFocused, 'drag-over': isDraggingOver && !isGenerating }]"
         @dragover="onDragOver"
@@ -584,7 +756,7 @@ onUnmounted(() => {
           v-model="inputContent"
           :class="['composer-textarea', inputDirection]"
           :dir="inputDirection"
-          :placeholder="chatStore.isTokenLimitExceeded || authStore.quota?.blocked ? 'توکن مصرفی شما به پایان رسید' : 'پیام خود را بنویسید...'"
+          :placeholder="chatStore.isTokenLimitExceeded || authStore.quota?.blocked ? 'توکن مصرفی شما به پایان رسید' : (isGenerating ? 'پیام خود را بنویسید (در صف ارسال قرار می‌گیرد)...' : 'پیام خود را بنویسید...')"
           :disabled="chatStore.isTokenLimitExceeded || authStore.quota?.blocked"
           rows="1"
           @focus="isFocused = true; updateDirection()"
@@ -656,10 +828,10 @@ onUnmounted(() => {
                 type="button"
                 class="model-badge-btn"
                 @click="toggleModelMenu"
-                title="تغییر مدل هوش مصنوعی"
+                :title="modelsStore.selectedModel ? `مدل فعال: ${modelsStore.selectedModel.name} (کلیک برای تغییر)` : 'تغییر مدل هوش مصنوعی'"
               >
                 <span class="model-dot"></span>
-                <span class="model-name">{{ modelsStore.selectedModel.name }}</span>
+                <span class="model-name" :title="modelsStore.selectedModel?.name">{{ modelsStore.selectedModel?.name }}</span>
                 <svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline :points="modelMenuOpen ? '6 15 12 9 18 15' : '18 15 12 9 6 15'"></polyline>
                 </svg>
@@ -715,10 +887,11 @@ onUnmounted(() => {
                     type="button"
                     :class="['model-option-btn', { active: model.id === modelsStore.selectedModelId }]"
                     @click="selectModel(model.id)"
+                    :title="model.name"
                   >
                     <div class="model-option-info">
                       <span class="flex items-center gap-1.5 flex-wrap">
-                        <span class="model-option-name">{{ model.name }}</span>
+                        <span class="model-option-name" :title="model.name">{{ model.name }}</span>
                         <span
                           v-if="model.isDefault"
                           class="rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
@@ -781,19 +954,37 @@ onUnmounted(() => {
               </svg>
             </button>
 
-            <button
-              v-if="isGenerating"
-              type="button"
-              class="btn-stop"
-              @click="handleStop"
-              title="توقف پاسخ"
-            >
-              <span class="stop-square"></span>
-            </button>
+            <!-- When generating: show Stop button AND (if user has typed) Queue button -->
+            <template v-if="isGenerating">
+              <button
+                type="button"
+                class="btn-stop"
+                data-testid="composer-stop-btn"
+                @click="handleStop"
+                title="توقف پاسخ"
+              >
+                <span class="stop-square"></span>
+              </button>
+              <button
+                v-if="hasInput"
+                type="button"
+                class="btn-queue"
+                data-testid="composer-queue-btn"
+                @click="handleSubmit"
+                title="افزودن به صف ارسال (Enter)"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </template>
+
+            <!-- When not generating: normal Send button -->
             <button
               v-else
               type="button"
               class="btn-send"
+              data-testid="composer-send-btn"
               :disabled="!canSend"
               @click="handleSubmit"
               title="ارسال پیام"
@@ -1105,6 +1296,31 @@ onUnmounted(() => {
   color: var(--secondary-foreground);
   cursor: pointer;
   transition: all 150ms ease;
+  max-width: 140px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+@media (max-width: 640px) {
+  .model-badge-btn {
+    max-width: 105px;
+    padding: 4px 6px;
+  }
+}
+
+.model-name {
+  display: inline-block;
+  max-width: 95px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+@media (max-width: 640px) {
+  .model-name {
+    max-width: 65px;
+  }
 }
 
 .model-badge-btn:hover {
@@ -1129,7 +1345,8 @@ onUnmounted(() => {
   position: absolute;
   bottom: calc(100% + 8px);
   inset-inline-start: 0;
-  width: 260px;
+  width: 270px;
+  max-width: min(320px, calc(100vw - 32px));
   background-color: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1164,6 +1381,7 @@ onUnmounted(() => {
   border: none;
   background: transparent;
   transition: background-color 150ms ease;
+  min-width: 0;
 }
 
 .model-option-btn:hover,
@@ -1176,17 +1394,29 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 2px;
   text-align: inherit;
+  min-width: 0;
+  flex: 1;
 }
 
 .model-option-name {
   font-size: 13px;
   font-weight: 500;
   color: var(--foreground);
+  max-width: 165px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .model-option-meta {
   font-size: 11px;
   color: var(--muted-foreground);
+  max-width: 210px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .check-mark {
@@ -1278,6 +1508,330 @@ onUnmounted(() => {
   border-radius: 2px;
   background-color: var(--primary);
   transition: background-color 150ms ease;
+}
+
+.btn-queue {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 150ms ease;
+  cursor: pointer;
+  border: none;
+}
+
+.btn-queue:hover {
+  opacity: 0.9;
+  transform: scale(1.03);
+}
+
+/* ─── Queued Messages Dropdown & Scrollable Container ───────────────── */
+.queued-messages-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 8px;
+  border-radius: var(--radius-md, 10px);
+  background: var(--card);
+  border: 1px solid rgba(124, 106, 247, 0.35);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  animation: fadeIn 200ms ease-out;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+:global(.dark) .queued-messages-container {
+  background: rgba(30, 32, 40, 0.9);
+  border-color: rgba(124, 106, 247, 0.45);
+}
+
+.queued-summary-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(124, 106, 247, 0.08);
+  cursor: pointer;
+  user-select: none;
+  transition: background 150ms ease;
+  min-height: 38px;
+}
+
+.queued-summary-bar:hover {
+  background: rgba(124, 106, 247, 0.14);
+}
+
+.queued-summary-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queued-summary-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.queued-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--primary);
+  color: var(--primary-foreground, #fff);
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.queued-summary-preview {
+  font-size: 11.5px;
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+
+.queued-summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.queued-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--secondary);
+  color: var(--foreground);
+  cursor: pointer;
+  transition: transform 200ms ease, background 150ms ease;
+}
+
+.queued-toggle-btn:hover {
+  background: var(--muted);
+}
+
+.queued-toggle-btn.is-open svg {
+  transform: rotate(180deg);
+}
+
+.queued-dropdown-scrollable {
+  max-height: 180px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid rgba(124, 106, 247, 0.2);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(124, 106, 247, 0.35) transparent;
+}
+
+.queued-dropdown-scrollable::-webkit-scrollbar {
+  width: 5px;
+}
+
+.queued-dropdown-scrollable::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.queued-dropdown-scrollable::-webkit-scrollbar-thumb {
+  background: rgba(124, 106, 247, 0.35);
+  border-radius: 3px;
+}
+
+.queued-message-card {
+  width: 100%;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 150ms ease;
+}
+
+:global(.dark) .queued-message-card {
+  background: rgba(22, 24, 30, 0.8);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.queued-card-num {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
+  font-family: var(--font-mono, monospace);
+}
+
+.queued-message-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.queued-badge-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.queued-icon {
+  flex-shrink: 0;
+}
+
+.queued-pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--primary);
+  box-shadow: 0 0 0 0 rgba(124, 106, 247, 0.7);
+  animation: queuedPulse 1.8s infinite;
+}
+
+@keyframes queuedPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(124, 106, 247, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(124, 106, 247, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(124, 106, 247, 0);
+  }
+}
+
+.queued-index {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.queued-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.queued-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  transition: all 150ms ease;
+}
+
+.queued-send-btn {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+.queued-send-btn:hover {
+  opacity: 0.9;
+}
+
+.queued-edit-btn:hover {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+.queued-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.queued-message-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.queued-message-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--foreground);
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+.queued-message-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.queued-file-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--secondary);
+  color: var(--muted-foreground);
+  font-size: 11px;
+  border: 1px solid var(--border);
+}
+
+.queued-options-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.queued-option-badge {
+  font-size: 10.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.queued-option-badge.web {
+  background: rgba(59, 130, 246, 0.12);
+  color: rgb(59, 130, 246);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.queued-option-badge.thinking {
+  background: rgba(168, 85, 247, 0.12);
+  color: rgb(168, 85, 247);
+  border: 1px solid rgba(168, 85, 247, 0.25);
 }
 
 .disclaimer {

@@ -145,6 +145,19 @@ export interface SendMessageRequest {
   useThinking?: boolean
 }
 
+export interface QueuedMessage {
+  id: string
+  conversationId: string
+  content: string
+  fileIds?: string[]
+  files?: FileAttachmentItem[]
+  options?: {
+    useWebSearch?: boolean
+    useThinking?: boolean
+  }
+  createdAt: string
+}
+
 export interface SearchResult {
   id: string
   title: string
@@ -506,6 +519,8 @@ export interface AuditLogItem {
   traceId?: string | null
   spanId?: string | null
   actorId?: string | null
+  actorEmail?: string | null
+  actorName?: string | null
   actorType: 'admin' | 'user' | 'system'
   action: string
   entityType: string

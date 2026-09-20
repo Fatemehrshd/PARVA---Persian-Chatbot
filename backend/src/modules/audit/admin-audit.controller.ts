@@ -24,6 +24,10 @@ export class AdminAuditController {
     @Query('action') action?: string,
     @Query('entityType') entityType?: string,
     @Query('actorId') actorId?: string,
+    @Query('id') id?: string,
+    @Query('actorEmail') actorEmail?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ) {
     return this.auditService.findAll({
       page,
@@ -35,6 +39,10 @@ export class AdminAuditController {
       action,
       entityType,
       actorId,
+      id,
+      actorEmail,
+      startDate,
+      endDate,
     });
   }
 }

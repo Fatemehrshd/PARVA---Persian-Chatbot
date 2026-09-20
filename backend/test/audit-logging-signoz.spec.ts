@@ -51,6 +51,27 @@ describe('Audit Logging and SigNoz Tracing Integration', () => {
             const t = qb.parameters.traceId.replace(/%/g, '').toLowerCase();
             filtered = filtered.filter((l) => l.traceId?.toLowerCase().includes(t));
           }
+          if (qb.parameters.directId) {
+            const d = qb.parameters.directId.replace(/%/g, '').toLowerCase();
+            filtered = filtered.filter(
+              (l) =>
+                l.id?.toLowerCase().includes(d) ||
+                l.traceId?.toLowerCase().includes(d) ||
+                l.actorId?.toLowerCase().includes(d),
+            );
+          }
+          if (qb.parameters.actorEmail) {
+            const ae = qb.parameters.actorEmail.replace(/%/g, '').toLowerCase();
+            filtered = filtered.filter((l) => l.actorEmail?.toLowerCase().includes(ae));
+          }
+          if (qb.parameters.startDate) {
+            const sd = new Date(qb.parameters.startDate).getTime();
+            filtered = filtered.filter((l) => l.createdAt && new Date(l.createdAt).getTime() >= sd);
+          }
+          if (qb.parameters.endDate) {
+            const ed = new Date(qb.parameters.endDate).getTime();
+            filtered = filtered.filter((l) => l.createdAt && new Date(l.createdAt).getTime() <= ed);
+          }
           if (qb.whereClauses.some((c: string) => c.includes('statusCode < 400'))) {
             filtered = filtered.filter((l) => (l.statusCode ?? 200) < 400 && !l.errorMessage);
           }
@@ -313,6 +334,64 @@ describe('Audit Logging and SigNoz Tracing Integration', () => {
       const result = await adminAuditController.getAuditLogs(undefined, undefined, 'zarinpal');
       expect(result.items.length).toBe(1);
       expect(result.items[0].action).toBe('payment.zarinpal.request');
+    });
+
+    it('filters logs by id (Log ID / User ID / Trace ID)', async () => {
+      const result = await adminAuditController.getAuditLogs(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'aaaaaaaa',
+      );
+      expect(result.items.length).toBe(1);
+      expect(result.items[0].traceId).toBe('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+    });
+
+    it('filters logs by date range (startDate & endDate)', async () => {
+      const now = new Date();
+      const past = new Date(now.getTime() - 60000).toISOString();
+      const future = new Date(now.getTime() + 60000).toISOString();
+      const wayPast = new Date(now.getTime() - 1000000).toISOString();
+
+      const resultWithinRange = await adminAuditController.getAuditLogs(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        past,
+        future,
+      );
+      expect(resultWithinRange.items.length).toBe(3);
+
+      const resultOutOfRange = await adminAuditController.getAuditLogs(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        wayPast,
+        past,
+      );
+      expect(resultOutOfRange.items.length).toBe(0);
     });
   });
 });

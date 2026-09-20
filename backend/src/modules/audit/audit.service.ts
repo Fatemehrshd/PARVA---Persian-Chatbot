@@ -42,6 +42,8 @@ export interface CreateAuditLogParams {
   traceId?: string | null;
   spanId?: string | null;
   actorId?: string | null;
+  actorEmail?: string | null;
+  actorName?: string | null;
   actorType?: 'admin' | 'user' | 'system' | string;
   action: string;
   entityType:
@@ -69,12 +71,16 @@ export interface FindAuditLogsOptions {
   page?: number;
   limit?: number;
   search?: string;
+  id?: string;
   traceId?: string;
   action?: string;
   entityType?: string;
   actorId?: string;
+  actorEmail?: string;
   status?: 'all' | 'success' | 'error' | string;
   type?: 'all' | 'http_request' | 'external_fetch' | 'security' | string;
+  startDate?: string;
+  endDate?: string;
 }
 
 @Injectable()
@@ -111,6 +117,8 @@ export class AuditService implements OnModuleInit {
         traceId: activeTraceId,
         spanId: activeSpanId,
         actorId: params.actorId ?? null,
+        actorEmail: params.actorEmail ?? null,
+        actorName: params.actorName ?? null,
         actorType: params.actorType ?? 'user',
         action: params.action,
         entityType: params.entityType,
@@ -141,11 +149,22 @@ export class AuditService implements OnModuleInit {
 
     const qb = this.auditRepo.createQueryBuilder('log');
 
-    // 1. Text search across action, path, traceId, errorMessage
+    // 1. Multi-ID and Text search across action, path, traceId, log.id, actorId, actorEmail, entityId, errorMessage
     if (options.search && options.search.trim().length > 0) {
       const search = `%${options.search.trim()}%`;
       qb.andWhere(
-        '(log.action ILIKE :search OR log.path ILIKE :search OR log.traceId ILIKE :search OR log.errorMessage ILIKE :search OR log.entityType ILIKE :search)',
+        '(' +
+          'CAST(log.id AS TEXT) ILIKE :search ' +
+          'OR log.traceId ILIKE :search ' +
+          'OR CAST(log.actorId AS TEXT) ILIKE :search ' +
+          'OR log.actorEmail ILIKE :search ' +
+          'OR log.actorName ILIKE :search ' +
+          'OR log.entityId ILIKE :search ' +
+          'OR log.action ILIKE :search ' +
+          'OR log.path ILIKE :search ' +
+          'OR log.errorMessage ILIKE :search ' +
+          'OR log.entityType ILIKE :search' +
+        ')',
         { search },
       );
     }
@@ -153,6 +172,20 @@ export class AuditService implements OnModuleInit {
     // 2. Exact or partial traceId filter
     if (options.traceId && options.traceId.trim().length > 0) {
       qb.andWhere('log.traceId ILIKE :traceId', { traceId: `%${options.traceId.trim()}%` });
+    }
+
+    // 2.1 Direct ID filter (Log ID, Trace ID, User ID, or Entity ID)
+    if (options.id && options.id.trim().length > 0) {
+      const cleanId = options.id.trim();
+      qb.andWhere(
+        '(' +
+          'CAST(log.id AS TEXT) ILIKE :directId ' +
+          'OR log.traceId ILIKE :directId ' +
+          'OR CAST(log.actorId AS TEXT) ILIKE :directId ' +
+          'OR log.entityId ILIKE :directId' +
+        ')',
+        { directId: `%${cleanId}%` },
+      );
     }
 
     // 3. Status filter
@@ -175,7 +208,7 @@ export class AuditService implements OnModuleInit {
       });
     }
 
-    // 5. Explicit action / entityType / actorId
+    // 5. Explicit action / entityType / actorId / actorEmail
     if (options.action) {
       qb.andWhere('log.action = :action', { action: options.action });
     }
@@ -183,7 +216,24 @@ export class AuditService implements OnModuleInit {
       qb.andWhere('log.entityType = :entityType', { entityType: options.entityType });
     }
     if (options.actorId) {
-      qb.andWhere('log.actorId = :actorId', { actorId: options.actorId });
+      qb.andWhere('CAST(log.actorId AS TEXT) = :actorId', { actorId: options.actorId });
+    }
+    if (options.actorEmail) {
+      qb.andWhere('log.actorEmail ILIKE :actorEmail', { actorEmail: `%${options.actorEmail.trim()}%` });
+    }
+
+    // 6. Date Range filter (Jalali converted or ISO dates)
+    if (options.startDate && options.startDate.trim().length > 0) {
+      const parsedStart = new Date(options.startDate.trim());
+      if (!isNaN(parsedStart.getTime())) {
+        qb.andWhere('log.createdAt >= :startDate', { startDate: parsedStart });
+      }
+    }
+    if (options.endDate && options.endDate.trim().length > 0) {
+      const parsedEnd = new Date(options.endDate.trim());
+      if (!isNaN(parsedEnd.getTime())) {
+        qb.andWhere('log.createdAt <= :endDate', { endDate: parsedEnd });
+      }
     }
 
     qb.orderBy('log.createdAt', 'DESC');

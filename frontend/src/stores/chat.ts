@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Conversation, Message, FileAttachmentItem, WebSource } from '../types'
+import type { Conversation, Message, FileAttachmentItem, WebSource, QueuedMessage } from '../types'
 import { chatService } from '../services/chat.service'
 import { filesService } from '../services/files.service'
 import { modelsService } from '../services/models.service'
@@ -628,6 +628,9 @@ export const useChatStore = defineStore('chat', () => {
     }
     conversations.value = conversations.value.filter((c) => c.id !== id)
     delete sampleMessages[id]
+    messageQueue.value.delete(id)
+    pendingMessageQueue.value.delete(id)
+    persistQueue()
     if (currentConversationId.value === id) {
       if (conversations.value.length > 0) {
         await selectConversation(conversations.value[0].id)
@@ -688,18 +691,141 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  // ─── Pending Message Queue (per-conversation) ────────────────────────────
+  // ─── Message Queue Persistence & State (per-conversation) ──────────────
+  const QUEUE_STORAGE_KEY = 'chat_queued_messages'
+
+  function loadPersistedQueue(): Map<string, QueuedMessage[]> {
+    try {
+      const raw = localStorage.getItem(QUEUE_STORAGE_KEY)
+      if (!raw) return new Map()
+      const parsed = JSON.parse(raw)
+      const map = new Map<string, QueuedMessage[]>()
+      if (parsed && typeof parsed === 'object') {
+        for (const [k, v] of Object.entries(parsed)) {
+          if (Array.isArray(v)) {
+            map.set(k, v)
+          }
+        }
+      }
+      return map
+    } catch {
+      return new Map()
+    }
+  }
+
+  function persistQueue() {
+    try {
+      const obj: Record<string, QueuedMessage[]> = {}
+      for (const [k, v] of messageQueue.value.entries()) {
+        if (v && v.length > 0) {
+          obj[k] = v
+        }
+      }
+      localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(obj))
+    } catch {}
+  }
+
   const pendingMessageQueue = ref<Map<string, QueuedMessageJob[]>>(new Map())
+  const messageQueue = ref<Map<string, QueuedMessage[]>>(loadPersistedQueue())
+
+  const currentQueuedMessages = computed<QueuedMessage[]>(() => {
+    const convId = currentConversationId.value || '__new__'
+    return messageQueue.value.get(convId) || []
+  })
+
+  function getQueuedMessages(convId?: string): QueuedMessage[] {
+    const targetConvId = convId || currentConversationId.value || '__new__'
+    return messageQueue.value.get(targetConvId) || []
+  }
+
+  function addToQueue(
+    content: string,
+    files?: FileAttachmentItem[],
+    options?: { useWebSearch?: boolean; useThinking?: boolean },
+    convId?: string
+  ): QueuedMessage {
+    const targetConvId = convId || currentConversationId.value || '__new__'
+    if (!messageQueue.value.has(targetConvId)) {
+      messageQueue.value.set(targetConvId, [])
+    }
+    const item: QueuedMessage = {
+      id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      conversationId: targetConvId,
+      content: content.trim(),
+      files: files && files.length > 0 ? [...files] : undefined,
+      fileIds: files && files.length > 0 ? files.map((f) => f.id) : undefined,
+      options: options ? { ...options } : undefined,
+      createdAt: new Date().toISOString(),
+    }
+    messageQueue.value.get(targetConvId)!.push(item)
+    persistQueue()
+    return item
+  }
+
+  function removeFromQueue(queueId: string, convId?: string) {
+    const targetConvId = convId || currentConversationId.value || '__new__'
+    const list = messageQueue.value.get(targetConvId)
+    if (!list) return
+    const filtered = list.filter((item) => item.id !== queueId)
+    if (filtered.length === 0) {
+      messageQueue.value.delete(targetConvId)
+    } else {
+      messageQueue.value.set(targetConvId, filtered)
+    }
+    persistQueue()
+  }
+
+  function clearQueue(convId?: string) {
+    const targetConvId = convId || currentConversationId.value || '__new__'
+    messageQueue.value.delete(targetConvId)
+    persistQueue()
+  }
+
+  async function processNextInQueue(convId: string): Promise<boolean> {
+    if (isTokenLimitExceeded.value || authStore.quota?.blocked) {
+      return false
+    }
+
+    const state = convStreamStates.value.get(convId)
+    if (state?.isStreaming || state?.isThinking) {
+      return false
+    }
+
+    const list = messageQueue.value.get(convId)
+    if (!list || list.length === 0) return false
+
+    const nextItem = list.shift()!
+    if (list.length === 0) {
+      messageQueue.value.delete(convId)
+    }
+    persistQueue()
+
+    await new Promise((resolve) => setTimeout(resolve, 40))
+
+    await sendMessage(nextItem.content, nextItem.files, {
+      ...nextItem.options,
+      targetConvId: convId,
+    })
+    return true
+  }
 
   function checkAndProcessQueue(convId: string) {
-    const queue = pendingMessageQueue.value.get(convId)
-    if (!queue || queue.length === 0) return
+    const state = convStreamStates.value.get(convId)
+    // Never auto-dequeue if streaming or if stream encountered an error (preserve queued messages)
+    if (state?.isStreaming || state?.isThinking || state?.streamError) return
 
-    const nextJob = queue.shift()!
-    const targetMsg = messages.value.find((m) => m.id === nextJob.id) || nextJob.userMessage
-    targetMsg.status = 'sent'
+    // 1. Pending file jobs if any
+    const fileQueue = pendingMessageQueue.value.get(convId)
+    if (fileQueue && fileQueue.length > 0) {
+      const nextJob = fileQueue.shift()!
+      const targetMsg = messages.value.find((m) => m.id === nextJob.id) || nextJob.userMessage
+      if (targetMsg) targetMsg.status = 'sent'
+      executeMessageStream(convId, nextJob.content, targetMsg, nextJob.fileIds)
+      return
+    }
 
-    executeMessageStream(convId, nextJob.content, targetMsg, nextJob.fileIds)
+    // 2. User composer message queue
+    void processNextInQueue(convId)
   }
 
   // ─── Execute streaming response for a message ──────────────────────────────
@@ -831,8 +957,6 @@ export const useChatStore = defineStore('chat', () => {
           s.currentStreamingText = ''
           convStreamStates.value.set(convId, { ...s })
         }
-
-        checkAndProcessQueue(convId)
       },
       abortCtrl.signal,
       (newTitle: string) => {
@@ -970,7 +1094,11 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   // ─── Send message ──────────────────────────────────────────────────────────
-  async function sendMessage(content: string, files?: FileAttachmentItem[], opts?: { useWebSearch?: boolean; useThinking?: boolean }) {
+  async function sendMessage(
+    content: string,
+    files?: FileAttachmentItem[],
+    opts?: { useWebSearch?: boolean; useThinking?: boolean; targetConvId?: string }
+  ) {
     if (isTokenLimitExceeded.value) {
       uiStore.showToast('توکن مصرفی شما به پایان رسید', 'error')
       return
@@ -978,21 +1106,22 @@ export const useChatStore = defineStore('chat', () => {
 
     if (!content.trim() && (!files || files.length === 0)) return
 
-    const currentActiveState = currentConversationId.value ? convStreamStates.value.get(currentConversationId.value) : null
-    if (currentActiveState?.isStreaming || currentActiveState?.isThinking) {
-      uiStore.showToast('در حال دریافت پاسخ، امکان ارسال پیام جدید وجود ندارد', 'warning')
-      return
-    }
-
-    if (!currentConversationId.value) {
+    let convId = opts?.targetConvId || currentConversationId.value
+    if (!convId) {
       // Local placeholder id only — the conversation joins the sidebar when
       // the assistant responds (see executeMessageStream's first-token hook),
       // so a pending chat never shows up in the list.
       const tempId = `c-${Date.now()}`
       currentConversationId.value = tempId
+      convId = tempId
     }
 
-    let convId = currentConversationId.value!
+    const currentActiveState = convStreamStates.value.get(convId)
+    if (currentActiveState?.isStreaming || currentActiveState?.isThinking) {
+      addToQueue(content, files, opts, convId)
+      uiStore.showToast('پیام به صف ارسال اضافه شد', 'info')
+      return
+    }
 
     const fileList = files && files.length > 0 ? [...files] : undefined
     const fileIds = fileList ? fileList.map((f) => f.id) : undefined
@@ -1013,7 +1142,9 @@ export const useChatStore = defineStore('chat', () => {
       attachments: fileList,
       fileIds,
     }
-    messages.value.push(userMessage)
+    if (convId === currentConversationId.value) {
+      messages.value.push(userMessage)
+    }
 
     // Optimistically reveal the chat in the sidebar as soon as the user has
     // actually sent a message. This keeps the empty/new chat hidden until the
@@ -1068,6 +1199,12 @@ export const useChatStore = defineStore('chat', () => {
           if (oldQueue) {
             pendingMessageQueue.value.delete(convId)
             pendingMessageQueue.value.set(created.id, oldQueue)
+          }
+          const oldMsgQueue = messageQueue.value.get(convId)
+          if (oldMsgQueue) {
+            messageQueue.value.delete(convId)
+            messageQueue.value.set(created.id, oldMsgQueue)
+            persistQueue()
           }
           // Move pre-send feature flags ('__new__' → real id)
           if (convFlags.value['__new__']) {
@@ -1245,6 +1382,11 @@ export const useChatStore = defineStore('chat', () => {
     s.searchFailed = false
     convStreamStates.value.set(convId, { ...s })
     void authStore.refreshQuota()
+    if (!s.streamError) {
+      setTimeout(() => {
+        checkAndProcessQueue(convId)
+      }, 50)
+    }
   }
 
   // ─── Retry last message ────────────────────────────────────────────────────
@@ -1466,6 +1608,13 @@ export const useChatStore = defineStore('chat', () => {
     finishStream,
     clearStreamError,
     dismissStreamError,
-    pendingMessageQueue
+    pendingMessageQueue,
+    messageQueue,
+    currentQueuedMessages,
+    addToQueue,
+    removeFromQueue,
+    clearQueue,
+    processNextInQueue,
+    getQueuedMessages
   }
 })

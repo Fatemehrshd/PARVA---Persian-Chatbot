@@ -174,22 +174,7 @@ console.log(x);
   })
 
   describe('MessageBubble.vue TTS Button', () => {
-    it('renders minimal TTS button on assistant messages and triggers synthesis on click', async () => {
-      const mockAudioPlay = vi.fn().mockResolvedValue(undefined)
-      ;(window as any).Audio = vi.fn().mockImplementation(() => ({
-        play: mockAudioPlay,
-        pause: vi.fn(),
-        src: '',
-        onplay: null,
-        onended: null,
-        onerror: null,
-      }))
-      const mockBlob = new Blob([new Uint8Array([1, 2, 3])], { type: 'audio/mpeg' })
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        blob: vi.fn().mockResolvedValue(mockBlob),
-      } as any)
-
+    it('does NOT render TTS button on assistant messages (TTS removed per user request)', () => {
       const assistantMsg: Message = {
         id: 'msg-assistant-1',
         conversationId: 'conv-1',
@@ -203,17 +188,7 @@ console.log(x);
       })
 
       const ttsBtn = wrapper.find('.tts-button')
-      expect(ttsBtn.exists()).toBe(true)
-      expect(ttsBtn.attributes('title')).toContain('خواندن صوتی')
-
-      // Ensure button contains only the SVG icon, no text label
-      expect(ttsBtn.text().trim()).toBe('')
-
-      await ttsBtn.trigger('click')
-      expect(globalThis.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/tts/synthesize'),
-        expect.any(Object),
-      )
+      expect(ttsBtn.exists()).toBe(false)
     })
 
     it('does NOT render TTS button on user messages', () => {

@@ -10,6 +10,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Login & Register Image Alignment, Centering & Confirm Password (هم‌ترازی با تصویر، مرکزیت فرم لاگین/ثبت‌نام و فیلد تکرار رمز عبور)**:
+  - Ensured both the artwork image and the authentication form are vertically and horizontally centered and perfectly aligned along the same horizontal midline (`50vh`) in [LoginView.vue](file:///d:/codeless_final/frontend/src/views/LoginView.vue).
+  - Removed artificial fixed container heights and aligned `.form-wrapper` with `justify-content: center` and smooth bezier transition (`transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1)`).
+  - Locked heights on the logo header (`h-11`), tab switcher (`h-11`), and title block (`min-h-[36px]`).
+  - Added smooth `field-expand` transition for the `displayName`, `confirmPassword` input, and password requirements helper text.
+  - Added dedicated **تکرار رمز عبور** (Confirm Password) input (`#confirmPassword`) with lock icon, show/hide eye toggle (`showConfirmPassword`), empty validation (`لطفاً تکرار رمز عبور را وارد کنید.`), and mismatch validation (`رمز عبور و تکرار آن یکسان نیستند.`).
+  - Added automated unit tests covering confirm password validation and match behavior in `tests/LoginView.spec.ts`.
+- **Composer Model Selector Max Length & Ellipsis Truncation (محدودسازی حداکثر طول عنوان مدل در اینپوت)**:
+  - Added strict max-width (`140px` desktop / `105px` mobile) and CSS text truncation (`overflow: hidden; text-overflow: ellipsis; white-space: nowrap;`) to `.model-badge-btn` and `.model-name` in [ChatComposer.vue](file:///d:/codeless_final/frontend/src/components/chat/ChatComposer.vue).
+  - Preserves layout symmetry so long model names never push out action buttons (web search, thinking, mic, send).
+  - Added native tooltip `:title` on both the button and model name span, showing the full model identifier on hover.
+  - Added bounded width and ellipsis to `.model-option-name` inside the model selection popup.
+- **Scrollable & Collapsible Queued Messages Dropdown (دراپ‌داون و اسکرول‌شونده شدن صف پیام‌ها)**:
+  - Transformed queued messages into a sleek collapsible header bar (`.queued-summary-bar`) with rotary chevron toggle button, message count pill badge, and preview of the next queued message.
+  - Scrollable message card panel (`.queued-dropdown-scrollable`) with `max-height: 180px` and subtle custom scrollbar, ensuring the composer textarea is never pushed off-screen regardless of queue size.
+
+### Removed
+- **Text-to-Speech (TTS) Complete UI Removal (حذف کامل قابلیت متن به صدا)**:
+  - Per explicit user request, completely removed all speaker buttons (`.tts-button`) and audio readout UI from [MessageBubble.vue](file:///d:/codeless_final/frontend/src/components/chat/MessageBubble.vue) and [MessageList.vue](file:///d:/codeless_final/frontend/src/components/chat/MessageList.vue).
+- **Minimal Admin Audit Logs & Persian Date Range Filtering (بازطراحی مینیمال ممیزی ادمین و فیلتر بازه تاریخ شمسی)**:
+  - **Sleek Minimal Redesign (`AdminAuditLogsSection.vue`)**:
+    - Compact, unified toolbar replacing bulky cards with a minimal metrics strip (کل لاگ‌ها، خطاها، فراخوانی‌های خروجی و میانگین زمان پاسخ).
+    - Added dedicated **«همه لاگ‌ها»** tab for viewing aggregated telemetry, request logs, external fetches, and security events in one place.
+  - **Jalali Date Range Filtering (`PersianDatePicker.vue`)**:
+    - Interactive "از تاریخ" (`startDate`) and "تا تاریخ" (`endDate`) controls using the app's native Jalali Persian datepicker.
+    - Full backend date range filtering in `AuditService` and `AdminAuditController` with query parameters and indexed `createdAt` comparisons.
+    - Quick "حذف فیلترها" button to clear all filters with a single click.
+  - **High-Volume Telemetry & Logging Architecture Strategy (معماری تفکیک بار با SigNoz و ClickHouse)**:
+    - Decoupled two-tier logging architecture: High-throughput HTTP requests, stream spans, and telemetry are ingested via OpenTelemetry into SigNoz and ClickHouse with automated TTL retention policies to avoid PostgreSQL database bloat.
+    - Business-critical audit logs (auth, payments, settings, security anomalies) remain immutably preserved in PostgreSQL (`audit_logs`) and are correlated to SigNoz traces via 1-click `traceId` deep links.
+- **Message Queue Persistence & Error Preservation (پایداری صف پیام در رفرش و ماندگاری در وضعیت خطا)**:
+  - **Browser Refresh Persistence (`localStorage`)**:
+    - Message queue state is automatically persisted in `localStorage` under `chat_queued_messages`, restoring prompts and attachments if the user reloads the browser (`F5`).
+  - **Error Preservation & Retry Trigger**:
+    - Queued messages are preserved if the active stream encounters an error or network abort, showing a prominent "ارسال پیام صف‌بندی‌شده" button for instant dispatch.
+- **Message Queue Feature (قابلیت پیام در صف و صف‌بندی ارسال حین استریم و تفکر مدل)**:
+  - **Non-blocking Prompt Submission (`ChatComposer.vue` & `useChatStore`)**:
+    - Users can now seamlessly type and submit follow-up prompts while an AI assistant response is actively streaming or thinking (`isStreaming || isThinking`).
+    - Submitting via Enter key or the new "افزودن به صف" button immediately places the prompt into the conversation's FIFO message queue (`queuedMessages`), resets textarea height, and clears sessionStorage drafts.
+  - **Interactive Queued Message Banner & Card (`ChatComposer.vue`)**:
+    - Displays a theme-adaptive, animated card right above the composer with pulsating queue indicator dot, status badge ("پیام در صف ارسال"), sequence counter for multiple items (`(۱ از ۲)`), text snippet with RTL/LTR autodetection, file badges, and capability badges (🌐 جستجوی وب, 🧠 تفکر عمیق).
+    - **1-Click Edit Action (`editQueuedMessage`)**: Pulls the queued message and its attachments back into the composer textarea for editing without losing any content.
+    - **1-Click Cancel Action (`cancelQueuedMessage`)**: Immediately removes the item from the queue with toast notification.
+  - **Automatic Stream Chaining & Dequeue Execution (`chat.ts`)**:
+    - Automatic dequeue triggers on normal stream completion (`finishStream`), manual user abort (`stopStreaming`), and recoverable stream errors.
+    - Safe execution checks ensure no prompts are dropped, and prevents doomed requests if token limits or quota blocks occur.
+  - **Per-Conversation Queue Isolation & ID Migration**:
+    - Each conversation maintains its own independent message queue (`Map<string, QueuedMessage[]>`).
+    - Automatically migrates queued messages when a local placeholder conversation (`c-...`) is converted to a permanent backend ID.
+  - **PostgreSQL Persistence & Token Hashing (`refresh_tokens` table)**:
+    - Dedicated entity (`RefreshToken`) storing SHA-256 hashed refresh tokens (`tokenHash`), expiration timestamp (`expiresAt`), revocation status (`isRevoked`), user ID (`userId`), IP address, and User-Agent.
+    - Eliminates plain-text refresh token storage in the database, preventing credential leakage in the event of database dumps.
+  - **Refresh Token Rotation (RTR) & Reuse Detection**:
+    - Each call to `POST /auth/refresh` revokes the incoming token and issues a new pair of access and refresh tokens.
+    - If a revoked token is presented again (indicating token theft or replay attack), the system revokes all refresh tokens belonging to the user family.
+  - **Silent Refresh Interceptor (`frontend/src/services/api.ts`)**:
+    - Automatically catches 401 Unauthorized responses, acquires a fresh access token via `silentRefreshToken()`, and transparently replays the failed request with queue deduplication (`refreshPromise`).
+  - **Comprehensive Session Revocation (`/auth/logout`)**:
+    - Invalidates the active JWT in the in-memory blacklist and marks the refresh token revoked in PostgreSQL.
+- **Strong Password Complexity Validation (اعتبارسنجی پیشرفته و استاندارد رمز عبور قوی)**:
+  - **Backend Regex Enforcement (`SignupDto`)**:
+    - Password must be at least 8 characters and contain at least one uppercase letter (A-Z), one lowercase letter (a-z), one digit (0-9), and one special symbol (`!@#$%^&*()_+-=[]{};':"|,.<>/?~\``).
+    - Localized Persian error messages added to `backend/src/shared/messages.fa.ts`.
+    - Preserves existing accounts by only enforcing complexity on new registrations and password updates.
+  - **Frontend Signup Guidance (`LoginView.vue`)**:
+    - Real-time client-side validation and clear Persian criteria hints informing the user of the required password format.
+
+### Fixed
+- **Payment Cancellation Transition & Lifecycle Resolution (اصلاح چرخه پرداخت: تبدیل وضعیت تراکنش‌های انصرافی از «در انتظار» به «لغو شده» و تعیین تکلیف سشن‌های منقضی)**:
+  - **Fixed Stuck PENDING Status on User Cancellation (`PaymentResultView.vue` & `PaymentsService`)**:
+    - Previously, when a user cancelled payment on Zarinpal or sandbox gateway (returning with `Status=NOK`), `PaymentResultView` skipped verification, leaving the payment record stuck in `PENDING` (`در انتظار`) indefinitely.
+    - Updated `PaymentResultView.vue` to dispatch `paymentService.verify({ authority, status: 'NOK', payload: { cancel: true } })`, allowing the backend to register the cancellation.
+    - Updated `PaymentsService.verifyPayment` to record cancellations as `PaymentStatus.CANCELLED` (`لغو شده`) with cancellation timestamp and reason, rather than leaving them `PENDING` or misclassifying them as `FAILED`.
+  - **Auto-Expiration for Abandoned Gateway Sessions (`PaymentsService.expireStalePendingPayments`)**:
+    - When users navigate to the bank gateway and close the browser without returning, the gateway session expires after 20 minutes.
+    - Added `expireStalePendingPayments` which automatically transitions `PENDING` payments older than 20 minutes to `PaymentStatus.CANCELLED` with failure reason `'انقضای مهلت پرداخت در درگاه بانکی'`, preventing stale records from cluttering the reports.
+  - **Admin Payments Table & Result Page UX (`AdminPaymentsSection.vue` & `PaymentResultView.vue`)**:
+    - Added dedicated visual badge for `لغو شده` (`bg-slate-500/10 text-slate-400`) in `AdminPaymentsSection.vue`.
+    - Differentiated cancellation UX in `PaymentResultView.vue` with reassuring Persian messaging: "شما از انجام پرداخت در درگاه بانکی انصراف دادید و تراکنش لغو گردید. هیچ مبلغی از حساب شما کسر نشده است."
+- **Payment Result & Zarinpal Return Page Redesign & Theme Harmony (هماهنگ‌سازی کامل تم و اصلاح رنگ‌های صفحه بازگشت از درگاه زرین‌پال)**:
+  - **Fixed Broken Contrast & Illegible Receipt Box (`PaymentResultView.vue` & `SandboxGatewayMockView.vue`)**:
+    - Removed `background-color: var(--accent)` which caused dark navy text on dark navy background in Light Mode and glaring bright blue contrast issues in Dark Mode.
+    - Replaced with theme-adaptive surface tokens (`var(--surface-alt)` and `var(--border)`), providing high-contrast, legible typography in both Light Mode (Warm Cream) and Dark Mode (Cool Slate).
+  - **Brand Header & Interactive Theme Toggle**:
+    - Added top navigation bar featuring the reactive brand logo (`useThemeLogo()`), "پروا" platform name, and an interactive Theme Switcher (Light/Dark mode toggle button) for instant theme verification.
+  - **Modern Digital Invoice Card & Badges**:
+    - Designed a clean receipt card showing activated plan name, paid amount formatted in Tomans and Rials (`.toLocaleString('fa-IR')`), Shaparak verified status pill badge, and 1-click clipboard copy for the bank tracking code (`refId`).
+    - Harmonized success/failure icon wrappers using theme-based tokens (`--success`, `--destructive`) with subtle glowing backdrops.
+
+### Added
 - **Minimalist Speech-to-Text (STT) & Text-to-Speech (TTS) (قابلیت صوتی مینیمال: تبدیل گفتار به متن و متن به گفتار)**:
   - **Speech-to-Text (`frontend/src/composables/useSpeechRecognition.ts`)**:
     - Implemented Web Speech API recognition composable supporting Persian (`fa-IR`) with real-time interim results and silence handling.
@@ -37,7 +127,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **AuditLog Entity & Service Enhancements (`backend/src/modules/audit`)**:
     - Added columns `traceId` (indexed), `spanId`, `method`, `path`, `statusCode`, `durationMs`, and `errorMessage` to `audit_logs` table.
     - Updated `AuditService.findAll` and `AdminAuditController` with multi-field search, trace ID filtering, status filters (success vs error), and real-time aggregate KPI metrics (total logs, error count, fetch count, average duration).
-  - **Admin Panel Sidebar & Logs Dashboard (`frontend/src/views/admin/AdminAuditLogsSection.vue` & `AdminPanelView.vue`)**:
+  - **Enhanced Audit Log Architecture, Server-Side Pagination, Multi-ID Search & Actor Identity (ارتقای معماری سیستم لاگ، پیجینیشن سرورساید، جستجوی چندگانه بر اساس ID و هویت عامل)**:
+    - **Dual Storage Architecture Clarification & Implementation (معماری دوگانه ذخیره‌سازی داده‌ها)**:
+      - **PostgreSQL (`audit_logs` table)**: Structured, immutable relational persistence with B-tree and partial indexes. Completely eliminates plain-text log files for audit queries, transactional reliability, and administrative safety.
+      - **ClickHouse (via SigNoz APM `signoz-telemetrystore-clickhouse`)**: High-throughput distributed tracing engine holding spans, flame graphs, and network telemetry, seamlessly cross-referenced with PostgreSQL via W3C `traceId`.
+      - Prominently visualized via dual storage status badges in the admin audit header.
+    - **Server-Side Pagination & Performance (`AdminTable.vue` & `AdminAuditLogsSection.vue`)**:
+      - Integrated server-side pagination with dynamic page sizes (`10`, `20`, `50`, `100`), total count indicators, and page navigation controls, avoiding heavy in-memory loads.
+    - **Multi-ID & Multi-Field Search (جستجوی پیشرفته بر اساس انواع شناسه‌ها)**:
+      - Direct ID filter input (`idFilter`) supporting partial or exact UUID search for Log UUID, SigNoz Trace ID, User UUID, and Entity ID using safe PostgreSQL `CAST(... AS TEXT)` expressions.
+      - Actor email and user name search filter (`actorFilter`).
+      - Dedicated SigNoz Trace ID filter (`traceFilter`).
+    - **Rich Actor Identity Tracking (هویت و مشخصات کامل عامل انجام‌دهنده)**:
+      - Added `actorEmail` and `actorName` columns to `audit_logs` entity and migrations.
+      - Fixed NestJS interceptor user extraction bug by dynamically resolving `req.user` in the stream `tap()` phase (after route authentication guards execute) with fallback to `req.body.email` for unauthenticated endpoints.
+      - Rich table column: user initials avatar, display name, email, role badge (`مدیر`, `کاربر`, `سیستم`), and 1-click user log filter button.
+      - Detail Modal Actor Card: comprehensive identity profile containing Name, Email with copy button, User UUID with copy button, Role, Client IP, and User-Agent.
+- **Admin Panel Sidebar & Logs Dashboard (`frontend/src/views/admin/AdminAuditLogsSection.vue` & `AdminPanelView.vue`)**:
     - Added «لاگ‌های امنیتی» to the admin sidebar with Lucide `Activity` icon.
     - Top summary KPI cards for quick inspection of system health, failure counts, outbound fetch calls, and latency.
     - Filter toolbar with type tabs (All, Inbound HTTP, Outbound Fetch, Security), status selector, and Trace ID search.

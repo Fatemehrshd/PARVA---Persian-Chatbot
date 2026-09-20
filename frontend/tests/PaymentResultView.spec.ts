@@ -99,9 +99,43 @@ describe('PaymentResultView Flow', () => {
     expect(wrapper.text()).toContain('پرداخت با موفقیت انجام شد')
   })
 
-  it('displays failure state when status is NOK', async () => {
+  it('notifies backend and displays cancelled state when pending payment returns with status NOK', async () => {
     vi.mocked(useRoute).mockReturnValue({
-      query: { authority: 'auth-fail', status: 'NOK' },
+      query: { authority: 'auth-cancel-1', status: 'NOK' },
+    } as any)
+
+    vi.mocked(paymentService.getByAuthority).mockResolvedValue({
+      id: 'pay-cancel',
+      status: 'PENDING',
+      amount: '500000',
+    } as any)
+
+    vi.mocked(paymentService.verify).mockResolvedValue({
+      success: false,
+      status: 'CANCELLED',
+      message: 'تراکنش توسط کاربر لغو شد.',
+      payment: {
+        id: 'pay-cancel',
+        status: 'CANCELLED',
+        amount: '500000',
+      },
+    } as any)
+
+    const wrapper = mount(PaymentResultView)
+    await flushPromises()
+
+    expect(paymentService.verify).toHaveBeenCalledWith({
+      authority: 'auth-cancel-1',
+      status: 'NOK',
+      payload: { cancel: true, status: 'NOK' },
+    })
+    expect(wrapper.text()).toContain('پرداخت توسط کاربر لغو شد')
+    expect(wrapper.text()).toContain('تراکنش لغو گردید')
+  })
+
+  it('displays cancelled state without re-verifying when payment is already CANCELLED', async () => {
+    vi.mocked(useRoute).mockReturnValue({
+      query: { authority: 'auth-already-cancel', status: 'NOK' },
     } as any)
 
     vi.mocked(paymentService.getByAuthority).mockResolvedValue({
@@ -114,6 +148,6 @@ describe('PaymentResultView Flow', () => {
     await flushPromises()
 
     expect(paymentService.verify).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('تراکنش ناموفق بود')
+    expect(wrapper.text()).toContain('پرداخت توسط کاربر لغو شد')
   })
 })

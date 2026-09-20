@@ -11,7 +11,6 @@ import ImageGallery from './ImageGallery.vue'
 import SourcesBlock from './SourcesBlock.vue'
 import ThinkingBlock from './ThinkingBlock.vue'
 import { stripTrailingSourcesLine } from '../../utils/citations'
-import { useTextToSpeech } from '../../composables/useTextToSpeech'
 
 const props = defineProps<{
   message: Message
@@ -100,23 +99,6 @@ async function handleFeedback(type: 'like' | 'dislike') {
     uiStore.showToast('از بازخورد مثبت شما متشکریم!', 'success', 2000)
   } else if (newFeedback === 'dislike') {
     uiStore.showToast('بازخورد شما ثبت شد و بررسی خواهد شد.', 'info', 2000)
-  }
-}
-
-// ─── Text-to-Speech (TTS) ───────────────────────────────────────────────────
-const { isPlaying: isTtsPlaying, isLoading: isTtsLoading, currentlyPlayingId, toggle: toggleTts } = useTextToSpeech()
-
-const isThisMessageSpeaking = computed(() => {
-  return isTtsPlaying.value && currentlyPlayingId.value === props.message.id
-})
-
-const isThisMessageLoading = computed(() => {
-  return isTtsLoading.value && currentlyPlayingId.value === props.message.id
-})
-
-function handleTtsToggle() {
-  if (props.message.content) {
-    toggleTts(props.message.id, props.message.content)
   }
 }
 </script>
@@ -261,32 +243,6 @@ function handleTtsToggle() {
           </svg>
           <span v-else class="copied-text font-sans text-primary text-xs font-semibold">✓</span>
           <span class="text-[11px]">{{ copied ? 'کپی شد' : 'کپی' }}</span>
-        </button>
-
-        <!-- Text-to-Speech (TTS) Read Aloud Button (Assistant Only, Minimal Icon) -->
-        <button
-          v-if="!isUser && message.content && message.status !== 'sending'"
-          type="button"
-          class="tts-button inline-flex items-center justify-center p-1 rounded-md transition-colors cursor-pointer"
-          :class="isThisMessageSpeaking || isThisMessageLoading ? 'text-primary bg-primary/15 font-semibold' : 'hover:bg-secondary text-muted-foreground hover:text-foreground'"
-          :title="isThisMessageSpeaking ? 'توقف پخش صوتی' : isThisMessageLoading ? 'درحال آماده‌سازی صوت...' : 'خواندن صوتی متن'"
-          :disabled="isThisMessageLoading"
-          @click="handleTtsToggle"
-        >
-          <!-- Loading Spinner if synthesizing -->
-          <svg v-if="isThisMessageLoading" class="w-3.5 h-3.5 text-primary animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-          </svg>
-          <!-- Stop Square Icon if playing -->
-          <svg v-else-if="isThisMessageSpeaking" class="w-3.5 h-3.5 text-primary animate-pulse" viewBox="0 0 24 24" fill="currentColor">
-            <rect x="5" y="5" width="14" height="14" rx="2" ry="2"/>
-          </svg>
-          <!-- Volume2 Speaker Icon if idle -->
-          <svg v-else class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-          </svg>
         </button>
 
         <!-- Like / Dislike Feedback (Only for Assistant Messages) -->

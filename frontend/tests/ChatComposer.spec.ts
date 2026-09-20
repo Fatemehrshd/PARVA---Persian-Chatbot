@@ -298,4 +298,32 @@ describe('ChatComposer.vue', () => {
     const badges = wrapper.findAll('[data-test="capability-badge"]')
     expect(badges.length).toBeGreaterThan(0)
   })
+
+  it('handles very long model name with tooltip title and bounded classes', async () => {
+    const modelsStore = useModelsStore()
+    const longName = 'DeepSeek-R1-Distill-Qwen-32B-Instruct-GGUF-Q4_K_M-Very-Long-Identifier'
+    modelsStore.models = [
+      {
+        id: 'model-long',
+        name: longName,
+        provider: 'custom',
+        apiIdentifier: 'deepseek-32b',
+        isActive: true,
+        isDefault: true,
+      } as any,
+    ]
+    modelsStore.selectedModelId = 'model-long'
+
+    const wrapper = mount(ChatComposer)
+    await wrapper.vm.$nextTick()
+
+    const modelBadgeBtn = wrapper.find('.model-badge-btn')
+    expect(modelBadgeBtn.exists()).toBe(true)
+    expect(modelBadgeBtn.attributes('title')).toContain(longName)
+
+    const modelNameSpan = wrapper.find('.model-name')
+    expect(modelNameSpan.exists()).toBe(true)
+    expect(modelNameSpan.attributes('title')).toBe(longName)
+    expect(modelNameSpan.text()).toBe(longName)
+  })
 })

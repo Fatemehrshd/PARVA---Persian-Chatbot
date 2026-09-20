@@ -22,12 +22,10 @@ describe('Pinia Stores', () => {
     expect(chatStore.currentConversationId).toBe(newId)
     expect(chatStore.messages.length).toBe(0)
 
-    // Sending a message alone does not add the conversation either — only
-    // the first token from the assistant (handled inside sendMessageStream's
-    // onToken callback) joins it to the sidebar. In this test there is no
-    // backend, so the conv stays off the list.
+    // Sending a message optimistically reveals the conversation in the sidebar
+    // so the user sees it in the list while generation takes place.
     await chatStore.sendMessage('سلام')
-    expect(chatStore.conversations.length).toBe(initialCount)
+    expect(chatStore.conversations.length).toBe(initialCount + 1)
     expect(chatStore.messages.length).toBe(1)
   })
 

@@ -1,23 +1,58 @@
-import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, ConflictException, UnauthorizedException, Optional } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
+import { RefreshToken } from './refresh-token.entity';
 import { FA } from '../../shared/messages.fa';
 
 @Injectable()
 export class AuthService {
-  private revoked = new Set<string>();
+  private static revoked = new Set<string>();
+
   constructor(
     private users: UsersService,
     private jwt: JwtService,
+    @Optional()
+    @InjectRepository(RefreshToken)
+    private refreshTokenRepo?: Repository<RefreshToken>,
   ) {}
-  private tokens(u: any) {
+
+  private hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  private async tokens(u: any, clientInfo?: { ip?: string; userAgent?: string }) {
     const payload = { sub: u.id, email: u.email, role: u.role };
+    const accessToken = this.jwt.sign(payload, { expiresIn: '1h' });
+    const refreshToken = this.jwt.sign({ ...payload, type: 'refresh' }, { expiresIn: '7d' });
+
+    if (this.refreshTokenRepo) {
+      try {
+        const tokenHash = this.hashToken(refreshToken);
+        await this.refreshTokenRepo.save(
+          this.refreshTokenRepo.create({
+            userId: u.id,
+            tokenHash,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            isRevoked: false,
+            ip: clientInfo?.ip || null,
+            userAgent: clientInfo?.userAgent || null,
+          }),
+        );
+      } catch {
+        // In-memory or fallback
+      }
+    }
+
     return {
-      accessToken: this.jwt.sign(payload, { expiresIn: '1h' }),
-      refreshToken: this.jwt.sign({ ...payload, type: 'refresh' }, { expiresIn: '7d' }),
+      accessToken,
+      refreshToken,
     };
   }
+
   toUserJson(u: any) {
     return {
       id: u.id,
@@ -28,26 +63,86 @@ export class AuthService {
       createdAt: u.createdAt,
     };
   }
-  async signup(email: string, password: string, displayName?: string) {
+
+  async signup(email: string, password: string, displayName?: string, clientInfo?: { ip?: string; userAgent?: string }) {
     if (await this.users.findByEmail(email))
       throw new ConflictException('Email is already registered');
     const passwordHash = await bcrypt.hash(password, 10);
     const u = await this.users.create({ email, passwordHash, displayName, role: 'user' });
-    return { user: this.toUserJson(u), ...this.tokens(u) };
+    const tokenResult = await this.tokens(u, clientInfo);
+    return { user: this.toUserJson(u), ...tokenResult };
   }
-  async login(email: string, password: string) {
+
+  async login(email: string, password: string, clientInfo?: { ip?: string; userAgent?: string }) {
     const u = await this.users.findByEmail(email.trim().toLowerCase());
     if (!u || !(await bcrypt.compare(password, u.passwordHash)))
       throw new UnauthorizedException(FA.invalidCredentials);
     if (u.isActive === false)
       throw new UnauthorizedException('حساب کاربری غیرفعال است');
-    return { user: this.toUserJson(u), ...this.tokens(u) };
+    const tokenResult = await this.tokens(u, clientInfo);
+    return { user: this.toUserJson(u), ...tokenResult };
   }
-  private static revoked = new Set<string>();
 
-  async logout(token?: string) {
+  async refresh(rawRefreshToken: string, clientInfo?: { ip?: string; userAgent?: string }) {
+    if (!rawRefreshToken || typeof rawRefreshToken !== 'string') {
+      throw new UnauthorizedException(FA.refreshTokenInvalid);
+    }
+
+    let decoded: any;
+    try {
+      decoded = this.jwt.verify(rawRefreshToken);
+    } catch {
+      throw new UnauthorizedException(FA.refreshTokenInvalid);
+    }
+
+    if (!decoded || decoded.type !== 'refresh' || !decoded.sub) {
+      throw new UnauthorizedException(FA.refreshTokenInvalid);
+    }
+
+    if (this.refreshTokenRepo) {
+      const tokenHash = this.hashToken(rawRefreshToken);
+      const existing = await this.refreshTokenRepo.findOne({
+        where: { tokenHash },
+      });
+
+      if (!existing) {
+        throw new UnauthorizedException(FA.refreshTokenInvalid);
+      }
+
+      if (existing.isRevoked || existing.expiresAt < new Date()) {
+        // Reuse detection / revocation
+        await this.refreshTokenRepo.update({ userId: decoded.sub }, { isRevoked: true });
+        throw new UnauthorizedException(FA.refreshTokenInvalid);
+      }
+
+      // Rotate: revoke the used refresh token
+      existing.isRevoked = true;
+      await this.refreshTokenRepo.save(existing);
+    }
+
+    const user = await this.users.findById(decoded.sub);
+    if (!user || user.isActive === false || user.isDeleted) {
+      throw new UnauthorizedException('حساب کاربری غیرفعال یا حذف شده است');
+    }
+
+    const newTokens = await this.tokens(user, clientInfo);
+    return {
+      user: this.toUserJson(user),
+      ...newTokens,
+    };
+  }
+
+  async logout(token?: string, rawRefreshToken?: string) {
     if (token) {
       AuthService.revoked.add(token);
+    }
+    if (rawRefreshToken && this.refreshTokenRepo) {
+      try {
+        const tokenHash = this.hashToken(rawRefreshToken);
+        await this.refreshTokenRepo.update({ tokenHash }, { isRevoked: true });
+      } catch {
+        // ignore
+      }
     }
   }
 

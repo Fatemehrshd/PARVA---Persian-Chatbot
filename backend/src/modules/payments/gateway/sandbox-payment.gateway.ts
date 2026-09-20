@@ -34,16 +34,28 @@ export class SandboxPaymentGateway implements PaymentGatewayProvider {
     amount: number;
     payload?: any;
   }): Promise<VerifyPaymentResult> {
-    const isFailed =
+    const isCancelled =
       params.payload?.status === 'NOK' ||
-      params.payload?.status === 'FAILED' ||
       params.payload?.cancel === true;
+
+    if (isCancelled) {
+      return {
+        success: false,
+        refId: null,
+        message: 'تراکنش توسط کاربر یا درگاه لغو شد.',
+        rawResponse: params.payload,
+      };
+    }
+
+    const isFailed =
+      params.payload?.status === 'FAILED' ||
+      params.payload?.status === 'ERROR';
 
     if (isFailed) {
       return {
         success: false,
         refId: null,
-        message: 'تراکنش توسط کاربر یا درگاه لغو شد.',
+        message: params.payload?.message || 'خطا در پردازش پرداخت بانکی.',
         rawResponse: params.payload,
       };
     }

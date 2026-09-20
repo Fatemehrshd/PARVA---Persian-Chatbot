@@ -22,6 +22,13 @@ export class AuditLog {
   @Column({ type: 'uuid', nullable: true })
   actorId: string | null;
 
+  @Index()
+  @Column({ length: 255, nullable: true })
+  actorEmail: string | null;
+
+  @Column({ length: 255, nullable: true })
+  actorName: string | null;
+
   @Column({ length: 30, default: 'user' })
   actorType: string;
 

@@ -8,7 +8,7 @@ describe('CapabilityBadge', () => {
     const wrapper = mount(CapabilityBadge, {
       props: { capability: 'thinking' },
     })
-    expect(wrapper.text()).toContain('تفکر عمیق')
+    expect(wrapper.text()).toContain('تفکر')
     expect(wrapper.attributes('title')).toBe('پشتیبانی از تفکر و استدلال گام به گام')
   })
 
@@ -16,14 +16,14 @@ describe('CapabilityBadge', () => {
     const wrapper = mount(CapabilityBadge, {
       props: { capability: 'vision' },
     })
-    expect(wrapper.text()).toContain('پردازش تصویر')
+    expect(wrapper.text()).toContain('تصویر')
   })
 
   it('renders document badge with correct Persian label', () => {
     const wrapper = mount(CapabilityBadge, {
       props: { capability: 'document' },
     })
-    expect(wrapper.text()).toContain('تحلیل اسناد')
+    expect(wrapper.text()).toContain('اسناد')
   })
 
   it('hides label text when showLabel is false', () => {

@@ -43,6 +43,20 @@ export function calculateEffectiveTokens(
   return Math.ceil(baseTokens * mult);
 }
 
+/**
+ * Resolves the admin-configured multiplier for a given task type.
+ * Falls back to 1.0 (no extra cost) if not configured.
+ * Keys: 'image', 'document', 'normal', 'thinking'
+ */
+export function resolveAttachmentMultiplier(
+  taskType: 'image' | 'document' | 'normal',
+  taskMultipliers: Record<string, number>,
+): number {
+  if (taskType === 'normal') return 1.0;
+  const val = Number(taskMultipliers[taskType]);
+  return Number.isFinite(val) && val > 0 ? val : 1.0;
+}
+
 export class QuotaExceededException extends BadRequestException {
   constructor(public reason: 'tokens' | 'messages', public resetAt: Date | null) {
     super({
@@ -71,26 +85,40 @@ const paceToken = () =>
  * ۱. اگر ابعاد تصویر مشخص باشد: تصویر به کاشی‌های ۵۱۲×۵۱۲ تقسیم شده و به ازای هر تایل ۱۷۰ توکن + ۸۵ توکن پایه محاسبه می‌شود.
  * ۲. در صورت نامشخص بودن ابعاد، بر اساس حجم تخمین زده می‌شود.
  * ۳. اسناد و متن‌ها: هر ۵۰۰ بایت معادل تقریباً ۱۰۰ توکن در نظر گرفته می‌شود.
+ *
+ * ضرایب تنظیم‌شده توسط ادمین (taskMultipliers) روی توکن‌های محاسبه‌شده هر نوع فایل اعمال می‌شوند.
+ * اگر taskMultipliers ارسال نشود یا ضریب صفر/تعریف‌نشده باشد، مقدار پیش‌فرض ۱.۰ (بدون ضریب) استفاده می‌شود.
  */
 export function calculateAttachmentTokens(
   attachments: Array<{ fileType?: string; fileSize?: number | string; metadata?: any }>,
+  taskMultipliers: Record<string, number> = {},
 ): number {
   let totalAttachmentTokens = 0;
   if (!attachments || attachments.length === 0) return 0;
+
+  const imageMult = resolveAttachmentMultiplier('image', taskMultipliers);
+  const documentMult = resolveAttachmentMultiplier('document', taskMultipliers);
 
   for (const att of attachments) {
     if (att.fileType === 'image') {
       const width = att.metadata?.width;
       const height = att.metadata?.height;
+      let rawTokens: number;
       if (typeof width === 'number' && typeof height === 'number' && width > 0 && height > 0) {
         const tilesX = Math.ceil(width / 512);
         const tilesY = Math.ceil(height / 512);
-        totalAttachmentTokens += 85 + tilesX * tilesY * 170;
+        rawTokens = 85 + tilesX * tilesY * 170;
       } else {
         const size = Number(att.fileSize) || 0;
         const chunks = Math.ceil(size / (128 * 1024));
-        totalAttachmentTokens += 85 + Math.max(1, chunks) * 65;
+        rawTokens = 85 + Math.max(1, chunks) * 65;
       }
+      totalAttachmentTokens += Math.ceil(rawTokens * imageMult);
+    } else if (att.fileType && ['pdf', 'excel', 'text'].includes(att.fileType)) {
+      // سند: هر ۵۰۰ بایت ≈ ۱۰۰ توکن
+      const size = Number(att.fileSize) || 0;
+      const rawTokens = size > 0 ? Math.ceil((size / 500) * 100) : 100;
+      totalAttachmentTokens += Math.ceil(rawTokens * documentMult);
     }
   }
   return totalAttachmentTokens;
@@ -760,7 +788,10 @@ export class ChatService {
         }),
       );
       // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست و ضرایب وب سرچ و تفکر
-      const attachmentTokens = calculateAttachmentTokens(attachments);
+      const taskMultipliers = typeof this.settings?.getTaskMultipliers === 'function'
+        ? await this.settings.getTaskMultipliers()
+        : {};
+      const attachmentTokens = calculateAttachmentTokens(attachments, taskMultipliers);
       const baseTokens = Math.ceil((content.length + full.length) / 4) + attachmentTokens;
       const searchMult = typeof this.settings?.getWebSearchMultiplier === 'function'
         ? await this.settings.getWebSearchMultiplier()
@@ -936,7 +967,10 @@ export class ChatService {
           }),
         );
         // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست و ضرایب وب سرچ و تفکر
-        const attachmentTokens = calculateAttachmentTokens(attachments);
+        const taskMultipliers = typeof this.settings?.getTaskMultipliers === 'function'
+          ? await this.settings.getTaskMultipliers()
+          : {};
+        const attachmentTokens = calculateAttachmentTokens(attachments, taskMultipliers);
         const baseTokens = Math.ceil((content.length + full.length) / 4) + attachmentTokens;
         const searchMult = typeof this.settings?.getWebSearchMultiplier === 'function'
           ? await this.settings.getWebSearchMultiplier()

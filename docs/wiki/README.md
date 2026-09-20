@@ -15,6 +15,7 @@ Welcome to the project documentation wiki.
 - [Features History](features.md)
 - [Admin Panel Guide (راهنمای پنل مدیریت)](admin.md)
 - [SigNoz APM & Telemetry Guide (راهنمای سیگنوز)](signoz.md)
+- [Load Testing with k6](load-testing-with-k6.md)
 - [Architectural Decisions (ADRs)](decisions.md)
 
 ## Development Workflow & Testing

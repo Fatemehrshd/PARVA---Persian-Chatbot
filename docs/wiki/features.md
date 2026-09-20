@@ -1,5 +1,29 @@
 # Features
 
+## Load Testing Tooling (k6)
+- Added `perf/k6/load-test.js` — a k6 v2 stress test for the backend: a ramping-VU
+  scenario exercising auth (login-or-signup in `setup()`) + the conversation
+  lifecycle (`POST`/`GET`/`DELETE /chat/conversations`). Safe by default: it does
+  NOT call any upstream LLM and only touches the auth guard + PostgreSQL rows.
+- Opt-in `RUN_CHAT=true` also sends `POST .../messages` in JSON-fallback mode
+  (`Accept: application/json`). ⚠️ With a real provider configured this incurs real
+  token cost + provider rate limits (~12 s/message at 25 ms/token pacing); prefer
+  the offline echo (blank the provider's `apiKey`) for cost-free chat load tests.
+- SSE caveat: k6 buffers the whole response, so the raw `text/event-stream`
+  endpoint can't be measured directly — the JSON-fallback path still exercises the
+  full `ChatService.generate()` pipeline.
+- Docs: `perf/k6/README.md` + `docs/wiki/load-testing-with-k6.md`.
+- Validated against the live dev backend: 3 VUs / 6 iterations → 0% `http_req_failed`,
+  ~42 ms create / 6 ms list / 8 ms delete (p95 ~85 ms).
+
+## مدیریت سراسری خطاها (Global Error Handling)
+- همه‌ی خطاهای HTTP از یک نقطه‌ی واحد (`frontend/src/services/api.ts`) عبور می‌کنند و قبل از رسیدن به هر کامپوننتی، از `translateServerMessage` در `frontend/src/utils/errorMessages.ts` فارسی‌سازی می‌شوند.
+- **هیچ پیام خام سروری/فریم‌ورکی به کاربر نشان داده نمی‌شود**: هر پیام ناشناخته‌ی غیرفارسی به یک پیام عمومی فارسی تبدیل می‌شود.
+- خطاهای شبکه (قطع اینترنت/سرور) با پیام فارسی مشخص و `statusCode: 0` گزارش می‌شوند.
+- در بک‌اند، فیلتر سراسری `HttpExceptionFilter` + فایل `messages.fa.ts` پیام‌های اعتبارسنجی را فارسی می‌کنند؛ خطاهای ۵۰۰ هرگز شامل stack یا جزئیات دیتابیس نیستند (فقط در لاگ سرور ثبت می‌شوند).
+- **ولیدیشن فرم‌ها بدون حباب native مرورگر**: فرم‌های ورود/ثبت‌نام و تغییر ایمیل `novalidate` دارند؛ اعتبارسنجی ایمیل (وجود `@` و نقطه در دامنه) با `isValidEmail` در `frontend/src/utils/validators.ts` سمت کلاینت انجام و نتیجه به‌صورت پیام فارسی inline نشان داده می‌شود.
+- تست‌های پوشش: `frontend/tests/services/api.spec.ts` (ترجمه، fallback، خطای شبکه) و `frontend/tests/LoginView.spec.ts` (خطای inline ایمیل نامعتبر).
+
 ## Per-User Theme Preference (تم اختصاصی به ازای هر کاربر)
 - هر کاربر می‌تواند تم خود را مستقل از سایر کاربران و مدیر سیستم انتخاب کند (تیره یا روشن).
 - تنظیم تم به صورت لوکال در `localStorage` (کلید `theme`) و همچنین به صورت اختصاصی در دیتابیس (ستون `themePreference` در جدول `users`) ذخیره می‌شود.

@@ -510,21 +510,24 @@ export const useChatStore = defineStore('chat', () => {
         const s = ensureState(convId)
         s.currentReasoning += thinkingChunk
         s.isActivelyThinking = true
+        s.isThinking = true
         convStreamStates.value.set(convId, { ...s })
-        resetWatchdog(convId, 25000)
+        resetWatchdog(convId, 35000)
       },
       (status: { state: 'thinking' | 'done'; durationMs?: number }) => {
         const s = ensureState(convId)
         if (status.state === 'thinking') {
           s.isActivelyThinking = true
+          s.isThinking = true
         } else if (status.state === 'done') {
           s.isActivelyThinking = false
+          s.isThinking = false
           if (status.durationMs !== undefined) {
             s.thinkingDurationMs = status.durationMs
           }
         }
         convStreamStates.value.set(convId, { ...s })
-        resetWatchdog(convId, 25000)
+        resetWatchdog(convId, 35000)
       }
     )
   }
@@ -854,8 +857,6 @@ export const useChatStore = defineStore('chat', () => {
     }
     sessionStorage.setItem('active_streaming_conv', convId)
 
-    let streamedAny = false
-
     // Abort any existing controller for this conv
     {
       const s = convStreamStates.value.get(convId)
@@ -887,7 +888,6 @@ export const useChatStore = defineStore('chat', () => {
         s.isThinking = false
         s.isActivelyThinking = false
         s.isSearching = false
-        streamedAny = true
         userMessage.status = 'sent'
         s.streamError = null
         // Append streamed tokens directly as they arrive from SSE.
@@ -943,7 +943,10 @@ export const useChatStore = defineStore('chat', () => {
             ? rawMsg
             : 'خطا در برقراری ارتباط'
 
-        if (streamedAny) {
+        const hasContent = Boolean(s.currentStreamingText.trim())
+        const hasReasoning = Boolean(s.currentReasoning.trim())
+
+        if (hasContent || hasReasoning) {
           userMessage.status = 'sent'
           convStreamStates.value.set(convId, { ...s })
           finishStream(convId, `msg-${Date.now()}`, true)
@@ -955,6 +958,7 @@ export const useChatStore = defineStore('chat', () => {
           userMessage.errorText = errorMessage
           s.streamError = errorMessage
           s.currentStreamingText = ''
+          s.currentReasoning = ''
           convStreamStates.value.set(convId, { ...s })
         }
       },
@@ -970,7 +974,6 @@ export const useChatStore = defineStore('chat', () => {
         s.isThinking = false
         s.isActivelyThinking = false
         s.isSearching = false
-        streamedAny = true
         userMessage.status = 'sent'
         s.streamError = null
         s.currentStreamingText = syncText
@@ -987,7 +990,6 @@ export const useChatStore = defineStore('chat', () => {
       (sources: WebSource[]) => {
         const s = ensureState(convId)
         s.pendingSources = sources
-        streamedAny = true
         userMessage.status = 'sent'
         convStreamStates.value.set(convId, { ...s })
         resetWatchdog(convId, 25000)
@@ -996,7 +998,7 @@ export const useChatStore = defineStore('chat', () => {
         const s = ensureState(convId)
         s.isSearching = false
         s.searchFailed = true
-        streamedAny = true
+        userMessage.status = 'sent'
         convStreamStates.value.set(convId, { ...s })
         resetWatchdog(convId, 25000)
       },
@@ -1008,9 +1010,9 @@ export const useChatStore = defineStore('chat', () => {
         }
         s.currentReasoning += thinkingChunk
         s.isActivelyThinking = true
-        streamedAny = true
+        s.isThinking = true
         convStreamStates.value.set(convId, { ...s })
-        resetWatchdog(convId, 25000)
+        resetWatchdog(convId, 35000)
       },
       (status: { state: 'thinking' | 'done'; durationMs?: number }) => {
         const s = ensureState(convId)
@@ -1019,14 +1021,16 @@ export const useChatStore = defineStore('chat', () => {
             ensureConversationVisibleInSidebar(convId, content)
           }
           s.isActivelyThinking = true
+          s.isThinking = true
         } else if (status.state === 'done') {
           s.isActivelyThinking = false
+          s.isThinking = false
           if (status.durationMs !== undefined) {
             s.thinkingDurationMs = status.durationMs
           }
         }
         convStreamStates.value.set(convId, { ...s })
-        resetWatchdog(convId, 25000)
+        resetWatchdog(convId, 35000)
       }
     )
   }
@@ -1361,14 +1365,14 @@ export const useChatStore = defineStore('chat', () => {
       }
     }
     const textToSave = overrideContent !== undefined ? overrideContent : s.currentStreamingText
-    if (textToSave) {
+    if (textToSave || s.currentReasoning) {
       // Only push to messages if this is the current conv (otherwise it would be stale)
       if (convId === currentConversationId.value) {
         messages.value.push({
           id: messageId,
           conversationId: convId,
           role: 'assistant',
-          content: textToSave,
+          content: textToSave || (isInterrupted ? 'به دلیل بروز خطا در ارتباط با مدل هوش مصنوعی، ادامه پاسخ قطع شد.' : ''),
           createdAt: new Date().toISOString(),
           isInterrupted,
           // فقط پیام کامل (غیرمتوقف) باید منابع داشته باشد - پیام متوقف‌شده ناقص است

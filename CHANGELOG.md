@@ -10,6 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Fix AI Thinking Output Display, Mid-Stream Error Propagation & Prompt De-duplication (حل مشکل عدم نمایش خروجی پس از تفکر، تشخیص خطاهای میانه استریم و جلوگیری از تداخل پرامپت تفکر)**:
+  - In `frontend/src/stores/chat.ts`:
+    - Updated `finishStream()` to preserve the assistant message if reasoning exists (`s.currentReasoning`), preventing the message bubble from being dropped when a stream is interrupted right after thinking.
+    - Reset `s.isThinking` and `s.isActivelyThinking` to `false` in `onThinkingStatus` when status is `'done'`.
+    - Handled mid-stream errors in `onError` by preserving already streamed reasoning via `finishStream(..., true)`.
+    - Increased stall watchdog timeout during thinking from 20s to 35s.
+  - In `backend/src/modules/ai/openai-compat.forwarder.ts`:
+    - Added `rawNonDataBuf` to accumulate and parse multi-line non-SSE JSON error bodies sent by upstream providers (e.g. Gemini 503 high demand or 429 quota spikes).
+    - Added `parseUpstreamError()` to map upstream error structures into localized, friendly Persian messages.
+    - Added premature connection cutoff detection (`!gotDone && !hasContentChunk`).
+    - Increased stall timeout during thinking to 35,000ms.
+  - In `backend/src/modules/ai/adapters/openai-compat.adapter.ts`:
+    - Updated `ThinkTagStreamParser` to close thinking blocks on any closing tag (`</think>` or `</thought>`) case-insensitively.
+  - In `backend/src/modules/chat/chat.service.ts`:
+    - Updated `isNativeReasoningModel` to detect Gemini, OpenAI, DeepSeek, and Anthropic, preventing duplicate `<think>` prompt injection on native reasoning models.
+    - Added fallback to emit reasoning text as content if upstream terminates after thinking without emitting content tokens.
 - **Inline Persian validation for a missing `@` in the email field (نمایش inline خطای نبودِ @ در ایمیل)**: the browser's native English bubble ("Please include an '@' in the email address…") no longer appears — the login/signup form and the profile email-change form use `novalidate`, and a shared client-side validator (`frontend/src/utils/validators.ts`, mirroring the backend `@IsEmail` rule) shows the same inline Persian message for a missing `@`, a missing domain dot, or any other invalid email **before** any request is sent. Covered by new tests in `frontend/tests/LoginView.spec.ts`.
 - **Global Persian error handling (هندل سراسری و فارسی خطاها)**: a centralized localization layer (`frontend/src/utils/errorMessages.ts`) now runs in `services/api.ts` — the single funnel for every HTTP error:
   - Known English backend messages (`Resource not found`, `Admin only`, `Email is already registered`, model/provider errors, MinIO storage errors, …) are translated to Persian.

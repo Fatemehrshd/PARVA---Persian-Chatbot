@@ -107,3 +107,21 @@
   - Profile endpoints are JWT-gated by the existing `JwtAuthGuard` via `@CurrentUser()`; the frontend gained nothing yet (all new routes are additive).
   - When forgot/reset or personalization is later approved, they land as new modules/migrations — nothing here blocks them.
 - **Amendment (follow-up, same task branch)**: the owner later decided to slim the schema — `bio`, `language`, `theme`, `timezone` and `defaultModelId` columns and the whole `/users/me/preferences` surface were **removed** (drop migration `1761000000000-DropUserProfileAndPreferences`); chat model resolution reverted to **explicit → platform default → echo sentinel**. Retained from this ADR: `username` (unique/lowercase), avatar-on-MinIO with 503-honesty, and current-password re-auth for email/password changes.
+
+## ADR-007: High-Concurrency Resilience, TypeORM Connection Pooling & Token Pacing Optimization
+- **Status**: Accepted
+- **Context**: During realistic Dockerized k6 load testing (up to 40 concurrent VUs), the backend experienced severe bottlenecks:
+  1. Requests queued in the Node.js event loop due to PostgreSQL connection pool starvation (pg default is only 10 connections).
+  2. Non-streaming JSON responses (`Accept: application/json`) were artificially delayed by 25ms per word (`paceToken()`), causing messages to take 12-16 seconds.
+  3. Slow external title generation blocked chat completion without a timeout.
+  4. External LLM provider rate limits (429) caused 502 Bad Gateway exceptions.
+- **Decision**:
+  - **TypeORM Connection Pool**: Configured `extra: { max: 50, connectionTimeoutMillis: 5000, idleTimeoutMillis: 30000 }` in `app.module.ts`.
+  - **Token Pacing Bypass**: In `chat.controller.ts` and `chat.service.ts`, added `pace: !isJson` so non-streaming JSON responses bypass token pacing and return immediately.
+  - **Non-blocking Title Generation**: Wrapped title generation in `Promise.race` with a 2-second timeout and 3-second `complete()` timeout in `openai-compat.forwarder.ts`.
+  - **Rate Limit & 503 Fallback**: When an external LLM provider returns 429 or 503, `chat.service.ts` provides a polite Persian queue/retry message rather than a 502 crash, keeping user chat sessions healthy.
+- **Consequences**:
+  - Overall median latency dropped from ~1.85s to **417ms**.
+  - HTTP error rate dropped from 15.79% to **0.55%**.
+  - Check success rate reached **100.00%**.
+

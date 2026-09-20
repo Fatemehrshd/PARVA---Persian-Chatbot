@@ -27,6 +27,7 @@ Directory structure:
     │   │   │   ├── AdminTable.vue
     │   │   │   ├── AdminTableSkeleton.vue
     │   │   │   ├── DeleteConfirmModal.vue
+    │   │   │   ├── LiveTerminalLogs.vue
     │   │   │   ├── ModelAccessBadge.vue
     │   │   │   ├── ModelAccessPicker.vue
     │   │   │   ├── ModelsModal.vue
@@ -138,10 +139,12 @@ Directory structure:
     │   │   └── index.ts
     │   ├── utils/
     │   │   ├── citations.ts
+    │   │   ├── errorMessages.ts
     │   │   ├── models.ts
     │   │   ├── numberInput.ts
     │   │   ├── stats.ts
-    │   │   └── textDirection.ts
+    │   │   ├── textDirection.ts
+    │   │   └── validators.ts
     │   └── views/
     │       ├── AboutView.vue
     │       ├── AdminModelsView.vue
@@ -168,9 +171,12 @@ Directory structure:
     │           ├── AdminSubscriptionsSection.vue
     │           └── AdminUsersSection.vue
     ├── tests/
+    │   ├── admin-user-edit-persistence.spec.ts
     │   ├── AdminAuditLogsSection.spec.ts
     │   ├── AdminModelCapabilitiesAndTariffs.spec.ts
     │   ├── AdminModelsView.spec.ts
+    │   ├── AdminPaymentsAndCouponsSearch.spec.ts
+    │   ├── AdminSubscriptionsSearch.spec.ts
     │   ├── AdminTable.spec.ts
     │   ├── AvatarSync.spec.ts
     │   ├── CapabilityBadge.spec.ts
@@ -191,11 +197,13 @@ Directory structure:
     │   ├── FilePreviewCard.spec.ts
     │   ├── ImageGallery.spec.ts
     │   ├── IranDate.spec.ts
+    │   ├── LiveTerminalLogs.spec.ts
     │   ├── LoginView.spec.ts
     │   ├── MarkdownContent.spec.ts
     │   ├── MessageBubble.spec.ts
     │   ├── MessageList.searching.spec.ts
     │   ├── MessageList.spec.ts
+    │   ├── MessageQueue.spec.ts
     │   ├── model-default.spec.ts
     │   ├── ModelAccess.spec.ts
     │   ├── NetworkAndRetry.spec.ts
@@ -203,6 +211,7 @@ Directory structure:
     │   ├── numberInput.spec.ts
     │   ├── PaymentResultView.spec.ts
     │   ├── PersianDatePicker.spec.ts
+    │   ├── PlanEditorModal.default-model.spec.ts
     │   ├── ProfileMenu.spec.ts
     │   ├── ProfileModal.spec.ts
     │   ├── RoleTokenLimitModal.spec.ts
@@ -213,9 +222,11 @@ Directory structure:
     │   ├── stats.spec.ts
     │   ├── Stores.spec.ts
     │   ├── SubscriptionFlow.spec.ts
+    │   ├── ThemePerUser.spec.ts
     │   ├── ThinkingBlock.spec.ts
     │   ├── useAsyncAction.spec.ts
     │   ├── useFormSubmit.spec.ts
+    │   ├── UserEditorModal.free-plan.spec.ts
     │   ├── UserEditorModal.spec.ts
     │   ├── useThemeLogo.spec.ts
     │   ├── voice-stt-tts.spec.ts
@@ -1404,13 +1415,13 @@ Displaying README.md.
 FILE: index.html
 ================================================
 <!DOCTYPE html>
-<html lang="fa" dir="rtl" class="dark" data-theme="dark">
+<html lang="fa" dir="rtl" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <script>
       (function() {
         try {
-          var t = localStorage.getItem('theme') || 'dark';
+          var t = localStorage.getItem('theme') || 'light';
           if (t === 'dark') {
             document.documentElement.classList.add('dark');
             document.documentElement.setAttribute('data-theme', 'dark');
@@ -1963,6 +1974,10 @@ const columnFilters = ref<Record<string, string>>({})
 const sortColumn = ref<string | null>(null)
 const sortOrder = ref<'asc' | 'desc' | null>(null)
 
+function getNestedValue(item: any, path: string): unknown {
+  return path.split('.').reduce((value, key) => value == null ? undefined : value[key], item)
+}
+
 const effectiveSearchFields = computed(() => {
   if (props.searchFields && props.searchFields.length > 0) return props.searchFields
   return props.columns.filter((c) => c.key !== 'actions' && c.key !== 'status')
@@ -1990,8 +2005,9 @@ const filteredItems = computed(() => {
     const q = searchQuery.value.trim().toLowerCase()
     const field = selectedSearchField.value
     res = res.filter((item) => {
-      if (field && item[field] !== undefined && item[field] !== null) {
-        return String(item[field]).toLowerCase().includes(q)
+      const fieldValue = field ? getNestedValue(item, field) : undefined
+      if (field && fieldValue !== undefined && fieldValue !== null) {
+        return String(fieldValue).toLowerCase().includes(q)
       }
       return Object.values(item).some((val) => String(val).toLowerCase().includes(q))
     })
@@ -2002,7 +2018,7 @@ const filteredItems = computed(() => {
     const val = columnFilters.value[key]?.trim().toLowerCase()
     if (val) {
       res = res.filter((item) => {
-        const itemVal = item[key]
+        const itemVal = getNestedValue(item, key)
         if (itemVal === undefined || itemVal === null) return false
         return String(itemVal).toLowerCase().includes(val)
       })
@@ -2014,8 +2030,8 @@ const filteredItems = computed(() => {
     const col = sortColumn.value
     const ord = sortOrder.value
     res = [...res].sort((a, b) => {
-      const valA = a[col]
-      const valB = b[col]
+      const valA = getNestedValue(a, col)
+      const valB = getNestedValue(b, col)
       if (valA === valB) return 0
       if (valA === undefined || valA === null) return 1
       if (valB === undefined || valB === null) return -1
@@ -2188,32 +2204,14 @@ function formatCellValue(value: unknown): unknown {
       </div>
 
       <div class="toolbar-actions-group flex items-center gap-2">
-        <!-- دکمه نمایش / پنهان‌سازی فیلترهای ستونی (Column Filters) -->
         <button
           type="button"
-          class="data-grid-action-btn"
-          :class="{ 'btn-active': showColumnFilters }"
-          title="فیلتر اختصاصی بر روی هر ستون جدول"
+          class="column-filter-toggle text-xs px-2.5 py-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+          data-testid="toggle-column-filters"
+          :aria-expanded="showColumnFilters"
           @click="showColumnFilters = !showColumnFilters"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-          </svg>
-          <span>فیلتر ستون‌ها</span>
-          <span v-if="activeFiltersCount > 0" class="filter-count-badge font-mono">
-            {{ toPersianDigits(activeFiltersCount) }}
-          </span>
-        </button>
-
-        <!-- دکمه پاک‌سازی همه فیلترها در صورت فعال بودن فیلتر -->
-        <button
-          v-if="activeFiltersCount > 0"
-          type="button"
-          class="data-grid-action-btn clear-all-btn text-destructive hover:bg-destructive/10"
-          title="پاک‌سازی تمامی فیلترها"
-          @click="clearAllFilters"
-        >
-          <span>حذف فیلترها</span>
+          {{ showColumnFilters ? 'بستن فیلترها' : 'فیلتر ستون‌ها' }}
         </button>
 
         <slot name="toolbar-actions" />
@@ -2295,8 +2293,8 @@ function formatCellValue(value: unknown): unknown {
                   :data-label="col.label"
                   :class="col.align === 'left' ? 'text-left' : col.align === 'center' ? 'text-center' : 'text-right'"
                 >
-                  <slot :name="`cell-${col.key}`" :row="item" :col="col" :value="item[col.key]">
-                    {{ formatCellValue(item[col.key]) }}
+                  <slot :name="`cell-${col.key}`" :row="item" :col="col" :value="getNestedValue(item, col.key)">
+                    {{ formatCellValue(getNestedValue(item, col.key)) }}
                   </slot>
                 </td>
               </slot>
@@ -2951,6 +2949,12 @@ const computedLoading = computed(() => {
 }
 </style>
 
+
+
+================================================
+FILE: src/components/admin/LiveTerminalLogs.vue
+================================================
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 4684: character maps to <undefined>
 
 
 ================================================
@@ -3620,7 +3624,7 @@ Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in posi
 ================================================
 FILE: src/components/admin/modals/PlanEditorModal.vue
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 4432: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 4931: character maps to <undefined>
 
 
 ================================================
@@ -3879,7 +3883,7 @@ input:focus {
 ================================================
 FILE: src/components/admin/modals/UserEditorModal.vue
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 6119: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 2998: character maps to <undefined>
 
 
 ================================================
@@ -3947,7 +3951,7 @@ const iconComponent = computed(() => {
 ================================================
 FILE: src/components/chat/ChatComposer.vue
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 2302: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 2352: character maps to <undefined>
 
 
 ================================================
@@ -5264,13 +5268,13 @@ html:not(.dark) .markdown-content .code-block-wrapper {
 ================================================
 FILE: src/components/chat/MessageBubble.vue
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 8135: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 7334: character maps to <undefined>
 
 
 ================================================
 FILE: src/components/chat/MessageList.vue
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 10170: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 9998: character maps to <undefined>
 
 
 ================================================
@@ -5746,7 +5750,7 @@ Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in posi
 ================================================
 FILE: src/components/layout/ProfileModal.vue
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 2695: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 2750: character maps to <undefined>
 
 
 ================================================
@@ -6660,7 +6664,7 @@ export function useAsyncAction<TArgs extends any[] = any[], TResult = any>(
       options?.onSuccess?.(result)
       return result
     } catch (err: any) {
-      const message = err?.message || 'An error occurred during submission'
+      const message = err?.message || 'Ø¹Ù…Ù„ÛŒØ§Øª Ø¨Ø§ Ø®Ø·Ø§ Ù…ÙˆØ§Ø¬Ù‡ Ø´Ø¯.'
       error.value = message
       options?.onError?.(err)
       return undefined
@@ -6819,7 +6823,9 @@ export function useFormSubmit<TArgs extends any[] = any[], TResult = any>(
       return result
     } catch (err: any) {
       let errorMessage = 'Ø¹Ù…Ù„ÛŒØ§Øª Ø¨Ø§ Ø®Ø·Ø§ Ù…ÙˆØ§Ø¬Ù‡ Ø´Ø¯.'
-      const rawMsg = err?.message
+      // rawMessage preserves the validator array (ApiError.message is a
+      // joined display string after localization).
+      const rawMsg = err?.rawMessage ?? err?.message
 
       if (Array.isArray(rawMsg)) {
         errorMessage = rawMsg.join(', ')
@@ -7364,7 +7370,7 @@ export function useThemeLogo(): UseThemeLogoReturn {
   const uiStore = useUiStore()
 
   const activeLogo = computed(() => {
-    if (uiStore.theme === 'dark') {
+    if (uiStore.effectiveTheme === 'dark') {
       return darkLogoUrl ?? logoFallback
     }
     return lightLogoUrl ?? logoFallback
@@ -7901,7 +7907,7 @@ Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in posi
 ================================================
 FILE: src/services/api.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 2991: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 5865: character maps to <undefined>
 
 
 ================================================
@@ -7929,6 +7935,8 @@ export interface GetAuditLogsParams {
   entityType?: string;
   actorId?: string;
   actorEmail?: string;
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface AuditLogsResponse {
@@ -7955,9 +7963,20 @@ export const auditService = {
       if (params.entityType) sp.set('entityType', params.entityType);
       if (params.actorId) sp.set('actorId', params.actorId);
       if (params.actorEmail) sp.set('actorEmail', params.actorEmail);
+      if (params.startDate) sp.set('startDate', params.startDate);
+      if (params.endDate) sp.set('endDate', params.endDate);
     }
     const qs = sp.toString();
     return request<any>(`/admin/audit-logs${qs ? `?${qs}` : ''}`);
+  },
+
+  async getSystemLogs(type: 'app' | 'error' = 'app', lines = 100): Promise<{
+    lines: string[];
+    filename: string;
+    totalLines: number;
+    exists: boolean;
+  }> {
+    return request<any>(`/admin/audit-logs/system-logs?type=${type}&lines=${lines}`);
   },
 };
 
@@ -8013,6 +8032,17 @@ export const authService = {
     return request<void>('/auth/logout', {
       method: 'POST',
       body: JSON.stringify(payload)
+    })
+  },
+
+  /**
+   * Refresh access token using stored refresh token.
+   * POST /auth/refresh
+   */
+  async refreshToken(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
+    return request<{ accessToken: string; refreshToken: string }>('/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken })
     })
   }
 }
@@ -8285,6 +8315,8 @@ export const paymentService = {
     limit?: number;
     userId?: string;
     status?: string;
+    search?: string;
+    searchField?: string;
   }): Promise<{
     items: Payment[];
     total: number;
@@ -8303,6 +8335,8 @@ export const paymentService = {
       if (params.limit) sp.set('limit', String(params.limit));
       if (params.userId) sp.set('userId', params.userId);
       if (params.status) sp.set('status', params.status);
+      if (params.search) sp.set('search', params.search);
+      if (params.searchField) sp.set('searchField', params.searchField);
     }
     const qs = sp.toString();
     return request<any>(`/admin/payments${qs ? `?${qs}` : ''}`);
@@ -8369,6 +8403,25 @@ import type {
 export const profileService = {
   async getProfile(): Promise<UserProfile> {
     return resolveAvatarUrl(await request<UserProfile>('/users/me'))
+  },
+
+  async getThemePreference(): Promise<'dark' | 'light' | null> {
+    // Tolerate both shapes: the documented `{ preference }` envelope and the
+    // legacy bare-string response some deployments may still serve.
+    const res = await request<'dark' | 'light' | { preference: 'dark' | 'light' | null }>(
+      '/users/me/theme'
+    )
+    if (typeof res === 'string') {
+      return res === 'dark' ? 'dark' : 'light'
+    }
+    return res?.preference ?? null
+  },
+
+  async updateThemePreference(preference: 'dark' | 'light' | null): Promise<UserProfile> {
+    return resolveAvatarUrl(await request<UserProfile>('/users/me/theme', {
+      method: 'PATCH',
+      body: JSON.stringify({ preference: preference ?? null }),
+    }))
   },
 
   async updateProfile(payload: UpdateProfileRequest): Promise<UserProfile> {
@@ -8566,13 +8619,13 @@ export const subscriptionService = {
 ================================================
 FILE: src/stores/auth.ts
 ================================================
-[Binary file]
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1139: character maps to <undefined>
 
 
 ================================================
 FILE: src/stores/chat.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 4940: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 4955: character maps to <undefined>
 
 
 ================================================
@@ -8601,179 +8654,14 @@ export const useCounterStore = defineStore('counter', () => {
 ================================================
 FILE: src/stores/models.ts
 ================================================
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { Model, CreateModelRequest } from '../types'
-import { modelsService } from '../services/models.service'
-import { useAuthStore } from './auth'
-
-export const useModelsStore = defineStore('models', () => {
-  const authStore = useAuthStore()
-
-  const initialModels: Model[] = [
-    {
-      id: 'm-1',
-      name: 'Neural-1 Flash',
-      provider: 'anthropic',
-      apiIdentifier: 'claude-3-5-sonnet',
-      isActive: true,
-      isDefault: true,
-      supportsThinking: false,
-      supportsVision: true,
-      supportsDocument: true,
-      thinkingBudgetTokens: 4096,
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'm-2',
-      name: 'GPT-4o Omni',
-      provider: 'openai',
-      apiIdentifier: 'gpt-4o',
-      isActive: true,
-      isDefault: false,
-      supportsThinking: false,
-      supportsVision: true,
-      supportsDocument: true,
-      thinkingBudgetTokens: 4096,
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'm-3',
-      name: 'Llama 3.3 70B',
-      provider: 'local',
-      apiIdentifier: 'llama-3.3-70b-instruct',
-      isActive: true,
-      isDefault: false,
-      supportsThinking: false,
-      supportsVision: false,
-      supportsDocument: true,
-      thinkingBudgetTokens: 2048,
-      createdAt: new Date().toISOString()
-    }
-  ]
-
-  const models = ref<Model[]>(initialModels)
-  const selectedModelId = ref<string>('m-1')
-  const loading = ref(false)
-  const error = ref<string | null>(null)
-
-  const activeModels = computed(() => models.value.filter((m) => m.isActive))
-  const defaultModel = computed(() => models.value.find((m) => m.isDefault) || models.value[0])
-  const selectedModel = computed(() => models.value.find((m) => m.id === selectedModelId.value) || defaultModel.value)
-
-  async function fetchModels(forAdmin = false) {
-    loading.value = true
-    error.value = null
-    try {
-      let data: Model[]
-      if (forAdmin || authStore.isAdmin) {
-        try {
-          const res = await modelsService.listModels()
-          data = Array.isArray(res) ? res : (res?.items || [])
-        } catch (err: any) {
-          if (err?.statusCode === 403) {
-            data = await modelsService.listActiveModels()
-          } else {
-            throw err
-          }
-        }
-      } else {
-        data = await modelsService.listActiveModels()
-      }
-
-      if (Array.isArray(data) && data.length > 0) {
-        models.value = data
-        const currentValid = data.some((m) => m.id === selectedModelId.value)
-        if (!currentValid || selectedModelId.value.startsWith('m-')) {
-          const def = data.find((m) => m.isDefault) || data[0]
-          if (def) {
-            selectedModelId.value = def.id
-          }
-        }
-      }
-    } catch (err: any) {
-      error.value = err?.message || 'Failed to fetch models'
-      // Keep initial fallback models for offline/unauthenticated views
-    } finally {
-      loading.value = false
-    }
-  }
-
-  async function addModel(data: CreateModelRequest): Promise<Model> {
-    const newModel = await modelsService.createModel(data)
-    models.value.push(newModel)
-    return newModel
-  }
-
-  async function removeModel(id: string) {
-    try {
-      await modelsService.deleteModel(id)
-    } catch (err: any) {
-      if (err?.statusCode === 403 || err?.statusCode === 401) {
-        throw err
-      }
-    }
-    models.value = models.value.filter((m) => m.id !== id)
-    if (selectedModelId.value === id && models.value.length > 0) {
-      selectedModelId.value = models.value[0].id
-    }
-  }
-
-  async function makeDefault(id: string) {
-    try {
-      await modelsService.setDefaultModel(id)
-    } catch (err: any) {
-      if (err?.statusCode === 403) {
-        throw err
-      }
-    }
-    models.value.forEach((m) => {
-      m.isDefault = m.id === id
-    })
-  }
-
-  function selectModel(id: string) {
-    selectedModelId.value = id
-  }
-
-  async function toggleModelStatus(id: string, isActive: boolean) {
-    try {
-      await modelsService.updateModelStatus(id, isActive)
-    } catch (err: any) {
-      if (err?.statusCode === 403 || err?.statusCode === 401) {
-        throw err
-      }
-    }
-    const target = models.value.find((m) => m.id === id)
-    if (target) {
-      target.isActive = isActive
-    }
-  }
-
-  return {
-    models,
-    activeModels,
-    selectedModelId,
-    selectedModel,
-    defaultModel,
-    loading,
-    error,
-    fetchModels,
-    addModel,
-    removeModel,
-    makeDefault,
-    toggleModelStatus,
-    selectModel
-  }
-})
-
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 2960: character maps to <undefined>
 
 
 ================================================
 FILE: src/stores/ui.ts
 ================================================
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 
 export interface Toast {
   id: string
@@ -8795,7 +8683,22 @@ export const useUiStore = defineStore('ui', () => {
   const authMode = ref<'login' | 'signup'>('login')
   const adminModelsModalOpen = ref(false)
   const toasts = ref<Toast[]>([])
-  const theme = ref<'dark' | 'light'>((localStorage.getItem('theme') as 'dark' | 'light') || 'dark')
+  // Single source of truth for the theme currently rendered on screen. It is
+  // mirrored to localStorage so the right theme applies before the backend
+  // preference syncs in. For signed-in users the per-user backend preference
+  // is authoritative and overrides this once synced.
+  const storedTheme = typeof localStorage !== 'undefined' ? localStorage.getItem('theme') : null
+  const theme = ref<'dark' | 'light'>(storedTheme === 'dark' ? 'dark' : 'light')
+  // Per-user theme preference persisted on the backend (null = unset â†’ global default).
+  const userThemePreference = ref<'dark' | 'light' | null>(null)
+  const themeSynced = ref(false)
+  // Auth pages (login/signup) must always render in the light theme, no matter
+  // what theme any user or previous session left behind. This is a view-local
+  // override: it is never written to localStorage and never sent to the backend.
+  const authPageLightMode = ref(false)
+
+  /** Global default theme shown to every user who hasn't set a preference. */
+  const DEFAULT_THEME: 'dark' | 'light' = 'light'
 
   function applyTheme(newTheme: 'dark' | 'light') {
     if (typeof document !== 'undefined') {
@@ -8804,13 +8707,114 @@ export const useUiStore = defineStore('ui', () => {
     }
   }
 
+  /** The theme actually rendered on screen. Priority: auth pages are always
+   * light â†’ per-user backend preference â†’ local setting. */
+  const effectiveTheme = computed<'dark' | 'light'>(() => {
+    if (authPageLightMode.value) return 'light'
+    return userThemePreference.value ?? theme.value
+  })
+
+  /** Toggle the view-local light override used by the login page. */
+  function setAuthPageLightMode(on: boolean) {
+    authPageLightMode.value = on
+  }
+
   // Set initial theme
-  applyTheme(theme.value)
+  applyTheme(effectiveTheme.value)
+
+  watch(effectiveTheme, (newTheme) => {
+    applyTheme(newTheme)
+  })
 
   watch(theme, (newTheme) => {
     localStorage.setItem('theme', newTheme)
-    applyTheme(newTheme)
+    // local setting only wins when no per-user preference is set
+    if (!userThemePreference.value) {
+      applyTheme(newTheme)
+    }
   })
+
+  /**
+   * On page refresh, re-arm the per-user sync so the next call actually
+   * fetches the backend preference instead of no-op'ing on `themeSynced`.
+   * The sync itself is lazy (async) and safe to call before auth resolves.
+   */
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', () => {
+      try { localStorage.setItem('theme', theme.value) } catch {}
+    })
+  }
+
+  async function persistThemePreference(preference: 'dark' | 'light' | null) {
+    try {
+      const { profileService } = await import('../services/profile.service')
+      await profileService.updateThemePreference(preference)
+    } catch {
+      // Offline / backend error: the local change still applies.
+    }
+  }
+
+  /**
+   * Fetch the per-user theme preference from the backend and apply it.
+   * Runs once per session; `resetThemeSession()` re-arms it for the next user.
+   */
+  async function syncUserThemePreference() {
+    if (themeSynced.value) return
+    themeSynced.value = true
+    try {
+      const { profileService } = await import('../services/profile.service')
+      const pref = await profileService.getThemePreference()
+      userThemePreference.value = pref
+      theme.value = pref ?? DEFAULT_THEME
+    } catch {
+      // Backend unavailable or unauthenticated: keep the current setting.
+    }
+  }
+
+  /** Persist a per-user theme preference on the backend and apply it. */
+  function setUserThemePreference(preference: 'dark' | 'light' | null) {
+    userThemePreference.value = preference
+    theme.value = preference ?? DEFAULT_THEME
+    void persistThemePreference(preference)
+  }
+
+  /** Clear the per-user preference (falls back to the global default = light). */
+  function clearUserThemePreference() {
+    setUserThemePreference(null)
+  }
+
+  /** Set the displayed theme (quick toggles). Persists per-user when signed in. */
+  function setTheme(newTheme: 'dark' | 'light') {
+    theme.value = newTheme
+    void persistIfSignedIn(newTheme)
+  }
+
+  async function persistIfSignedIn(newTheme: 'dark' | 'light') {
+    try {
+      const { useAuthStore } = await import('../stores/auth')
+      const auth = useAuthStore()
+      if (!auth.isAuthenticated) return
+      userThemePreference.value = newTheme
+      await persistThemePreference(newTheme)
+    } catch {
+      // Ignore; the local change still applies.
+    }
+  }
+
+  function toggleTheme() {
+    setTheme(theme.value === 'dark' ? 'light' : 'dark')
+  }
+
+  /**
+   * Forget the current session's per-user theme and return to the global
+   * default. Called on login/logout so one user's preference never leaks
+   * into another user's session.
+   */
+  function resetThemeSession() {
+    themeSynced.value = false
+    userThemePreference.value = null
+    theme.value = DEFAULT_THEME
+  }
 
   // Sync direction to html element (strictly Persian RTL)
   if (typeof document !== 'undefined') {
@@ -8887,14 +8891,6 @@ export const useUiStore = defineStore('ui', () => {
     toasts.value = toasts.value.filter((t) => t.id !== id)
   }
 
-  function setTheme(newTheme: 'dark' | 'light') {
-    theme.value = newTheme
-  }
-
-  function toggleTheme() {
-    theme.value = theme.value === 'dark' ? 'light' : 'dark'
-  }
-
   const isOnline = ref(typeof navigator !== 'undefined' ? navigator.onLine : true)
 
   function setOnline(online: boolean) {
@@ -8917,6 +8913,11 @@ export const useUiStore = defineStore('ui', () => {
     settingsModalOpen,
     toasts,
     theme,
+    userThemePreference,
+    effectiveTheme,
+    themeSynced,
+    authPageLightMode,
+    setAuthPageLightMode,
     isOnline,
     toggleSidebar,
     toggleDirection,
@@ -8930,6 +8931,10 @@ export const useUiStore = defineStore('ui', () => {
     removeToast,
     setTheme,
     toggleTheme,
+    syncUserThemePreference,
+    setUserThemePreference,
+    clearUserThemePreference,
+    resetThemeSession,
     setOnline,
     initNetworkListeners
   }
@@ -8992,7 +8997,7 @@ export function getModelCapabilities(model?: ModelCapabilities | null): Capabili
 ================================================
 FILE: src/types/index.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 4518: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 4811: character maps to <undefined>
 
 
 ================================================
@@ -9043,12 +9048,93 @@ export function linkCitationsInHtml(html: string, sources: WebSource[] | null | 
 
 
 ================================================
+FILE: src/utils/errorMessages.ts
+================================================
+/**
+ * Centralized client-side error message localization.
+ *
+ * Every error surfaced to the user passes through `translateServerMessage`
+ * (called from `services/api.ts`, the single funnel for all HTTP errors), so:
+ *   1. Known English backend messages are shown in Persian.
+ *   2. Any unrecognized non-Persian message (raw framework/DB text, a leak
+ *      from a future endpoint, etc.) NEVER reaches the user as-is — it is
+ *      replaced by a generic Persian fallback.
+ *   3. Already-Persian server messages (the majority) pass through untouched.
+ */
+
+const NETWORK_ERROR = 'ارتباط با سرور برقرار نشد. لطفاً اتصال اینترنت خود را بررسی کنید.'
+
+const GENERIC_FALLBACK = 'خطای غیرمنتظره‌ای رخ داد. لطفاً دوباره تلاش کنید.'
+
+/** Exact-match translations for backend messages still served in English. */
+const EXACT: Record<string, string> = {
+  'Resource not found': 'منبع مورد نظر پیدا نشد.',
+  'Admin only': 'این عملیات فقط برای مدیر سیستم مجاز است.',
+  'Missing or invalid access token': 'نشست شما معتبر نیست؛ لطفاً دوباره وارد شوید.',
+  'Email is already registered': 'این نشانی ایمیل قبلاً ثبت شده است.',
+  'Selected AI model is currently disabled': 'مدل انتخاب‌شده در حال حاضر غیرفعال است.',
+  'Selected AI model does not exist': 'مدل انتخاب‌شده وجود ندارد.',
+  'Model does not belong to this provider': 'این مدل متعلق به این ارائه‌دهنده نیست.',
+  'Model not found': 'مدل پیدا نشد.',
+  'Provider not found': 'ارائه‌دهنده پیدا نشد.',
+  'Invalid path': 'مسیر درخواست نامعتبر است.',
+  'Object storage (MinIO) is not configured; avatar upload is disabled':
+    'سرویس ذخیره‌سازی تصویر در دسترس نیست؛ لطفاً بعداً دوباره تلاش کنید.',
+  'Internal server error': 'خطای غیرمنتظره در سرور رخ داده است. لطفاً دوباره تلاش کنید.',
+  'An error occurred during submission': 'عملیات با خطا مواجه شد.',
+  'Failed to fetch models': 'خطا در دریافت فهرست مدل‌ها',
+}
+
+/** Pattern-based translations for dynamic backend messages. */
+const PATTERNS: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
+  [/^Provider "(.+)" already exists$/u, (m) => `ارائه‌دهنده «${m[1]}» قبلاً ثبت شده است.`],
+  [/^The model '(.+)' does not exist$/u, (m) => `مدل «${m[1]}» وجود ندارد.`],
+  [
+    /^property "?([\w.]+)"? should (not exist|not be empty)$/u,
+    (m) => `فیلد «${m[1]}» در درخواست مجاز نیست.`,
+  ],
+  [/^property "?([\w.]+)"? must be (a |an )?[\w ]+$/u, (m) => `فیلد «${m[1]}» نامعتبر است.`],
+  [/^(Failed to fetch|NetworkError|Load failed|Network request failed)$/u, () => NETWORK_ERROR],
+]
+
+const HAS_PERSIAN = /[\u0600-\u06FF]/
+
+function translateOne(message: string): string {
+  const trimmed = (message ?? '').trim()
+  if (!trimmed) return GENERIC_FALLBACK
+  if (EXACT[trimmed]) return EXACT[trimmed]
+  for (const [pattern, build] of PATTERNS) {
+    const m = trimmed.match(pattern)
+    if (m) return build(m)
+  }
+  // Already user-facing Persian (the vast majority of backend messages).
+  if (HAS_PERSIAN.test(trimmed)) return trimmed
+  // Unknown non-Persian text must never leak to the user as-is.
+  return GENERIC_FALLBACK
+}
+
+/**
+ * Localize a backend error message. Accepts the envelope `message` field,
+ * which may be a string or an array of class-validator messages; arrays are
+ * translated per-element and returned as an array so field-level error
+ * mapping upstream keeps working.
+ */
+export function translateServerMessage(message: unknown): string | string[] {
+  if (Array.isArray(message)) return message.map((m) => translateOne(String(m)))
+  return translateOne(String(message ?? ''))
+}
+
+export { NETWORK_ERROR, GENERIC_FALLBACK }
+
+
+
+================================================
 FILE: src/utils/models.ts
 ================================================
 /**
  * Moves the platform-default flag to one model, in place.
- * Returns the previously-default model's id (undefined when none was set)
- * so callers can roll the flags back if the server call fails.
+ * Returns the previlously-default model's id (undefined when none was set)
+ * so callers can rol the flags back if the server call fails.
  */
 export function markDefaultModel<T extends { id: string; isDefault?: boolean }>(
   models: T[],
@@ -9119,6 +9205,25 @@ Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in posi
 
 
 ================================================
+FILE: src/utils/validators.ts
+================================================
+/**
+ * Client-side validators shared across forms.
+ * Kept in sync with the backend's class-validator rules (@IsEmail) so the
+ * inline Persian error appears BEFORE the request is sent â€” the HTML5
+ * `type="email"` native bubble (English, browser-drawn) is suppressed with
+ * `novalidate` on the forms.
+ */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** true only for `local@domain.tld` (an `@` AND a dot in the domain). */
+export function isValidEmail(value: string): boolean {
+  return EMAIL_RE.test((value ?? '').trim())
+}
+
+
+
+================================================
 FILE: src/views/AboutView.vue
 ================================================
 <template>
@@ -9156,7 +9261,7 @@ import AdminPanelView from './AdminPanelView.vue'
 ================================================
 FILE: src/views/AdminPanelView.vue
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 3279: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 3022: character maps to <undefined>
 
 
 ================================================
@@ -9426,19 +9531,19 @@ button:hover {
 ================================================
 FILE: src/views/LoginView.vue
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1297: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1898: character maps to <undefined>
 
 
 ================================================
 FILE: src/views/PaymentResultView.vue
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 2567: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1919: character maps to <undefined>
 
 
 ================================================
 FILE: src/views/SandboxGatewayMockView.vue
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 2713: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 3781: character maps to <undefined>
 
 
 ================================================
@@ -9456,13 +9561,13 @@ Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in posi
 ================================================
 FILE: src/views/admin/AdminAuditLogsSection.vue
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 5170: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 5992: character maps to <undefined>
 
 
 ================================================
 FILE: src/views/admin/AdminChatsSection.vue
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1523: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1552: character maps to <undefined>
 
 
 ================================================
@@ -9486,19 +9591,19 @@ Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in posi
 ================================================
 FILE: src/views/admin/AdminFilesSection.vue
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1738: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1775: character maps to <undefined>
 
 
 ================================================
 FILE: src/views/admin/AdminModelsSection.vue
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 7097: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 7244: character maps to <undefined>
 
 
 ================================================
 FILE: src/views/admin/AdminPaymentsSection.vue
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1772: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 2139: character maps to <undefined>
 
 
 ================================================
@@ -9522,13 +9627,19 @@ Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in posi
 ================================================
 FILE: src/views/admin/AdminSubscriptionsSection.vue
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1830: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1847: character maps to <undefined>
 
 
 ================================================
 FILE: src/views/admin/AdminUsersSection.vue
 ================================================
 Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1155: character maps to <undefined>
+
+
+================================================
+FILE: tests/admin-user-edit-persistence.spec.ts
+================================================
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 2462: character maps to <undefined>
 
 
 ================================================
@@ -9602,22 +9713,22 @@ describe('AdminModelsView.vue (Dashboard)', () => {
     expect(wrapper.text()).toContain('Ú©Ø§Ø±Ø¨Ø±Ø§Ù†')
   })
 
-  it('filters models using the search box with 3s debounce and confirms no search on dashboard', async () => {
+  it('filters models using the table search box and confirms no header search on dashboard', async () => {
     const wrapper = mount(AdminModelsView)
 
-    // Search bar is removed from Dashboard per user request
+    // Header search is removed from Dashboard per user request
     expect(wrapper.find('.search-input').exists()).toBe(false)
 
     // Switch to models section where search is available
     await wrapper.find('[data-admin-section="models"]').trigger('click')
+    await flushPromises()
+    await wrapper.vm.$nextTick()
 
-    const searchInput = wrapper.find('.search-input')
+    const searchInput = wrapper.find('.search-text-input')
     expect(searchInput.exists()).toBe(true)
 
     vi.useFakeTimers()
     await searchInput.setValue('gpt')
-    await vi.advanceTimersByTimeAsync(3000)
-    // AdminTable's own 250ms search debounce fires after the parent's 3s one
     await vi.advanceTimersByTimeAsync(250)
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
@@ -9694,6 +9805,129 @@ describe('AdminModelsView.vue (Dashboard)', () => {
   })
 })
 
+
+
+
+================================================
+FILE: tests/AdminPaymentsAndCouponsSearch.spec.ts
+================================================
+import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import AdminPaymentsSection from '../src/views/admin/AdminPaymentsSection.vue'
+import AdminCouponsSection from '../src/views/admin/AdminCouponsSection.vue'
+import { paymentService } from '../src/services/payment.service'
+
+vi.mock('../src/services/payment.service', () => ({
+  paymentService: {
+    getAllPayments: vi.fn(),
+    adminGetCoupons: vi.fn(),
+    adminCreateCoupon: vi.fn(),
+    adminUpdateCoupon: vi.fn(),
+    adminDeleteCoupon: vi.fn(),
+  },
+}))
+
+describe('Admin payments and coupons search', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  it('searches financial transactions by the selected user email field', async () => {
+    vi.mocked(paymentService.getAllPayments).mockResolvedValue({ items: [], total: 0, page: 1, limit: 10, totalPages: 1 } as any)
+    const wrapper = mount(AdminPaymentsSection, { global: { stubs: { AdminTableSkeleton: true } } })
+    await flushPromises()
+
+    const search = wrapper.find('input.search-text-input')
+    expect(search.exists()).toBe(true)
+    await wrapper.find('select.search-field-select').setValue('user.email')
+    await search.setValue('alice@example.com')
+    await new Promise((resolve) => setTimeout(resolve, 260))
+    await flushPromises()
+
+    expect(paymentService.getAllPayments).toHaveBeenLastCalledWith(expect.objectContaining({
+      search: 'alice@example.com',
+      searchField: 'user.email',
+    }))
+  })
+
+  it('searches coupons by code or description and sends the status filter', async () => {
+    vi.mocked(paymentService.adminGetCoupons).mockResolvedValue({ items: [], total: 0, page: 1, limit: 10, totalPages: 1 } as any)
+    const wrapper = mount(AdminCouponsSection)
+    await flushPromises()
+
+    const search = wrapper.find('input[placeholder="Ø¬Ø³ØªØ¬Ùˆ Ø¯Ø± Ú©Ø¯Ù‡Ø§ Ùˆ ØªÙˆØ¶ÛŒØ­Ø§Øª..."]')
+    await search.setValue('SPRING')
+    await new Promise((resolve) => setTimeout(resolve, 320))
+    await flushPromises()
+
+    expect(paymentService.adminGetCoupons).toHaveBeenLastCalledWith(expect.objectContaining({
+      search: 'SPRING',
+      isActive: undefined,
+    }))
+  })
+})
+
+
+
+================================================
+FILE: tests/AdminSubscriptionsSearch.spec.ts
+================================================
+import { describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import AdminSubscriptionsSection from '../src/views/admin/AdminSubscriptionsSection.vue'
+import { subscriptionService } from '../src/services/subscription.service'
+
+vi.mock('../src/services/subscription.service', () => ({
+  subscriptionService: {
+    getAllSubscriptions: vi.fn(),
+    assignPlan: vi.fn(),
+    cancelSubscription: vi.fn(),
+  },
+}))
+
+describe('AdminSubscriptionsSection search', () => {
+  it('searches subscriptions by nested user and plan fields', async () => {
+    setActivePinia(createPinia())
+    vi.mocked(subscriptionService.getAllSubscriptions).mockResolvedValue({
+      items: [
+        {
+          id: 'sub-1', userId: 'u1', planId: 'p1', status: 'ACTIVE', source: 'payment',
+          user: { id: 'u1', email: 'alice@example.com', displayName: 'آلیس' },
+          plan: { id: 'p1', name: 'طرح حرفه‌ای' },
+        },
+        {
+          id: 'sub-2', userId: 'u2', planId: 'p2', status: 'EXPIRED', source: 'admin',
+          user: { id: 'u2', email: 'bob@example.com', displayName: 'باب' },
+          plan: { id: 'p2', name: 'طرح رایگان' },
+        },
+      ],
+      total: 2,
+      page: 1,
+      limit: 10,
+      totalPages: 1,
+    } as any)
+
+    const wrapper = mount(AdminSubscriptionsSection, {
+      global: {
+        stubs: {
+          BaseButton: { template: '<button><slot /></button>' },
+          AssignSubscriptionModal: { template: '<div />' },
+          DeleteConfirmModal: { template: '<div />' },
+        },
+      },
+    })
+    await flushPromises()
+
+    const search = wrapper.find('.search-text-input')
+    await wrapper.find('.search-field-select').setValue('user.email')
+    await search.setValue('alice')
+    await new Promise((resolve) => setTimeout(resolve, 260))
+
+    expect(wrapper.findAll('tbody tr.table-row')).toHaveLength(1)
+    expect(wrapper.text()).toContain('alice@example.com')
+    expect(wrapper.text()).not.toContain('bob@example.com')
+  })
+})
 
 
 
@@ -9801,6 +10035,43 @@ describe('AdminTable.vue Component', () => {
     expect(wrapper.text()).not.toContain('GPT-4o')
   })
 
+  it('searches and filters nested fields used by admin tables', async () => {
+    const wrapper = mount(AdminTable, {
+      props: {
+        columns: [
+          { key: 'user.email', label: 'ایمیل کاربر' },
+          { key: 'plan.name', label: 'طرح' },
+        ],
+        items: [
+          { id: '1', user: { email: 'ali@example.com' }, plan: { name: 'Pro' } },
+          { id: '2', user: { email: 'sara@example.com' }, plan: { name: 'Free' } },
+        ],
+        searchable: true,
+        defaultShowColumnFilters: true,
+      },
+    })
+
+    await wrapper.find('.search-text-input').setValue('sara')
+    await new Promise((resolve) => setTimeout(resolve, 260))
+    expect(wrapper.findAll('tbody tr.table-row')).toHaveLength(1)
+    expect(wrapper.text()).toContain('sara@example.com')
+  })
+
+  it('lets server-side tables open column filters from the toolbar', async () => {
+    const wrapper = mount(AdminTable, {
+      props: {
+        columns,
+        items,
+        searchable: true,
+        serverSide: true,
+      },
+    })
+
+    expect(wrapper.find('.column-filters-row').exists()).toBe(false)
+    await wrapper.get('[data-testid="toggle-column-filters"]').trigger('click')
+    expect(wrapper.find('.column-filters-row').exists()).toBe(true)
+  })
+
   it('supports column sorting on header click', async () => {
     const wrapper = mount(AdminTable, {
       props: {
@@ -9904,61 +10175,7 @@ describe('authStore: immediate avatar availability', () => {
 ================================================
 FILE: tests/CapabilityBadge.spec.ts
 ================================================
-import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
-import CapabilityBadge from '@/components/chat/CapabilityBadge.vue'
-import { getModelCapabilities } from '@/types/capabilities'
-
-describe('CapabilityBadge', () => {
-  it('renders thinking badge with correct Persian label', () => {
-    const wrapper = mount(CapabilityBadge, {
-      props: { capability: 'thinking' },
-    })
-    expect(wrapper.text()).toContain('تفکر عمیق')
-    expect(wrapper.attributes('title')).toBe('پشتیبانی از تفکر و استدلال گام به گام')
-  })
-
-  it('renders vision badge with correct Persian label', () => {
-    const wrapper = mount(CapabilityBadge, {
-      props: { capability: 'vision' },
-    })
-    expect(wrapper.text()).toContain('پردازش تصویر')
-  })
-
-  it('renders document badge with correct Persian label', () => {
-    const wrapper = mount(CapabilityBadge, {
-      props: { capability: 'document' },
-    })
-    expect(wrapper.text()).toContain('تحلیل اسناد')
-  })
-
-  it('hides label text when showLabel is false', () => {
-    const wrapper = mount(CapabilityBadge, {
-      props: { capability: 'thinking', showLabel: false },
-    })
-    expect(wrapper.text()).toBe('')
-    expect(wrapper.find('[data-test="capability-badge"]').exists()).toBe(true)
-  })
-
-  it('getModelCapabilities extracts capability list properly', () => {
-    expect(
-      getModelCapabilities({
-        supportsThinking: true,
-        supportsVision: true,
-        supportsDocument: false,
-      }),
-    ).toEqual(['thinking', 'vision'])
-
-    expect(
-      getModelCapabilities({
-        supportsThinking: false,
-        supportsVision: false,
-        supportsDocument: true,
-      }),
-    ).toEqual(['document'])
-  })
-})
-
+[Binary file]
 
 
 ================================================
@@ -11267,147 +11484,92 @@ describe('Iran Standard Time Formatting (Asia/Tehran)', () => {
 
 
 ================================================
-FILE: tests/LoginView.spec.ts
+FILE: tests/LiveTerminalLogs.spec.ts
 ================================================
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
-import { createPinia, setActivePinia } from 'pinia'
-import LoginView from '../src/views/LoginView.vue'
-import { useAuthStore } from '../src/stores/auth'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import LiveTerminalLogs from '../src/components/admin/LiveTerminalLogs.vue'
+import { auditService } from '../src/services/audit.service'
 
-// Mock vue-router
-const pushMock = vi.fn()
-vi.mock('vue-router', () => ({
-  useRouter: () => ({
-    push: pushMock,
-  }),
+vi.mock('../src/services/audit.service', () => ({
+  auditService: {
+    getSystemLogs: vi.fn(),
+  },
 }))
 
-describe('LoginView.vue', () => {
+describe('LiveTerminalLogs.vue', () => {
   beforeEach(() => {
-    setActivePinia(createPinia())
-    pushMock.mockClear()
+    vi.clearAllMocks()
+    vi.mocked(auditService.getSystemLogs).mockResolvedValue({
+      filename: 'app-2026-09-20.log',
+      totalLines: 3,
+      lines: [
+        '2026-09-20 16:00:00 [INFO] Server started on port 3000',
+        '2026-09-20 16:00:01 [WARN] Rate limit approaching for user 1',
+        '2026-09-20 16:00:02 [ERROR] Database connection dropped',
+      ],
+    })
   })
 
-  it('renders login form with Shadcn components', () => {
-    const wrapper = mount(LoginView, {
-      global: {
-        stubs: {
-          'router-link': true,
-        },
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('renders terminal log lines and filename properly', async () => {
+    const wrapper = mount(LiveTerminalLogs, {
+      props: {
+        signozUrl: 'http://localhost:3301',
       },
     })
 
-    expect(wrapper.text()).toMatch(/Ù¾Ø±ÙˆØ§|PARVA/)
-    expect(wrapper.find('input[type="email"]').exists()).toBe(true)
-    expect(wrapper.find('input[type="password"]').exists()).toBe(true)
-    expect(wrapper.find('button[type="submit"]').exists()).toBe(true)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('app-2026-09-20.log')
+    expect(wrapper.text()).toContain('Server started on port 3000')
+    expect(wrapper.text()).toContain('Database connection dropped')
+    expect(auditService.getSystemLogs).toHaveBeenCalledWith('app', 150)
   })
 
-  it('switches to signup tab when clicked', async () => {
-    const wrapper = mount(LoginView, {
-      global: {
-        stubs: {
-          'router-link': true,
-        },
-      },
-    })
+  it('filters log lines with search input', async () => {
+    const wrapper = mount(LiveTerminalLogs)
+    await flushPromises()
 
-    const buttons = wrapper.findAll('button[type="button"]')
-    const signupTab = buttons.find(b => b.text().includes('Ø«Ø¨Øªâ€ŒÙ†Ø§Ù…') || b.text().includes('Sign Up'))
-    expect(signupTab).toBeDefined()
-    
-    await signupTab!.trigger('click')
-    expect(wrapper.find('#displayName').exists()).toBe(true)
+    const input = wrapper.find('input[type="text"]')
+    expect(input.exists()).toBe(true)
+
+    await input.setValue('Database')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Database connection dropped')
+    expect(wrapper.text()).not.toContain('Server started on port 3000')
   })
 
-  it('shows error when email is invalid', async () => {
-    const wrapper = mount(LoginView, {
-      global: {
-        stubs: {
-          'router-link': true,
-        },
-      },
+  it('switches between app and error logs', async () => {
+    const wrapper = mount(LiveTerminalLogs)
+    await flushPromises()
+
+    vi.mocked(auditService.getSystemLogs).mockResolvedValueOnce({
+      filename: 'error-2026-09-20.log',
+      totalLines: 1,
+      lines: ['2026-09-20 16:01:00 [ERROR] Out of memory crash'],
     })
 
-    const emailInput = wrapper.find('input[type="email"]')
-    await emailInput.setValue('invalid-email')
+    const errorBtn = wrapper.findAll('button').find((b) => b.text().includes('Ø®Ø·Ø§Ù‡Ø§'))
+    expect(errorBtn).toBeDefined()
+    await errorBtn!.trigger('click')
+    await flushPromises()
 
-    await wrapper.find('form').trigger('submit.prevent')
-    expect(wrapper.text()).toMatch(/Ø§ÛŒÙ…ÛŒÙ„ Ù…Ø¹ØªØ¨Ø±|valid email/i)
-  })
-
-  it('disables inputs and button with loading spinner during authentication submission', async () => {
-    const wrapper = mount(LoginView, {
-      global: {
-        stubs: {
-          'router-link': true,
-        },
-      },
-    })
-
-    const authStore = useAuthStore()
-    let resolveLogin!: (val: boolean) => void
-    const loginPromise = new Promise<boolean>((resolve) => {
-      resolveLogin = resolve
-    })
-    vi.spyOn(authStore, 'login').mockImplementation(() => loginPromise)
-
-    const emailInput = wrapper.find('input[type="email"]')
-    const passwordInput = wrapper.find('input[type="password"]')
-    await emailInput.setValue('test@example.com')
-    await passwordInput.setValue('password123')
-
-    // Submit form
-    wrapper.find('form').trigger('submit.prevent')
-    await wrapper.vm.$nextTick()
-
-    // Inputs and submit button should be disabled
-    expect(emailInput.attributes('disabled')).toBeDefined()
-    expect(passwordInput.attributes('disabled')).toBeDefined()
-
-    const submitBtn = wrapper.find('button[type="submit"]')
-    expect(submitBtn.attributes('disabled')).toBeDefined()
-    expect(submitBtn.find('svg.animate-spin').exists()).toBe(true)
-
-    // Complete login
-    resolveLogin(true)
-    await loginPromise
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
-
-    expect(pushMock).toHaveBeenCalledWith('/')
-  })
-
-  it('displays error message banner when password or username is incorrect', async () => {
-    const wrapper = mount(LoginView, {
-      global: {
-        stubs: {
-          'router-link': true,
-        },
-      },
-    })
-
-    const authStore = useAuthStore()
-    vi.spyOn(authStore, 'login').mockImplementation(async () => {
-      authStore.error = 'Ø§ÛŒÙ…ÛŒÙ„ ÛŒØ§ Ø±Ù…Ø² Ø¹Ø¨ÙˆØ± Ø§Ø´ØªØ¨Ø§Ù‡ Ø§Ø³Øª.'
-      return false
-    })
-
-    const emailInput = wrapper.find('input[type="email"]')
-    const passwordInput = wrapper.find('input[type="password"]')
-    await emailInput.setValue('user@example.com')
-    await passwordInput.setValue('wrongpassword')
-
-    await wrapper.find('form').trigger('submit.prevent')
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
-
-    expect(wrapper.text()).toContain('Ø§ÛŒÙ…ÛŒÙ„ ÛŒØ§ Ø±Ù…Ø² Ø¹Ø¨ÙˆØ± Ø§Ø´ØªØ¨Ø§Ù‡ Ø§Ø³Øª.')
+    expect(auditService.getSystemLogs).toHaveBeenCalledWith('error', 150)
+    expect(wrapper.text()).toContain('Out of memory crash')
   })
 })
 
 
+
+================================================
+FILE: tests/LoginView.spec.ts
+================================================
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 6640: character maps to <undefined>
 
 
 ================================================
@@ -11432,6 +11594,361 @@ Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in posi
 FILE: tests/MessageList.spec.ts
 ================================================
 Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 7074: character maps to <undefined>
+
+
+================================================
+FILE: tests/MessageQueue.spec.ts
+================================================
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import ChatComposer from '../src/components/chat/ChatComposer.vue'
+import { useChatStore } from '../src/stores/chat'
+import { useUiStore } from '../src/stores/ui'
+import { chatService } from '../src/services/chat.service'
+
+vi.mock('../src/services/chat.service', () => ({
+  chatService: {
+    createConversation: vi.fn().mockResolvedValue({ id: 'conv-real-1', title: 'تست' }),
+    sendMessageStream: vi.fn(),
+    stopActiveStream: vi.fn().mockResolvedValue({ success: true }),
+    deleteConversation: vi.fn().mockResolvedValue({ success: true }),
+    updateConversation: vi.fn().mockResolvedValue({ success: true }),
+  },
+}))
+
+vi.mock('../src/services/api', () => ({
+  checkBackendHealth: vi.fn().mockResolvedValue(true),
+}))
+
+describe('Message Queue Feature (قابلیت پیام در صف)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('1. User can type and submit message while assistant is streaming (message added to queue)', async () => {
+    const wrapper = mount(ChatComposer)
+    const chatStore = useChatStore()
+    const uiStore = useUiStore()
+    const toastSpy = vi.spyOn(uiStore, 'showToast')
+
+    chatStore.currentConversationId = 'conv-test-1'
+    chatStore.convStreamStates.set('conv-test-1', {
+      isStreaming: true,
+      isThinking: false,
+      streamError: null,
+      currentStreamingText: 'پاسخ هوش مصنوعی در حال تولید...',
+      abortController: new AbortController(),
+      watchdogTimer: null,
+      lastUserPrompt: 'پیام اول',
+      charBuffer: [],
+      releaseTimer: null,
+      pendingSources: null,
+      isSearching: false,
+      searchFailed: false,
+      currentReasoning: '',
+      isActivelyThinking: false,
+      thinkingDurationMs: null,
+    })
+
+    await wrapper.vm.$nextTick()
+
+    // Stop button is visible
+    expect(wrapper.find('[data-testid="composer-stop-btn"]').exists()).toBe(true)
+    // Send/queue button not visible yet because input is empty
+    expect(wrapper.find('[data-testid="composer-queue-btn"]').exists()).toBe(false)
+
+    // User types next prompt into textarea
+    const textarea = wrapper.find('textarea')
+    await textarea.setValue('این پیام دوم است که باید در صف قرار گیرد')
+
+    // Queue button is now visible
+    const queueBtn = wrapper.find('[data-testid="composer-queue-btn"]')
+    expect(queueBtn.exists()).toBe(true)
+
+    // Click the queue button (or hit Enter)
+    await queueBtn.trigger('click')
+
+    // Textarea is cleared
+    expect((textarea.element as HTMLTextAreaElement).value).toBe('')
+
+    // Feedback toast shown
+    expect(toastSpy).toHaveBeenCalledWith('پیام به صف ارسال اضافه شد', 'info')
+
+    // Chat store has 1 message in queue for this conversation
+    const queuedList = chatStore.currentQueuedMessages
+    expect(queuedList.length).toBe(1)
+    expect(queuedList[0].content).toBe('این پیام دوم است که باید در صف قرار گیرد')
+    expect(queuedList[0].conversationId).toBe('conv-test-1')
+
+    // Queued Message card is now rendered in DOM
+    await wrapper.vm.$nextTick()
+    const queueContainer = wrapper.find('[data-testid="queued-messages-container"]')
+    expect(queueContainer.exists()).toBe(true)
+    expect(queueContainer.text()).toContain('پیام در صف ارسال')
+    expect(queueContainer.text()).toContain('این پیام دوم است که باید در صف قرار گیرد')
+  })
+
+  it('2. Editing a queued message removes it from queue and restores it into the composer textarea', async () => {
+    const wrapper = mount(ChatComposer)
+    const chatStore = useChatStore()
+
+    chatStore.currentConversationId = 'conv-test-2'
+    chatStore.addToQueue('پیامی برای ویرایش', undefined, { useWebSearch: true }, 'conv-test-2')
+
+    await wrapper.vm.$nextTick()
+
+    const queueCard = wrapper.find('[data-testid="queued-messages-container"]')
+    expect(queueCard.exists()).toBe(true)
+    expect(queueCard.text()).toContain('پیامی برای ویرایش')
+
+    // Click Edit button
+    const editBtn = wrapper.find('[data-testid="queued-edit-btn"]')
+    expect(editBtn.exists()).toBe(true)
+    await editBtn.trigger('click')
+
+    // Queue should now be empty
+    expect(chatStore.currentQueuedMessages.length).toBe(0)
+
+    // Textarea has the restored content
+    const textarea = wrapper.find('textarea')
+    expect((textarea.element as HTMLTextAreaElement).value).toBe('پیامی برای ویرایش')
+
+    // Flag for web search restored
+    expect(chatStore.getConvFlag('conv-test-2').web).toBe(true)
+  })
+
+  it('3. Cancelling a queued message removes it from queue and shows toast', async () => {
+    const wrapper = mount(ChatComposer)
+    const chatStore = useChatStore()
+    const uiStore = useUiStore()
+    const toastSpy = vi.spyOn(uiStore, 'showToast')
+
+    chatStore.currentConversationId = 'conv-test-3'
+    chatStore.addToQueue('پیام حذفی', undefined, undefined, 'conv-test-3')
+
+    await wrapper.vm.$nextTick()
+
+    const deleteBtn = wrapper.find('[data-testid="queued-delete-btn"]')
+    expect(deleteBtn.exists()).toBe(true)
+    await deleteBtn.trigger('click')
+
+    expect(chatStore.currentQueuedMessages.length).toBe(0)
+    expect(toastSpy).toHaveBeenCalledWith('پیام از صف حذف شد', 'info')
+
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="queued-messages-container"]').exists()).toBe(false)
+  })
+
+  it('4. Automatically dequeues and sends next message when current stream finishes (finishStream)', async () => {
+    vi.useFakeTimers()
+    const chatStore = useChatStore()
+    chatStore.currentConversationId = 'conv-test-4'
+
+    // Stream currently running
+    chatStore.convStreamStates.set('conv-test-4', {
+      isStreaming: true,
+      isThinking: false,
+      streamError: null,
+      currentStreamingText: 'تولید پاسخ اول...',
+      abortController: new AbortController(),
+      watchdogTimer: null,
+      lastUserPrompt: 'پیام ۱',
+      charBuffer: [],
+      releaseTimer: null,
+      pendingSources: null,
+      isSearching: false,
+      searchFailed: false,
+      currentReasoning: '',
+      isActivelyThinking: false,
+      thinkingDurationMs: null,
+    })
+
+    // Add queued prompt
+    chatStore.addToQueue('پیام در صف که باید بعد از پایان ارسال شود', undefined, undefined, 'conv-test-4')
+    expect(chatStore.getQueuedMessages('conv-test-4').length).toBe(1)
+
+    // Stream completes
+    chatStore.finishStream('conv-test-4', 'msg-reply-1')
+
+    // Advance async timers for auto-dequeue
+    await vi.advanceTimersByTimeAsync(200)
+
+    // Queued message was shifted
+    expect(chatStore.getQueuedMessages('conv-test-4').length).toBe(0)
+
+    // Observable result: user message added to chatStore.messages
+    expect(chatStore.messages.some((m) => m.content === 'پیام در صف که باید بعد از پایان ارسال شود')).toBe(true)
+
+    // Observable result: chatService.sendMessageStream was called
+    expect(chatService.sendMessageStream).toHaveBeenCalledWith(
+      'conv-test-4',
+      'پیام در صف که باید بعد از پایان ارسال شود',
+      expect.any(Function),
+      expect.any(Function),
+      expect.any(Function),
+      expect.any(Object),
+      expect.any(Function),
+      expect.any(Function),
+      undefined,
+      expect.any(Function),
+      expect.any(Function),
+      expect.any(Function),
+      expect.any(Object),
+      expect.any(Function),
+      expect.any(Function)
+    )
+
+    vi.useRealTimers()
+  })
+
+  it('5. Stopping stream manually (stopStreaming) automatically triggers next queued message', async () => {
+    vi.useFakeTimers()
+    const chatStore = useChatStore()
+    chatStore.currentConversationId = 'conv-test-5'
+
+    chatStore.convStreamStates.set('conv-test-5', {
+      isStreaming: true,
+      isThinking: false,
+      streamError: null,
+      currentStreamingText: 'پاسخ طولانی...',
+      abortController: new AbortController(),
+      watchdogTimer: null,
+      lastUserPrompt: 'سؤال اولیه',
+      charBuffer: [],
+      releaseTimer: null,
+      pendingSources: null,
+      isSearching: false,
+      searchFailed: false,
+      currentReasoning: '',
+      isActivelyThinking: false,
+      thinkingDurationMs: null,
+    })
+
+    chatStore.addToQueue('سؤال بعدی پس از توقف پاسخ قبلی', undefined, undefined, 'conv-test-5')
+
+    // User stops stream
+    chatStore.stopStreaming()
+
+    await vi.advanceTimersByTimeAsync(200)
+
+    expect(chatStore.getQueuedMessages('conv-test-5').length).toBe(0)
+    expect(chatStore.messages.some((m) => m.content === 'سؤال بعدی پس از توقف پاسخ قبلی')).toBe(true)
+    expect(chatService.sendMessageStream).toHaveBeenCalledWith(
+      'conv-test-5',
+      'سؤال بعدی پس از توقف پاسخ قبلی',
+      expect.any(Function),
+      expect.any(Function),
+      expect.any(Function),
+      expect.any(Object),
+      expect.any(Function),
+      expect.any(Function),
+      undefined,
+      expect.any(Function),
+      expect.any(Function),
+      expect.any(Function),
+      expect.any(Object),
+      expect.any(Function),
+      expect.any(Function)
+    )
+
+    vi.useRealTimers()
+  })
+
+  it('6. Multiple queued messages follow FIFO (first in, first out) order', () => {
+    const chatStore = useChatStore()
+    const convId = 'conv-test-fifo'
+
+    chatStore.addToQueue('پیام الف', undefined, undefined, convId)
+    chatStore.addToQueue('پیام ب', undefined, undefined, convId)
+    chatStore.addToQueue('پیام ج', undefined, undefined, convId)
+
+    const list = chatStore.getQueuedMessages(convId)
+    expect(list.length).toBe(3)
+    expect(list[0].content).toBe('پیام الف')
+    expect(list[1].content).toBe('پیام ب')
+    expect(list[2].content).toBe('پیام ج')
+  })
+
+  it('7. Conversation isolation: Queued messages in Conv A do not appear in Conv B', () => {
+    const chatStore = useChatStore()
+
+    chatStore.addToQueue('پیام در گفتگوی یک', undefined, undefined, 'conv-A')
+    chatStore.addToQueue('پیام در گفتگوی دو', undefined, undefined, 'conv-B')
+
+    chatStore.currentConversationId = 'conv-A'
+    expect(chatStore.currentQueuedMessages.length).toBe(1)
+    expect(chatStore.currentQueuedMessages[0].content).toBe('پیام در گفتگوی یک')
+
+    chatStore.currentConversationId = 'conv-B'
+    expect(chatStore.currentQueuedMessages.length).toBe(1)
+    expect(chatStore.currentQueuedMessages[0].content).toBe('پیام در گفتگوی دو')
+  })
+
+  it('8. Persistence across page refresh: queued messages survive in localStorage and re-hydrate', () => {
+    const chatStore = useChatStore()
+    chatStore.addToQueue('پیام مهم قبل از رفرش', undefined, undefined, 'conv-persist-1')
+
+    // Verify localStorage has the queued item
+    const raw = localStorage.getItem('chat_queued_messages')
+    expect(raw).toBeTruthy()
+    expect(raw).toContain('پیام مهم قبل از رفرش')
+
+    // Simulate page refresh by resetting Pinia and re-instantiating the store
+    setActivePinia(createPinia())
+    const freshStore = useChatStore()
+    freshStore.currentConversationId = 'conv-persist-1'
+
+    expect(freshStore.currentQueuedMessages.length).toBe(1)
+    expect(freshStore.currentQueuedMessages[0].content).toBe('پیام مهم قبل از رفرش')
+  })
+
+  it('9. Error state preservation: queued message is NOT discarded when stream errors out', async () => {
+    vi.useFakeTimers()
+    const chatStore = useChatStore()
+    chatStore.currentConversationId = 'conv-err-test'
+
+    // Stream running
+    chatStore.convStreamStates.set('conv-err-test', {
+      isStreaming: true,
+      isThinking: false,
+      streamError: null,
+      currentStreamingText: 'پاسخ ناقص...',
+      abortController: new AbortController(),
+      watchdogTimer: null,
+      lastUserPrompt: 'درخواست اول',
+      charBuffer: [],
+      releaseTimer: null,
+      pendingSources: null,
+      isSearching: false,
+      searchFailed: false,
+      currentReasoning: '',
+      isActivelyThinking: false,
+      thinkingDurationMs: null,
+    })
+
+    chatStore.addToQueue('پیامی که در زمان خطا نباید حذف شود', undefined, undefined, 'conv-err-test')
+
+    // Stream fails with error
+    const s = chatStore.convStreamStates.get('conv-err-test')!
+    s.isStreaming = false
+    s.streamError = 'زمان انتظار به پایان رسید'
+    chatStore.convStreamStates.set('conv-err-test', { ...s })
+
+    // Finish stream with error
+    chatStore.finishStream('conv-err-test', 'msg-err-1', true)
+
+    await vi.advanceTimersByTimeAsync(200)
+
+    // Message MUST still be in the queue, not dropped or lost!
+    expect(chatStore.getQueuedMessages('conv-err-test').length).toBe(1)
+    expect(chatStore.getQueuedMessages('conv-err-test')[0].content).toBe('پیامی که در زمان خطا نباید حذف شود')
+
+    vi.useRealTimers()
+  })
+})
+
 
 
 ================================================
@@ -11629,7 +12146,7 @@ describe('Role quota modal â€” commercial model access', () => {
 ================================================
 FILE: tests/NetworkAndRetry.spec.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 5316: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 6017: character maps to <undefined>
 
 
 ================================================
@@ -11668,6 +12185,90 @@ Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in posi
 FILE: tests/PersianDatePicker.spec.ts
 ================================================
 Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 3863: character maps to <undefined>
+
+
+================================================
+FILE: tests/PlanEditorModal.default-model.spec.ts
+================================================
+import { describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import PlanEditorModal from '../src/components/admin/modals/PlanEditorModal.vue'
+import { modelsService } from '../src/services/models.service'
+import { subscriptionService } from '../src/services/subscription.service'
+
+vi.mock('../src/services/models.service', () => ({
+  modelsService: {
+    listModels: vi.fn(),
+  },
+}))
+
+vi.mock('../src/services/subscription.service', () => ({
+  subscriptionService: {
+    getPlan: vi.fn(),
+  },
+}))
+
+describe('PlanEditorModal default model refresh', () => {
+  it('loads fresh plan models when the editor opens', async () => {
+    vi.mocked(modelsService.listModels).mockResolvedValue([
+      { id: 'model-default', name: 'مدل پیش‌فرض', provider: 'openai', isActive: true, isDefault: true } as any,
+    ])
+    vi.mocked(subscriptionService.getPlan).mockResolvedValue({
+      id: 'free-plan',
+      slug: 'free',
+      name: 'طرح رایگان',
+      price: '0',
+      currency: 'IRR',
+      durationDays: 0,
+      tokenQuota: 0,
+      messageQuota: null,
+      resetHours: 6,
+      features: {},
+      isActive: true,
+      isDefault: true,
+      sortOrder: 0,
+      planModels: [{ id: 'link-1', modelId: 'model-default' }],
+      createdAt: '',
+      updatedAt: '',
+    } as any)
+
+    const wrapper = mount(PlanEditorModal, {
+      props: {
+        open: true,
+        plan: {
+          id: 'free-plan',
+          slug: 'free',
+          name: 'طرح رایگان',
+          price: '0',
+          currency: 'IRR',
+          durationDays: 0,
+          tokenQuota: 0,
+          messageQuota: null,
+          resetHours: 6,
+          features: {},
+          isActive: true,
+          isDefault: true,
+          sortOrder: 0,
+          planModels: [],
+          createdAt: '',
+          updatedAt: '',
+        } as any,
+      },
+      global: {
+        stubs: {
+          AdminModal: { template: '<div><slot /><slot name="footer" /></div>' },
+          BaseButton: { template: '<button><slot /></button>' },
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(subscriptionService.getPlan).toHaveBeenCalledWith('free-plan')
+    const modelCheckbox = wrapper.findAll('input[type="checkbox"]')[1]
+    expect((modelCheckbox.element as HTMLInputElement).checked).toBe(true)
+  })
+})
+
 
 
 ================================================
@@ -12085,13 +12686,15 @@ describe('SettingsModal', () => {
     const themeCards = wrapper.findAll('.theme-card')
     expect(themeCards.length).toBe(2)
 
-    // Second card is Light theme
+    // Second card is Light theme â€” clicking now persists a per-user preference
     await themeCards[1].trigger('click')
-    expect(uiStore.theme).toBe('light')
+    expect(uiStore.userThemePreference).toBe('light')
+    expect(uiStore.effectiveTheme).toBe('light')
 
     // First card is Dark theme
     await themeCards[0].trigger('click')
-    expect(uiStore.theme).toBe('dark')
+    expect(uiStore.userThemePreference).toBe('dark')
+    expect(uiStore.effectiveTheme).toBe('dark')
   })
 
   it('does not display any English language or LTR switch option and operates strictly in Persian RTL', async () => {
@@ -12326,13 +12929,186 @@ describe('adjustStat', () => {
 ================================================
 FILE: tests/Stores.spec.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 4043: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 3916: character maps to <undefined>
 
 
 ================================================
 FILE: tests/SubscriptionFlow.spec.ts
 ================================================
 Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1678: character maps to <undefined>
+
+
+================================================
+FILE: tests/ThemePerUser.spec.ts
+================================================
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { nextTick } from 'vue'
+import { createPinia, setActivePinia } from 'pinia'
+import { useUiStore } from '../src/stores/ui'
+import { useAuthStore } from '../src/stores/auth'
+import { authService } from '../src/services/auth.service'
+import { profileService } from '../src/services/profile.service'
+
+/**
+ * Theme behavior contract:
+ * 1. The default theme for every user is LIGHT.
+ * 2. Each signed-in user gets their own backend-persisted theme, independent
+ *    of other users, and it survives a page refresh.
+ * 3. The login page always renders in the light theme (view-local override,
+ *    never persisted).
+ */
+
+const userA = { id: 'ua', email: 'a@parva.co', displayName: 'Ú©Ø§Ø±Ø¨Ø± ØªÛŒØ±Ù‡', role: 'user' }
+const userB = { id: 'ub', email: 'b@parva.co', displayName: 'Ú©Ø§Ø±Ø¨Ø± Ø±ÙˆØ´Ù†', role: 'user' }
+
+const profileBase = {
+  username: null,
+  avatarUrl: null,
+  createdAt: new Date().toISOString(),
+}
+
+function loginResponse(user: typeof userA) {
+  return { user, accessToken: `tok-${user.id}`, refreshToken: `ref-${user.id}` }
+}
+
+function profileFor(user: typeof userA) {
+  return { ...user, ...profileBase, isActive: true }
+}
+
+beforeEach(() => {
+  localStorage.clear()
+  setActivePinia(createPinia())
+  vi.restoreAllMocks()
+})
+
+describe('theme: defaults, per-user independence, login page', () => {
+  it('parses the theme endpoint response whether it is a bare string or the { preference } envelope', async () => {
+    // Regression: the backend once served the raw value ("dark") while the
+    // client read `.preference`, so every refresh silently reset dark â†’ light.
+    const jsonOk = (body: unknown) =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    const fetchMock = vi
+      .fn()
+      // legacy bare-string shape
+      .mockResolvedValueOnce(jsonOk('dark'))
+      // documented envelope shape
+      .mockResolvedValueOnce(jsonOk({ preference: 'light' }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      expect(await profileService.getThemePreference()).toBe('dark')
+      expect(await profileService.getThemePreference()).toBe('light')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('defaults to the light theme for a brand-new user', () => {
+    const ui = useUiStore()
+    expect(ui.effectiveTheme).toBe('light')
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+  })
+
+  it('login page always renders light and never overwrites the stored theme', async () => {
+    localStorage.setItem('theme', 'dark')
+    const ui = useUiStore()
+    expect(ui.effectiveTheme).toBe('dark')
+
+    ui.setAuthPageLightMode(true)
+    await nextTick()
+    expect(ui.effectiveTheme).toBe('light')
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+    // View-local override: the stored theme must stay untouched.
+    expect(localStorage.getItem('theme')).toBe('dark')
+
+    // Leaving the login page restores the session's own theme.
+    ui.setAuthPageLightMode(false)
+    await nextTick()
+    expect(ui.effectiveTheme).toBe('dark')
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+  })
+
+  it('keeps each user independent: dark preference follows user A, user B falls back to light', async () => {
+    vi.spyOn(authService, 'login').mockResolvedValue(loginResponse(userA) as any)
+    vi.spyOn(profileService, 'getProfile').mockResolvedValue(profileFor(userA) as any)
+    vi.spyOn(profileService, 'getThemePreference').mockResolvedValue('dark')
+    vi.spyOn(authService, 'logout').mockResolvedValue({} as any)
+
+    const auth = useAuthStore()
+    const ui = useUiStore()
+
+    // User A signs in â†’ their persisted dark preference applies.
+    await expect(auth.login(userA.email, 'Passw0rd!123')).resolves.toBe(true)
+    expect(ui.userThemePreference).toBe('dark')
+    expect(ui.effectiveTheme).toBe('dark')
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+
+    // Logout wipes the per-user session back to the light default.
+    await auth.logout()
+    expect(ui.userThemePreference).toBeNull()
+    expect(ui.effectiveTheme).toBe('light')
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+
+    // User B (no preference set) gets the light default â€” never user A's dark.
+    vi.spyOn(authService, 'login').mockResolvedValue(loginResponse(userB) as any)
+    vi.spyOn(profileService, 'getProfile').mockResolvedValue(profileFor(userB) as any)
+    vi.spyOn(profileService, 'getThemePreference').mockResolvedValue(null)
+    await expect(auth.login(userB.email, 'Passw0rd!123')).resolves.toBe(true)
+    expect(ui.userThemePreference).toBeNull()
+    expect(ui.effectiveTheme).toBe('light')
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+  })
+
+  it('survives a page refresh: the synced preference re-applies without flipping', async () => {
+    // Simulate a previous session of user A (dark preference) in localStorage.
+    localStorage.setItem('theme', 'dark')
+    localStorage.setItem('token', 'tok-ua')
+    localStorage.setItem('refreshToken', 'ref-ua')
+    localStorage.setItem('user', JSON.stringify(userA))
+
+    vi.spyOn(profileService, 'getProfile').mockResolvedValue(profileFor(userA) as any)
+    vi.spyOn(profileService, 'getThemePreference').mockResolvedValue('dark')
+
+    // "Refresh": brand-new pinia/store instances over the same storage.
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    const ui = useUiStore()
+
+    expect(ui.effectiveTheme).toBe('dark')
+    await vi.waitFor(() => {
+      expect(ui.themeSynced).toBe(true)
+    })
+    expect(ui.userThemePreference).toBe('dark')
+    expect(ui.effectiveTheme).toBe('dark')
+    expect(auth.isAuthenticated).toBe(true)
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+  })
+
+  it('a signed-in user without a preference falls back to light even if storage says dark', async () => {
+    localStorage.setItem('theme', 'dark')
+    localStorage.setItem('token', 'tok-ub')
+    localStorage.setItem('refreshToken', 'ref-ub')
+    localStorage.setItem('user', JSON.stringify(userB))
+
+    vi.spyOn(profileService, 'getProfile').mockResolvedValue(profileFor(userB) as any)
+    vi.spyOn(profileService, 'getThemePreference').mockResolvedValue(null)
+
+    setActivePinia(createPinia())
+    useAuthStore()
+    const ui = useUiStore()
+
+    await vi.waitFor(() => {
+      expect(ui.themeSynced).toBe(true)
+    })
+    expect(ui.effectiveTheme).toBe('light')
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+  })
+})
+
 
 
 ================================================
@@ -12572,6 +13348,12 @@ describe('useFormSubmit Composable', () => {
 
 
 ================================================
+FILE: tests/UserEditorModal.free-plan.spec.ts
+================================================
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1238: character maps to <undefined>
+
+
+================================================
 FILE: tests/UserEditorModal.spec.ts
 ================================================
 import { describe, it, expect } from 'vitest'
@@ -12753,105 +13535,7 @@ FILE: tests/voice-stt-tts.spec.ts
 ================================================
 FILE: tests/services/api.spec.ts
 ================================================
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { request, ApiError, buildUrl, getApiBaseUrl, checkBackendHealth } from '../../src/services/api'
-
-describe('Base API Client (api.ts)', () => {
-  beforeEach(() => {
-    localStorage.clear()
-    vi.restoreAllMocks()
-  })
-
-  it('buildUrl handles relative endpoints and respects base URL', () => {
-    const url = buildUrl('/auth/login')
-    expect(url).toBe(`${getApiBaseUrl()}/auth/login`)
-
-    const absolute = buildUrl('https://custom.api/v1/auth/login')
-    expect(absolute).toBe('https://custom.api/v1/auth/login')
-  })
-
-  it('injects Authorization Bearer token when token is present in localStorage', async () => {
-    localStorage.setItem('token', 'sample-jwt-token')
-
-    let capturedHeaders!: Headers
-    global.fetch = vi.fn().mockImplementation((_url, options) => {
-      capturedHeaders = new Headers(options.headers)
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true })
-      } as any)
-    })
-
-    const result = await request<{ success: boolean }>('/test-endpoint')
-
-    expect(result.success).toBe(true)
-    expect(capturedHeaders.get('Authorization')).toBe('Bearer sample-jwt-token')
-    expect(capturedHeaders.get('Content-Type')).toBe('application/json')
-  })
-
-  it('unwraps data payload from standard { success, message, data } API response envelope', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        success: true,
-        message: 'Operation successful',
-        data: { id: 'item-1', name: 'Item One' }
-      })
-    } as any)
-
-    const result = await request<{ id: string; name: string }>('/items/item-1')
-    expect(result).toEqual({ id: 'item-1', name: 'Item One' })
-  })
-
-  it('handles 204 No Content responses correctly without JSON parsing error', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 204
-    } as any)
-
-    const result = await request<void>('/auth/logout', { method: 'POST' })
-    expect(result).toEqual({})
-  })
-
-  it('throws ApiError with status and message when response is not ok', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 409,
-      json: async () => ({
-        statusCode: 409,
-        message: 'Email is already registered',
-        error: 'Conflict'
-      })
-    } as any)
-
-    await expect(request('/auth/signup', { method: 'POST' })).rejects.toThrow('Email is already registered')
-  })
-
-  it('checkBackendHealth returns true when backend /health returns 200 ok', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200
-    } as any)
-
-    const isHealthy = await checkBackendHealth(1000)
-    expect(isHealthy).toBe(true)
-    expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/health'),
-      expect.objectContaining({ method: 'GET' })
-    )
-  })
-
-  it('checkBackendHealth returns false when network fails or times out', async () => {
-    global.fetch = vi.fn().mockRejectedValue(new Error('Connection refused'))
-
-    const isHealthy = await checkBackendHealth(1000)
-    expect(isHealthy).toBe(false)
-  })
-})
-
-
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 3307: character maps to <undefined>
 
 
 ================================================
@@ -12922,6 +13606,22 @@ describe('Auth Service (auth.service.ts)', () => {
       method: 'POST',
       body: JSON.stringify({ refreshToken: 'ref-123' })
     })
+  })
+
+  it('calls POST /auth/refresh with refreshToken', async () => {
+    const requestSpy = vi.spyOn(apiModule, 'request').mockResolvedValue({
+      accessToken: 'new-access-token',
+      refreshToken: 'new-refresh-token'
+    } as any)
+
+    const res = await authService.refreshToken('old-refresh-token')
+
+    expect(requestSpy).toHaveBeenCalledWith('/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken: 'old-refresh-token' })
+    })
+    expect(res.accessToken).toBe('new-access-token')
+    expect(res.refreshToken).toBe('new-refresh-token')
   })
 })
 

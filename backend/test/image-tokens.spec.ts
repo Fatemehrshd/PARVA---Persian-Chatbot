@@ -45,11 +45,22 @@ describe('calculateAttachmentTokens (Multimodal Image Token Calculation)', () =>
     expect(calculateAttachmentTokens(mediumImage)).toBe(215);
   });
 
-  it('ignores non-image attachments in vision tile calculation', () => {
+  it('ignores unsupported non-document attachments', () => {
+    const unsupported = [
+      { fileType: 'audio', fileSize: 500 * 1024 },
+      { fileType: 'archive', fileSize: 300 * 1024 },
+    ];
+    expect(calculateAttachmentTokens(unsupported)).toBe(0);
+  });
+
+  it('calculates document tokens for pdf and excel', () => {
     const pdfAndExcel = [
       { fileType: 'pdf', fileSize: 500 * 1024 },
       { fileType: 'excel', fileSize: 300 * 1024 },
     ];
-    expect(calculateAttachmentTokens(pdfAndExcel)).toBe(0);
+    // (500 * 1024 / 500) * 100 = 102400
+    // (300 * 1024 / 500) * 100 = 61440
+    // Total = 163840
+    expect(calculateAttachmentTokens(pdfAndExcel)).toBe(163840);
   });
 });

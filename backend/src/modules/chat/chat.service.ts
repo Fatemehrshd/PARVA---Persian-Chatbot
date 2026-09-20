@@ -265,9 +265,9 @@ export class ChatService {
             }
           }
           if (!m.reasoning_content && m.content && m.role === 'assistant') {
-            const thinkMatch = m.content.match(/^<think>([\s\S]*?)<\/think>\s*/);
+            const thinkMatch = m.content.match(/^<(think|thought)>([\s\S]*?)<\/\1>\s*/);
             if (thinkMatch) {
-              m.reasoning_content = thinkMatch[1].trim();
+              m.reasoning_content = thinkMatch[2].trim();
               m.content = m.content.slice(thinkMatch[0].length);
             }
           }
@@ -832,12 +832,25 @@ export class ChatService {
       : SYSTEM_PROMPT;
 
     const historyWithoutLast = history.length > 0 ? history.slice(0, -1) : [];
+    const isNativeReasoningModel =
+      target?.apiIdentifier &&
+      (target.apiIdentifier.startsWith('o1') ||
+        target.apiIdentifier.startsWith('o3') ||
+        target.apiIdentifier.startsWith('o4') ||
+        target.apiIdentifier.toLowerCase().includes('deepseek-r1') ||
+        target.apiIdentifier.toLowerCase().includes('deepseek-reasoner'));
+
+    const thinkingInstruction =
+      wantThinking && !isNativeReasoningModel
+        ? '\n\n[دستورالعمل تفکر: قبل از ارائه پاسخ نهایی، ابتدا فرایند تحلیل، تفکر و استدلال گام‌به‌گام خود را به صورت کامل درون تگ‌های <think>...</think> بنویس و سپس پاسخ نهایی را خارج از آن ارائه کن.]'
+        : '';
+
     const systemContent =
-      webSources && webSources.length > 0
+      (webSources && webSources.length > 0
         ? `${activeSystemPrompt}\n\n[منابع وب (در پاسخ با [n] به شماره منبع ارجاع بده)]:\n${webSources
             .map((s, i) => `[${i + 1}] ${s.title} — ${s.url}\n${s.snippet ?? ''}`)
             .join('\n')}`
-        : activeSystemPrompt;
+        : activeSystemPrompt) + thinkingInstruction;
     const messages: ChatMessage[] = [
       { role: 'system', content: systemContent },
       ...historyWithoutLast.map((m) => ({ role: m.role, content: m.content })),

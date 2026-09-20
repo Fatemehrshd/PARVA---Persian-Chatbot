@@ -121,60 +121,6 @@ const currentSectionTitle = computed(() => {
   return item ? item.label : 'پنل مدیریت'
 })
 
-// فیلدهای تحت جستجو بر اساس بخش فعال
-const currentSearchScope = computed(() => {
-  switch (activeSection.value) {
-    case 'users':
-      return {
-        placeholder: 'جستجو در کاربران بر اساس: نام کاربر، نشانی ایمیل، نقش...',
-        fields: ['نام کاربر', 'ایمیل', 'نقش'],
-      }
-    case 'models':
-      return {
-        placeholder: 'جستجو در مدل‌ها بر اساس: نام مدل، شناسه API، ارائه‌دهنده...',
-        fields: ['نام مدل', 'شناسه API', 'ارائه‌دهنده'],
-      }
-    case 'providers':
-      return {
-        placeholder: 'جستجو در ارائه‌دهنده‌ها بر اساس: نام سرویس‌دهنده، آدرس Base URL...',
-        fields: ['نام ارائه‌دهنده', 'آدرس Base URL'],
-      }
-    case 'chats':
-      return {
-        placeholder: 'جستجو در چت‌ها بر اساس: عنوان گفتگو، نام کاربر، ایمیل...',
-        fields: ['عنوان گفتگو', 'نام کاربر', 'ایمیل'],
-      }
-    case 'files':
-      return {
-        placeholder: 'جستجو در فایل‌ها بر اساس: نام فایل، نوع، کاربر...',
-        fields: ['نام فایل', 'نوع فایل', 'کاربر'],
-      }
-    case 'audit-logs':
-      return {
-        placeholder: 'جستجو در لاگ‌ها بر اساس: شناسه تریس، مسیر، عملیات، خطا...',
-        fields: ['شناسه تریس', 'مسیر/آدرس', 'عملیات', 'خطا'],
-      }
-    default:
-      return {
-        placeholder: 'جستجو در این بخش...',
-        fields: [],
-      }
-  }
-})
-
-watch(searchQuery, (newVal) => {
-  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
-  if (!newVal.trim()) {
-    debouncedSearchQuery.value = ''
-    isSearchDebouncing.value = false
-    return
-  }
-  isSearchDebouncing.value = true
-  searchDebounceTimer = setTimeout(() => {
-    debouncedSearchQuery.value = newVal
-    isSearchDebouncing.value = false
-  }, 3000)
-})
 function selectSection(section: string) {
   activeSection.value = section as AdminSection
   sidebarOpen.value = false

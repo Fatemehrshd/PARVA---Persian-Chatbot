@@ -836,10 +836,15 @@ export const useChatStore = defineStore('chat', () => {
     fileIds?: string[],
     opts?: { useWebSearch?: boolean; useThinking?: boolean }
   ) {
+    // Explicit opts win (composer passes the toggled value); every other path
+    // (queue, files, resume/retry) inherits the stored per-conversation flag.
+    const useWebSearch = opts?.useWebSearch ?? getConvFlag(convId).web
+    const useThinking = opts?.useThinking ?? getConvFlag(convId).thinking
+
     // Prepare streaming state
     {
       const s = ensureState(convId)
-      s.isThinking = true
+      s.isThinking = Boolean(useThinking)
       s.isStreaming = true
       s.currentStreamingText = ''
       s.currentReasoning = ''
@@ -873,11 +878,6 @@ export const useChatStore = defineStore('chat', () => {
       }
     }
     saveDismissedErrors()
-
-    // Explicit opts win (composer passes the toggled value); every other path
-    // (queue, files, resume/retry) inherits the stored per-conversation flag.
-    const useWebSearch = opts?.useWebSearch ?? getConvFlag(convId).web
-    const useThinking = opts?.useThinking ?? getConvFlag(convId).thinking
 
     await chatService.sendMessageStream(
       convId,
@@ -1211,10 +1211,17 @@ export const useChatStore = defineStore('chat', () => {
             messageQueue.value.set(created.id, oldMsgQueue)
             persistQueue()
           }
-          // Move pre-send feature flags ('__new__' → real id)
-          if (convFlags.value['__new__']) {
-            convFlags.value[created.id] = { ...getConvFlag(created.id), ...convFlags.value['__new__'] }
+          // Move pre-send feature flags ('__new__' or placeholder convId → real id)
+          const pendingFlags = {
+            ...(convFlags.value[convId] || {}),
+            ...(convFlags.value['__new__'] || {}),
+          }
+          if (Object.keys(pendingFlags).length > 0) {
+            convFlags.value[created.id] = { ...getConvFlag(created.id), ...pendingFlags }
             delete convFlags.value['__new__']
+            if (convId !== created.id) {
+              delete convFlags.value[convId]
+            }
             persistConvFlags()
           }
           convId = created.id

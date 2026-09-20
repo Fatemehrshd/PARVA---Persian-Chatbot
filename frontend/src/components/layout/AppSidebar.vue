@@ -292,10 +292,10 @@ onMounted(() => {
           <span class="sb-action-label">گفتگوی جدید</span>
         </button>
 
-        <button class="sb-action-row" title="گفتگوی موقت">
+        <!-- <button class="sb-action-row" title="گفتگوی موقت">
           <MessageCircleDashed :size="16" class="sb-action-icon" />
           <span class="sb-action-label">موقت</span>
-        </button>
+        </button> -->
       </nav>
 
       <!-- Divider -->

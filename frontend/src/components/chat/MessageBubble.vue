@@ -51,17 +51,17 @@ const formattedTime = computed(() => {
 
 const effectiveReasoning = computed(() => {
   if (props.message.reasoning_content) return props.message.reasoning_content
-  if (props.message.content?.startsWith('<think>')) {
-    const match = props.message.content.match(/^<think>([\s\S]*?)<\/think>/)
-    if (match) return match[1].trim()
+  if (props.message.content) {
+    const match = props.message.content.match(/^<(think|thought)>([\s\S]*?)<\/\1>/)
+    if (match) return match[2].trim()
   }
   return ''
 })
 
 const displayContent = computed(() => {
   let text = stripTrailingSourcesLine(props.message.content, props.message.sources ?? null)
-  if (text.startsWith('<think>')) {
-    text = text.replace(/^<think>[\s\S]*?<\/think>\s*/, '')
+  if (text) {
+    text = text.replace(/^<(think|thought)>[\s\S]*?<\/\1>\s*/, '')
   }
   return text
 })

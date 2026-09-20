@@ -116,7 +116,16 @@ export class HttpLoggingInterceptor implements NestInterceptor {
           const isStateChanging = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase());
           const isAuditWorthy = isStateChanging || statusCode >= 400;
 
-          if (this.auditService && isAuditWorthy) {
+          // Exclude regular chat messages (user or admin sending messages to chat) from audit log
+          const isChatMessaging =
+            path.includes('/messages') ||
+            path.includes('/chat/conversations') ||
+            path.includes('/chat/completions') ||
+            path.startsWith('/chat') ||
+            path.startsWith('/api/chat') ||
+            path.startsWith('/api/v1/chat');
+
+          if (this.auditService && isAuditWorthy && !isChatMessaging) {
             this.auditService
               .log({
                 traceId: span.traceId || traceContextService.getTraceId(),
@@ -169,8 +178,16 @@ export class HttpLoggingInterceptor implements NestInterceptor {
             span.spanId,
           );
 
-          // 2. Persist error audit log in PostgreSQL
-          if (this.auditService) {
+          // 2. Persist error audit log in PostgreSQL (excluding regular chat messaging)
+          const isChatMessaging =
+            path.includes('/messages') ||
+            path.includes('/chat/conversations') ||
+            path.includes('/chat/completions') ||
+            path.startsWith('/chat') ||
+            path.startsWith('/api/chat') ||
+            path.startsWith('/api/v1/chat');
+
+          if (this.auditService && !isChatMessaging) {
             this.auditService
               .log({
                 traceId: span.traceId || traceContextService.getTraceId(),

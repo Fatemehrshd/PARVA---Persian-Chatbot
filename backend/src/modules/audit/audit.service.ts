@@ -174,6 +174,16 @@ export class AuditService implements OnModuleInit {
 
     const qb = this.auditRepo.createQueryBuilder('log');
 
+    // Exclude regular chat messages (user or admin sending messages to chat) from audit logs
+    qb.andWhere(
+      '(log.path IS NULL OR (log.path NOT ILIKE :chatPath1 AND log.path NOT ILIKE :chatPath2))',
+      { chatPath1: '%/chat%', chatPath2: '%/messages%' },
+    );
+    qb.andWhere(
+      '(log.action IS NULL OR (log.action NOT ILIKE :chatAction1 AND log.action NOT ILIKE :chatAction2))',
+      { chatAction1: '%/chat%', chatAction2: '%/messages%' },
+    );
+
     // 1. Multi-ID and Text search across action, path, traceId, log.id, actorId, actorEmail, entityId, errorMessage
     if (options.search && options.search.trim().length > 0) {
       const search = `%${options.search.trim()}%`;
@@ -276,6 +286,14 @@ export class AuditService implements OnModuleInit {
 
     try {
       const statsQb = this.auditRepo.createQueryBuilder('log');
+      statsQb.andWhere(
+        '(log.path IS NULL OR (log.path NOT ILIKE :chatPath1 AND log.path NOT ILIKE :chatPath2))',
+        { chatPath1: '%/chat%', chatPath2: '%/messages%' },
+      );
+      statsQb.andWhere(
+        '(log.action IS NULL OR (log.action NOT ILIKE :chatAction1 AND log.action NOT ILIKE :chatAction2))',
+        { chatAction1: '%/chat%', chatAction2: '%/messages%' },
+      );
       const statResults = await statsQb
         .select('COUNT(*)', 'total')
         .addSelect(

@@ -423,6 +423,7 @@ describe('MessageList streaming scroll behavior', () => {
   it('shows the waiting text in Persian while the model is still thinking', async () => {
     const chatStore = useChatStore()
     chatStore.currentConversationId = TEST_CONV_ID
+    chatStore.setConvFlag(TEST_CONV_ID, { thinking: true })
     chatStore.convStreamStates.set(TEST_CONV_ID, {
       ...makeStreamState(),
       isStreaming: true,
@@ -444,5 +445,32 @@ describe('MessageList streaming scroll behavior', () => {
     })
 
     expect(wrapper.text()).toContain('درحال تفکر')
+  })
+
+  it('does NOT show the thinking text when thinking is disabled', async () => {
+    const chatStore = useChatStore()
+    chatStore.currentConversationId = TEST_CONV_ID
+    chatStore.setConvFlag(TEST_CONV_ID, { thinking: false })
+    chatStore.convStreamStates.set(TEST_CONV_ID, {
+      ...makeStreamState(),
+      isStreaming: true,
+      isThinking: false,
+      currentStreamingText: '',
+      currentReasoning: '',
+      isActivelyThinking: false,
+    } as any)
+
+    const wrapper = mount(MessageList, {
+      global: {
+        stubs: {
+          EmptyState: true,
+          MessageBubble: true,
+          MarkdownContent: true,
+          ThinkingBlock: true,
+        }
+      }
+    })
+
+    expect(wrapper.text()).not.toContain('درحال تفکر')
   })
 })

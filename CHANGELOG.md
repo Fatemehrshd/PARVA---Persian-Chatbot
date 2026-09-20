@@ -9,7 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+### Fixed
+- **Inline Persian validation for a missing `@` in the email field (نمایش inline خطای نبودِ @ در ایمیل)**: the browser's native English bubble ("Please include an '@' in the email address…") no longer appears — the login/signup form and the profile email-change form use `novalidate`, and a shared client-side validator (`frontend/src/utils/validators.ts`, mirroring the backend `@IsEmail` rule) shows the same inline Persian message for a missing `@`, a missing domain dot, or any other invalid email **before** any request is sent. Covered by new tests in `frontend/tests/LoginView.spec.ts`.
+- **Global Persian error handling (هندل سراسری و فارسی خطاها)**: a centralized localization layer (`frontend/src/utils/errorMessages.ts`) now runs in `services/api.ts` — the single funnel for every HTTP error:
+  - Known English backend messages (`Resource not found`, `Admin only`, `Email is already registered`, model/provider errors, MinIO storage errors, …) are translated to Persian.
+  - **No raw server/framework error can leak to the user anymore**: any unrecognized non-Persian message (DB errors, stack fragments, future endpoints) is replaced with a generic Persian fallback before any caller renders `err.message`.
+  - Network-level failures (`Failed to fetch`, offline, DNS, server down) now surface as a Persian offline message (`statusCode 0`) instead of the raw browser text.
+  - Array (class-validator) messages are translated per-element and preserved on `ApiError.rawMessage` so `useFormSubmit` field-level error mapping keeps working.
+  - English frontend fallbacks (`Failed to fetch models`, `An error occurred during submission`) localized.
+- **Dark theme no longer reset to light on page refresh (رفع بازگشت تم تیره به روشن بعد از رفرش)**: `GET /users/me/theme` returned the raw value (e.g. `"dark"`) while the client read `.preference` from it, so every refresh silently resolved the preference to `null` (→ light default). The backend now returns the documented `{ preference }` envelope, and the frontend parser tolerates both the envelope and the legacy bare-string shape. Covered by new tests in `backend/test/profile.spec.ts` and `frontend/tests/ThemePerUser.spec.ts`.
+- Theme behavior hardened (رفع مشکلات تم):
+  - The login page (`/login`) now **always renders in the light theme** via a view-local `authPageLightMode` override in the `ui` store — never persisted to `localStorage` or the backend, and a signed-in user's theme is restored as soon as they leave the page.
+  - Per-user theme is now guaranteed to be **independent per user and stable across page refreshes**: the backend preference (`GET /users/me/theme`) re-syncs on every refresh, and login/logout reset the session theme to the global default (light) so one user's preference never leaks to another.
+  - The default theme for any user without an explicit preference is **light**, even when stale `localStorage` state says otherwise. Covered by new behavioral tests in `frontend/tests/ThemePerUser.spec.ts`.
+- Admin table search and filtering now support selected fields, nested values, column-filter controls, and server-side field mapping across users, models, providers, chats, files, subscriptions, payments, and coupons.
+- Payment admin search now accepts nested fields such as `user.email`, `plan.name`, `refId`, and `authority`, and sends the correct `searchField` parameter to the backend.
+- Coupon admin search remains aligned with the server-side `search` and `isActive` filters, preserving the status filter while searching by code or description.
+- User-facing model visibility now follows explicit `plan_models` assignments. Free users no longer see or use public models outside the free plan, while admins retain full access.
+- Selecting a platform default model automatically links it to the free plan, including a migration backfill for the existing default model.
+
+#### Added
+- **Per-User Theme Preference (تم اختصاصی به ازای هر کاربر)**:
+  - Backend: `themePreference` column on `users`, `GET /users/me/theme` and `PATCH /users/me/theme` endpoints, migration `1762400000000-AddUserThemePreference.ts`.
+  - Frontend: `ui` store gains `userThemePreference` and computed `effectiveTheme`; theme selection in `SettingsModal.vue` and `ProfileMenu.vue` now persists per-user on the backend and takes priority over the local `localStorage` setting. Default theme for all users is Light.
+  - Tests: `SettingsModal.spec.ts` updated to assert per-user preference persistence.
 - **Database Transactions & ACID Guarantees (پیاده‌سازی تراکنش‌های دیتابیس و تضمین‌های اتمیک)**:
   - Wrapped plan supersede and active subscription creation in atomic `dataSource.transaction` in [subscriptions.service.ts](file:///d:/codeless_final/backend/src/modules/subscriptions/subscriptions.service.ts), eliminating partial failure states and concurrent subscription conflicts.
   - Wrapped refresh token rotation (revoking previous token and persisting new hashed token) in atomic `dataSource.transaction` in [auth.service.ts](file:///d:/codeless_final/backend/src/modules/auth/auth.service.ts), preventing token replay vulnerabilities and token loss during network latency.
@@ -155,7 +178,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - Fixed NestJS interceptor user extraction bug by dynamically resolving `req.user` in the stream `tap()` phase (after route authentication guards execute) with fallback to `req.body.email` for unauthenticated endpoints.
       - Rich table column: user initials avatar, display name, email, role badge (`مدیر`, `کاربر`, `سیستم`), and 1-click user log filter button.
       - Detail Modal Actor Card: comprehensive identity profile containing Name, Email with copy button, User UUID with copy button, Role, Client IP, and User-Agent.
-- **Admin Panel Sidebar & Logs Dashboard (`frontend/src/views/admin/AdminAuditLogsSection.vue` & `AdminPanelView.vue`)**:
+  - **Admin Panel Sidebar & Logs Dashboard (`frontend/src/views/admin/AdminAuditLogsSection.vue` & `AdminPanelView.vue`)**:
     - Added «لاگ‌های امنیتی» to the admin sidebar with Lucide `Activity` icon.
     - Top summary KPI cards for quick inspection of system health, failure counts, outbound fetch calls, and latency.
     - Filter toolbar with type tabs (All, Inbound HTTP, Outbound Fetch, Security), status selector, and Trace ID search.

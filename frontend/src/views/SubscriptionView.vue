@@ -182,6 +182,14 @@ async function executeCheckout(payload: { planId: string; gateway: string; coupo
         </div>
       </div>
 
+      <div v-else-if="entitlements?.subscriptionExpired" class="active-subscription-notice">
+        <ShieldCheck :size="20" class="text-amber-500" />
+        <div>
+          <strong>اشتراک «{{ entitlements.expiredPlanName || 'ویژه' }}» شما به پایان رسیده است.</strong>
+          <p>حساب شما به طرح رایگان برگشته است. امکانات اشتراک قبلی تا زمان خرید مجدد در دسترس نیست.</p>
+        </div>
+      </div>
+
       <div v-else-if="hasActivePurchasedPlan" class="active-subscription-notice">
         <ShieldCheck :size="20" class="text-emerald-500" />
         <div>

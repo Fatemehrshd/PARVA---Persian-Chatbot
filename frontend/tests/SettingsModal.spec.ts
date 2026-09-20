@@ -28,13 +28,15 @@ describe('SettingsModal', () => {
     const themeCards = wrapper.findAll('.theme-card')
     expect(themeCards.length).toBe(2)
 
-    // Second card is Light theme
+    // Second card is Light theme — clicking now persists a per-user preference
     await themeCards[1].trigger('click')
-    expect(uiStore.theme).toBe('light')
+    expect(uiStore.userThemePreference).toBe('light')
+    expect(uiStore.effectiveTheme).toBe('light')
 
     // First card is Dark theme
     await themeCards[0].trigger('click')
-    expect(uiStore.theme).toBe('dark')
+    expect(uiStore.userThemePreference).toBe('dark')
+    expect(uiStore.effectiveTheme).toBe('dark')
   })
 
   it('does not display any English language or LTR switch option and operates strictly in Persian RTL', async () => {

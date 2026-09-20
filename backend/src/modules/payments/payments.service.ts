@@ -443,6 +443,8 @@ export class PaymentsService {
     limit?: number;
     userId?: string;
     status?: PaymentStatus;
+    search?: string;
+    searchField?: string;
   }) {
     await this.expireStalePendingPayments();
     const page = Math.max(1, Number(options.page) || 1);
@@ -459,6 +461,34 @@ export class PaymentsService {
     }
     if (options.status) {
       qb.andWhere('p.status = :status', { status: options.status });
+    }
+
+    const search = options.search?.trim();
+    if (search) {
+      const allowedFields = [
+        'user.displayName',
+        'user.email',
+        'plan.name',
+        'status',
+        'refId',
+        'authority',
+      ];
+      const selectedField = options.searchField && allowedFields.includes(options.searchField)
+        ? options.searchField
+        : undefined;
+      const fields = selectedField ? [selectedField] : allowedFields;
+
+      const conditions = fields.map((field, idx) => {
+        const normalizedField = field.includes('.') ? field : `p.${field}`;
+        return `LOWER(CAST(${normalizedField} AS text)) LIKE :searchParam_${idx}`;
+      });
+
+      const params: Record<string, string> = {};
+      fields.forEach((_, idx) => {
+        params[`searchParam_${idx}`] = `%${search.toLowerCase()}%`;
+      });
+
+      qb.andWhere(`(${conditions.join(' OR ')})`, params);
     }
 
     qb.orderBy('p.createdAt', 'DESC');

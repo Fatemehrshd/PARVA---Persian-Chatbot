@@ -135,7 +135,9 @@ describe('ChatComposer.vue', () => {
     const sendBtn = wrapper.find('.btn-send')
     expect(sendBtn.attributes('disabled')).toBeDefined()
     const textarea = wrapper.find('textarea')
-    expect(textarea.attributes('disabled')).toBeDefined()
+    // The input stays enabled so the user can keep typing a follow-up
+    // while a previous response is still being generated.
+    expect(textarea.attributes('disabled')).toBeUndefined()
   })
 
   it('switches text direction dynamically between LTR and RTL as user types English and Persian characters', async () => {

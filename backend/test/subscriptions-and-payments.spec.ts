@@ -234,6 +234,32 @@ describe('Subscriptions & Entitlement Engine', () => {
     expect(ent.features.webSearch).toBe(false);
   });
 
+  it('exposes only models assigned to the free plan for a free user', async () => {
+    plansRepo.rows[0].planModels = [
+      { modelId: 'model_free_1' },
+      { modelId: 'model_free_2' },
+      { modelId: 'model_free_3' },
+    ];
+    aiModelRepo.rows.push(
+      { id: 'model_free_1', accessLevel: 'public', isActive: true, isDeleted: false },
+      { id: 'model_free_2', accessLevel: 'public', isActive: true, isDeleted: false },
+      { id: 'model_free_3', accessLevel: 'public', isActive: true, isDeleted: false },
+      { id: 'model_not_in_free', accessLevel: 'public', isActive: true, isDeleted: false },
+    );
+
+    const ent = await entitlementService.getUserEntitlements('u_regular');
+
+    expect(ent.allowedModelIds).toEqual(['model_free_1', 'model_free_2', 'model_free_3']);
+    expect(await entitlementService.isModelAllowedForUser(
+      aiModelRepo.rows.find((model: any) => model.id === 'model_free_1'),
+      { id: 'u_regular', role: 'user' },
+    )).toBe(true);
+    expect(await entitlementService.isModelAllowedForUser(
+      aiModelRepo.rows.find((model: any) => model.id === 'model_not_in_free'),
+      { id: 'u_regular', role: 'user' },
+    )).toBe(false);
+  });
+
   it('assigning Pro subscription updates entitlements, quotas and allowed models', async () => {
     const commercialModel = { id: 'model_commercial', accessLevel: 'commercial', isActive: true, isDeleted: false } as any;
     // Set planModelRepo so model_commercial is known to belong to plan_pro
@@ -288,6 +314,14 @@ describe('Subscriptions & Entitlement Engine', () => {
     const active = await subscriptionsService.getActiveSubscription('u_regular');
     expect(active).toBeNull();
     expect(subscriptionRepo.rows[0].status).toBe(SubscriptionStatus.EXPIRED);
+
+    const entitlements = await entitlementService.getUserEntitlements('u_regular');
+    expect(entitlements.subscriptionExpired).toBe(true);
+    expect(entitlements.expiredPlanName).toBe('طرح حرفه‌ای');
+    expect(entitlements.plan?.slug).toBe('free');
+    expect(entitlements.hasActiveSubscription).toBe(false);
+    expect(entitlements.features.thinking).toBe(false);
+    expect(entitlements.features.webSearch).toBe(false);
   });
 });
 

@@ -11,6 +11,10 @@ const uiStore = useUiStore()
 
 const payments = ref<Payment[]>([])
 const isLoading = ref(false)
+const page = ref(1)
+const limit = ref(10)
+const searchQuery = ref('')
+const searchField = ref('user.email')
 const stats = ref<{
   totalRevenue: number
   successfulCount: number
@@ -33,7 +37,16 @@ const columns: TableColumn[] = [
 async function loadPayments() {
   isLoading.value = true
   try {
-    const res = await paymentService.getAllPayments()
+    const params: any = {
+      page: page.value,
+      limit: limit.value,
+    }
+    if (searchQuery.value.trim()) {
+      params.search = searchQuery.value.trim()
+      if (searchField.value) params.searchField = searchField.value
+    }
+
+    const res = await paymentService.getAllPayments(params)
     payments.value = res.items || []
     if (res.stats) {
       stats.value = res.stats
@@ -43,6 +56,31 @@ async function loadPayments() {
   } finally {
     isLoading.value = false
   }
+}
+
+function handlePageChange(newPage: number) {
+  if (newPage === page.value) return
+  page.value = newPage
+  loadPayments()
+}
+
+function handlePageSizeChange(newSize: number) {
+  if (newSize === limit.value && page.value === 1) return
+  limit.value = newSize
+  page.value = 1
+  loadPayments()
+}
+
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+
+function handleSearch(query: string, field?: string) {
+  searchQuery.value = query
+  searchField.value = field || searchField.value || 'user.email'
+  page.value = 1
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    loadPayments()
+  }, 250)
 }
 
 onMounted(loadPayments)
@@ -122,6 +160,32 @@ function formatDate(iso?: string): string {
       </div>
     </div>
 
+    <div class="mb-4 flex flex-col sm:flex-row gap-3">
+      <div class="search-field-wrapper flex-1 flex gap-2">
+        <select
+          v-model="searchField"
+          class="search-field-select px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground"
+          @change="handleSearch(searchQuery, searchField)"
+        >
+          <option value="user.displayName">نام کاربر</option>
+          <option value="user.email">ایمیل کاربر</option>
+          <option value="plan.name">نام طرح</option>
+          <option value="status">وضعیت پرداخت</option>
+          <option value="refId">کد پیگیری</option>
+          <option value="authority">شناسه مرجع</option>
+        </select>
+        <div class="search-input-box flex-1 relative">
+          <input
+            v-model="searchQuery"
+            type="text"
+            class="search-text-input w-full pr-9 pl-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground"
+            placeholder="جستجو در تراکنش‌ها..."
+            @input="handleSearch(searchQuery, searchField)"
+          />
+        </div>
+      </div>
+    </div>
+
     <!-- Table -->
     <div class="border border-border rounded-xl bg-card overflow-hidden">
       <AdminTableSkeleton v-if="isLoading" :columns="columns.length" :rows="4" />
@@ -130,9 +194,11 @@ function formatDate(iso?: string): string {
         :columns="columns"
         :items="payments"
         paginated
-        :page-size="10"
+        :page-size="limit"
         :page-sizes="[10, 25, 50]"
         empty-text="هیچ تراکنشی ثبت نشده است."
+        @update:page="handlePageChange"
+        @update:pageSize="handlePageSizeChange"
       >
         <template #row="{ item: payment }">
           <!-- User column -->

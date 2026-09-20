@@ -12,8 +12,6 @@ import {
   Sliders,
   ArrowRight,
   Menu,
-  Search,
-  Loader2,
   CreditCard,
   UserCheck,
   Receipt,
@@ -84,12 +82,6 @@ watch(
 
 const adminName = computed(() => authStore.user?.displayName || authStore.user?.email || 'ادمین')
 const adminInitial = computed(() => adminName.value.charAt(0).toUpperCase())
-
-// 3-Second Search Debounce (Maintains test compatibility with AdminModelsView.spec.ts)
-const searchQuery = ref('')
-const debouncedSearchQuery = ref('')
-const isSearchDebouncing = ref(false)
-let searchDebounceTimer: any = null
 
 const labels = {
   dashboard: 'داشبورد',
@@ -183,14 +175,9 @@ watch(searchQuery, (newVal) => {
     isSearchDebouncing.value = false
   }, 3000)
 })
-
 function selectSection(section: string) {
   activeSection.value = section as AdminSection
   sidebarOpen.value = false
-  searchQuery.value = ''
-  debouncedSearchQuery.value = ''
-  isSearchDebouncing.value = false
-  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
 
   if (router && typeof router.push === 'function') {
     const targetPath = `/admin/${section}`
@@ -309,41 +296,6 @@ async function confirmDelete() {
           <h1>{{ currentSectionTitle }}</h1>
         </div>
 
-        <!-- Topbar Search Box (Hidden on Dashboard per test requirements) -->
-        <div v-if="activeSection !== 'dashboard' && activeSection !== 'prompts' && activeSection !== 'file-settings'" class="topbar-search-wrap">
-          <div class="search-box">
-            <Search :size="16" class="search-icon" />
-            <input
-              v-model="searchQuery"
-              type="search"
-              class="search-input"
-              :placeholder="currentSearchScope.placeholder"
-              aria-label="جستجو در این بخش"
-            />
-            <Loader2 v-if="isSearchDebouncing" :size="14" class="animate-spin text-primary ml-2" />
-            <button
-              v-if="searchQuery"
-              type="button"
-              class="clear-btn"
-              title="پاک کردن جستجو"
-              @click="searchQuery = ''"
-            >
-              ✕
-            </button>
-          </div>
-
-          <!-- Scope Badges / Chips -->
-          <div v-if="currentSearchScope.fields.length > 0" class="search-scope-chips flex items-center gap-1.5 mt-1 mr-1">
-            <span class="text-[10.5px] text-muted-foreground font-medium">جستجو در:</span>
-            <span
-              v-for="field in currentSearchScope.fields"
-              :key="field"
-              class="scope-badge text-[10.5px] px-1.5 py-0.2 rounded-md bg-secondary/80 text-secondary-foreground border border-border/60"
-            >
-              [{{ field }}]
-            </span>
-          </div>
-        </div>
       </header>
 
       <!-- Section Views (Loaded Lazily & Independently) -->
@@ -357,21 +309,18 @@ async function confirmDelete() {
         <!-- 2. Providers -->
         <AdminProvidersSection
           v-else-if="activeSection === 'providers'"
-          :search-query="debouncedSearchQuery"
           @delete-prompt="promptDelete"
         />
 
         <!-- 3. Models -->
         <AdminModelsSection
           v-else-if="activeSection === 'models'"
-          :search-query="debouncedSearchQuery"
           @delete-prompt="promptDelete"
         />
 
         <!-- 4. Users (Wrapped in .users-panel for spec compatibility) -->
         <div v-else-if="activeSection === 'users'" class="users-panel">
           <AdminUsersSection
-            :search-query="debouncedSearchQuery"
             @filter-files="filterFilesByUser"
           />
         </div>
@@ -379,14 +328,12 @@ async function confirmDelete() {
         <!-- 5. Chats -->
         <AdminChatsSection
           v-else-if="activeSection === 'chats'"
-          :search-query="debouncedSearchQuery"
           @delete-prompt="promptDelete"
         />
 
         <!-- 6. Files -->
         <AdminFilesSection
           v-else-if="activeSection === 'files'"
-          :search-query="debouncedSearchQuery"
           :user-filter="fileUserFilter"
           @clear-user-filter="fileUserFilter = null"
           @delete-prompt="promptDelete"
@@ -605,61 +552,6 @@ async function confirmDelete() {
   cursor: pointer;
 }
 
-.topbar-search-wrap {
-  display: flex;
-  flex-direction: column;
-  min-width: 280px;
-  max-width: 480px;
-  flex: 1;
-}
-
-.search-box {
-  position: relative;
-  display: flex;
-  align-items: center;
-  width: 100%;
-}
-
-.search-icon {
-  position: absolute;
-  right: 12px;
-  color: var(--muted-foreground);
-  pointer-events: none;
-}
-
-.search-input {
-  width: 100%;
-  padding: 8px 36px 8px 32px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--background);
-  color: var(--foreground);
-  font-size: 12.5px;
-  font-family: inherit;
-  outline: none;
-  transition: border-color 0.15s;
-}
-
-.search-input:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 20%, transparent);
-}
-
-.clear-btn {
-  position: absolute;
-  left: 10px;
-  background: none;
-  border: none;
-  color: var(--muted-foreground);
-  font-size: 13px;
-  cursor: pointer;
-  padding: 0;
-}
-
-.clear-btn:hover {
-  color: var(--foreground);
-}
-
 /* Mobile responsive */
 @media (max-width: 768px) {
   .admin-sidebar {
@@ -696,10 +588,5 @@ async function confirmDelete() {
     padding: 12px 16px;
   }
 
-  .topbar-search-wrap {
-    order: 3;
-    max-width: 100%;
-    min-width: 100%;
-  }
 }
 </style>

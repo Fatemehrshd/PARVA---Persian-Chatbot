@@ -43,7 +43,7 @@ export class ProvidersAdminController {
     }
     const result = ApiFeatures.applyToArray(all, query, {
       searchableFields: ['name', 'baseUrl'],
-      allowedFilterFields: ['isActive'],
+      allowedFilterFields: ['name', 'isActive'],
     });
     if (query.page || query.limit) {
       return result;

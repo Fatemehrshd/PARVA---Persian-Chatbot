@@ -27,6 +27,7 @@ export class AdminConversationsController {
   @Get()
   async listConversations(
     @Query('search') search?: string,
+    @Query('searchField') searchField?: string,
     @Query('userId') userId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -62,10 +63,10 @@ export class AdminConversationsController {
 
     const applied = ApiFeatures.applyToArray(
       results,
-      { search, userId, page, limit, sortBy, sortOrder },
+      { search, searchField, userId, page, limit, sortBy, sortOrder },
       {
         searchableFields: ['title', 'userDisplayName', 'userEmail', 'modelId'],
-        allowedFilterFields: ['userId', 'modelId'],
+        allowedFilterFields: ['title', 'userDisplayName', 'userEmail', 'userId', 'modelId'],
         defaultSortField: 'updatedAt',
         defaultSortOrder: 'DESC',
       },

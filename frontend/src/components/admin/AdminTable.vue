@@ -96,6 +96,10 @@ const columnFilters = ref<Record<string, string>>({})
 const sortColumn = ref<string | null>(null)
 const sortOrder = ref<'asc' | 'desc' | null>(null)
 
+function getNestedValue(item: any, path: string): unknown {
+  return path.split('.').reduce((value, key) => value == null ? undefined : value[key], item)
+}
+
 const effectiveSearchFields = computed(() => {
   if (props.searchFields && props.searchFields.length > 0) return props.searchFields
   return props.columns.filter((c) => c.key !== 'actions' && c.key !== 'status')
@@ -123,8 +127,9 @@ const filteredItems = computed(() => {
     const q = searchQuery.value.trim().toLowerCase()
     const field = selectedSearchField.value
     res = res.filter((item) => {
-      if (field && item[field] !== undefined && item[field] !== null) {
-        return String(item[field]).toLowerCase().includes(q)
+      const fieldValue = field ? getNestedValue(item, field) : undefined
+      if (field && fieldValue !== undefined && fieldValue !== null) {
+        return String(fieldValue).toLowerCase().includes(q)
       }
       return Object.values(item).some((val) => String(val).toLowerCase().includes(q))
     })
@@ -135,7 +140,7 @@ const filteredItems = computed(() => {
     const val = columnFilters.value[key]?.trim().toLowerCase()
     if (val) {
       res = res.filter((item) => {
-        const itemVal = item[key]
+        const itemVal = getNestedValue(item, key)
         if (itemVal === undefined || itemVal === null) return false
         return String(itemVal).toLowerCase().includes(val)
       })
@@ -147,8 +152,8 @@ const filteredItems = computed(() => {
     const col = sortColumn.value
     const ord = sortOrder.value
     res = [...res].sort((a, b) => {
-      const valA = a[col]
-      const valB = b[col]
+      const valA = getNestedValue(a, col)
+      const valB = getNestedValue(b, col)
       if (valA === valB) return 0
       if (valA === undefined || valA === null) return 1
       if (valB === undefined || valB === null) return -1
@@ -321,32 +326,14 @@ function formatCellValue(value: unknown): unknown {
       </div>
 
       <div class="toolbar-actions-group flex items-center gap-2">
-        <!-- دکمه نمایش / پنهان‌سازی فیلترهای ستونی (Column Filters) -->
         <button
           type="button"
-          class="data-grid-action-btn"
-          :class="{ 'btn-active': showColumnFilters }"
-          title="فیلتر اختصاصی بر روی هر ستون جدول"
+          class="column-filter-toggle text-xs px-2.5 py-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+          data-testid="toggle-column-filters"
+          :aria-expanded="showColumnFilters"
           @click="showColumnFilters = !showColumnFilters"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-          </svg>
-          <span>فیلتر ستون‌ها</span>
-          <span v-if="activeFiltersCount > 0" class="filter-count-badge font-mono">
-            {{ toPersianDigits(activeFiltersCount) }}
-          </span>
-        </button>
-
-        <!-- دکمه پاک‌سازی همه فیلترها در صورت فعال بودن فیلتر -->
-        <button
-          v-if="activeFiltersCount > 0"
-          type="button"
-          class="data-grid-action-btn clear-all-btn text-destructive hover:bg-destructive/10"
-          title="پاک‌سازی تمامی فیلترها"
-          @click="clearAllFilters"
-        >
-          <span>حذف فیلترها</span>
+          {{ showColumnFilters ? 'بستن فیلترها' : 'فیلتر ستون‌ها' }}
         </button>
 
         <slot name="toolbar-actions" />
@@ -428,8 +415,8 @@ function formatCellValue(value: unknown): unknown {
                   :data-label="col.label"
                   :class="col.align === 'left' ? 'text-left' : col.align === 'center' ? 'text-center' : 'text-right'"
                 >
-                  <slot :name="`cell-${col.key}`" :row="item" :col="col" :value="item[col.key]">
-                    {{ formatCellValue(item[col.key]) }}
+                  <slot :name="`cell-${col.key}`" :row="item" :col="col" :value="getNestedValue(item, col.key)">
+                    {{ formatCellValue(getNestedValue(item, col.key)) }}
                   </slot>
                 </td>
               </slot>

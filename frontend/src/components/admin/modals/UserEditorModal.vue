@@ -87,22 +87,26 @@ function dollarsToTokens(dollars: number): number {
   return Math.round((dollars / props.tokenRatePer1000) * 1000)
 }
 
+function populateForm(u: AdminUser) {
+  const limit = u.tokenLimit !== null && u.tokenLimit !== undefined && Number(u.tokenLimit) > 0 ? Number(u.tokenLimit) : null
+  const msgLimit = u.messageLimit !== null && u.messageLimit !== undefined && Number(u.messageLimit) > 0 ? Number(u.messageLimit) : null
+  form.value = {
+    displayName: u.displayName || '',
+    email: u.email,
+    role: u.role === 'admin' ? 'admin' : 'user',
+    usedTokens: Number(u.usedTokens || 0),
+    tokenLimit: limit,
+    messageLimit: msgLimit,
+  }
+  creditDollarInput.value = limit !== null && limit > 0 ? tokensToDollars(limit) : null
+}
+
+// هم روی «open» و هم روی «user» نگاه می‌کنیم تا هر بار باز شدن مودال، فرم از
+// داده فعلی همان کاربر بازپر شود (حتی اگر reference آبجکت عوض نشده باشد).
 watch(
-  () => props.user,
-  (u) => {
-    if (u) {
-      const limit = u.tokenLimit !== null && u.tokenLimit !== undefined && Number(u.tokenLimit) > 0 ? Number(u.tokenLimit) : null
-      const msgLimit = u.messageLimit !== null && u.messageLimit !== undefined && Number(u.messageLimit) > 0 ? Number(u.messageLimit) : null
-      form.value = {
-        displayName: u.displayName || '',
-        email: u.email,
-        role: u.role === 'admin' ? 'admin' : 'user',
-        usedTokens: Number(u.usedTokens || 0),
-        tokenLimit: limit,
-        messageLimit: msgLimit,
-      }
-      creditDollarInput.value = limit !== null && limit > 0 ? tokensToDollars(limit) : null
-    }
+  [() => props.open, () => props.user],
+  ([isOpen, u]) => {
+    if (isOpen && u) populateForm(u)
   },
   { immediate: true }
 )
@@ -322,7 +326,7 @@ function handleSubmit() {
           <div class="flex items-center justify-between flex-wrap gap-2">
             <span class="text-xs font-bold text-foreground">طرح اشتراک کاربر:</span>
             <span class="px-2 py-0.5 text-xs font-bold rounded-full bg-purple-500/15 text-purple-500 border border-purple-500/25">
-              {{ user?.planName || 'طرح پیش‌فرض سیستم' }}
+              {{ user?.planName || 'طرح رایگان' }}
             </span>
           </div>
 

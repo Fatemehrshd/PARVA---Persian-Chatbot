@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
@@ -11,12 +11,20 @@ import { Label } from '@/components/ui/label'
 
 import { useFormSubmit } from '../composables/useFormSubmit'
 import { useThemeLogo } from '../composables/useThemeLogo'
+import { isValidEmail } from '../utils/validators'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const uiStore = useUiStore()
 
 const { activeLogo } = useThemeLogo()
+
+// The login page must always render in the light theme, no matter what theme
+// any user (or a previous session) left behind. The override is view-local:
+// it is not persisted anywhere, and leaving this page restores the session's
+// own theme untouched (including a signed-in user's backend preference).
+onMounted(() => uiStore.setAuthPageLightMode(true))
+onUnmounted(() => uiStore.setAuthPageLightMode(false))
 
 const isSignup = ref(false)
 const email = ref('')
@@ -62,7 +70,7 @@ async function handleSubmit() {
     return
   }
 
-  if (!email.value.includes('@')) {
+  if (!isValidEmail(email.value)) {
     formError.value = 'لطفاً یک ایمیل معتبر وارد کنید.'
     return
   }
@@ -168,7 +176,11 @@ async function handleSubmit() {
         </div>
 
         <!-- Form Elements -->
-        <form @submit.prevent="handleSubmit" class="space-y-4 text-start">
+        <!-- `novalidate`: the browser's native type="email" bubble (English,
+             e.g. "Please include an '@'...") must never appear — invalid input
+             is surfaced as the same inline Persian message as every other
+             client-side validation error. -->
+        <form @submit.prevent="handleSubmit" novalidate class="space-y-4 text-start">
           
           <!-- Display Name (Signup Only) with smooth expansion -->
           <Transition name="field-expand">

@@ -46,8 +46,23 @@ export class ProfileService {
       avatarUrl: u.avatarUrl ?? null,
       role: u.role,
       isActive: u.isActive !== false,
+      themePreference: u.themePreference ?? null,
       createdAt: u.createdAt,
     };
+  }
+
+  async getThemePreference(userId: string): Promise<{ preference: 'dark' | 'light' | null }> {
+    const u = await this.users.findById(userId);
+    // Documented contract (wiki/api-reference): an explicit envelope so the
+    // bare-string-vs-object distinction can never be misread by clients.
+    return { preference: u?.themePreference ?? null };
+  }
+
+  async updateThemePreference(userId: string, preference: 'dark' | 'light' | null) {
+    const u = await this.mustFind(userId);
+    u.themePreference = preference ?? null;
+    await this.users.save(u);
+    return this.toProfileJson(u);
   }
 
   async getProfile(userId: string) {

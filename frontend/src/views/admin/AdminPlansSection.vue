@@ -131,6 +131,7 @@ async function handleToggleActive(plan: SubscriptionPlan) {
         v-else
         :columns="columns"
         :items="plans"
+        searchable
         empty-text="هنوز طرح اشتراکی تعریف نشده است."
       >
         <template #row="{ item: plan }">

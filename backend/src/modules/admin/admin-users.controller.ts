@@ -18,6 +18,7 @@ import {
   resolveEffectiveTokenLimit,
   resolveLimitSource,
   resolveEffectiveMessageLimit,
+  computeRemainingPercent,
 } from './settings.service';
 import { UpdateUserAdminDto, UpdateUserStatusDto } from './dto';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
@@ -91,6 +92,7 @@ export class AdminUsersController {
           tokenLimitSource,
           planName,
           planId,
+          remainingPercent: computeRemainingPercent(u, effectiveTokenLimit, effectiveMessageLimit),
           usedCostUsd: Number(
             Object.entries(u.usageByType || {})
               .reduce((sum, [type, tokens]) => {
@@ -107,7 +109,7 @@ export class AdminUsersController {
     }
     const result = ApiFeatures.applyToArray(withEffective, query, {
       searchableFields: ['displayName', 'email', 'username'],
-      allowedFilterFields: ['role', 'isActive'],
+      allowedFilterFields: ['displayName', 'email', 'username', 'role', 'isActive'],
       defaultSortField: 'createdAt',
       defaultSortOrder: 'ASC',
     });

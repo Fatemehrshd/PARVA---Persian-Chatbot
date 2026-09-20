@@ -57,6 +57,8 @@ export const paymentService = {
     limit?: number;
     userId?: string;
     status?: string;
+    search?: string;
+    searchField?: string;
   }): Promise<{
     items: Payment[];
     total: number;
@@ -75,6 +77,8 @@ export const paymentService = {
       if (params.limit) sp.set('limit', String(params.limit));
       if (params.userId) sp.set('userId', params.userId);
       if (params.status) sp.set('status', params.status);
+      if (params.search) sp.set('search', params.search);
+      if (params.searchField) sp.set('searchField', params.searchField);
     }
     const qs = sp.toString();
     return request<any>(`/admin/payments${qs ? `?${qs}` : ''}`);

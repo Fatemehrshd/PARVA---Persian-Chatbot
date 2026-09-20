@@ -25,6 +25,8 @@ export class User {
   @Column({ default: true }) isActive: boolean;
   /** Soft-delete flag; row is kept for audit, hidden from all listings/auth. */
   @Column({ default: false }) isDeleted: boolean;
+  /** Per-user theme override: 'system' | 'dark' | 'light'. Null = use global default. */
+  @Column({ type: 'varchar', nullable: true, default: null }) themePreference?: string | null;
   @CreateDateColumn() createdAt: Date;
   @OneToMany(() => Conversation, (c) => c.user) conversations: Conversation[];
 }

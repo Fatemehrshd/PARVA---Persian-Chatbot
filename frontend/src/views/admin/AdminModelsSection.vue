@@ -39,6 +39,7 @@ const sortBy = ref<string | undefined>(undefined)
 const sortOrder = ref<'ASC' | 'DESC' | undefined>(undefined)
 const columnFilters = ref<Record<string, string>>({})
 const tableSearchQuery = ref(props.searchQuery || '')
+const searchField = ref('')
 
 const isEditorModalOpen = ref(false)
 const editingModel = ref<Model | null>(null)
@@ -62,6 +63,7 @@ async function loadModels() {
       limit: pageSize.value,
     }
     if (combinedSearch) params.search = combinedSearch
+    if (searchField.value) params.searchField = searchField.value
     if (sortBy.value) {
       params.sortBy = sortBy.value
       params.sortOrder = sortOrder.value
@@ -143,8 +145,9 @@ function handlePageSizeChange(newSize: number) {
   loadModels()
 }
 
-function handleSearch(query: string) {
+function handleSearch(query: string, field?: string) {
   tableSearchQuery.value = query
+  searchField.value = field || ''
   page.value = 1
   const q = query.trim().toLowerCase()
   if (q) {
@@ -292,6 +295,11 @@ onMounted(loadModels)
       :totalItems="totalItems"
       :pageSizes="[10, 25, 50, 100]"
       :searchQuery="tableSearchQuery"
+      :searchFields="[
+        { key: 'name', label: 'نام مدل' },
+        { key: 'provider', label: 'ارائه‌دهنده' },
+        { key: 'apiIdentifier', label: 'شناسه API' },
+      ]"
       @update:page="handlePageChange"
       @update:pageSize="handlePageSizeChange"
       @search="handleSearch"

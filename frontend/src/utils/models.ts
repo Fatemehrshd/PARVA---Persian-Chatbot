@@ -1,7 +1,7 @@
 /**
  * Moves the platform-default flag to one model, in place.
- * Returns the previously-default model's id (undefined when none was set)
- * so callers can roll the flags back if the server call fails.
+ * Returns the previlously-default model's id (undefined when none was set)
+ * so callers can rol the flags back if the server call fails.
  */
 export function markDefaultModel<T extends { id: string; isDefault?: boolean }>(
   models: T[],

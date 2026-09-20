@@ -100,6 +100,35 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
+   * Pull the per-user theme preference from the backend and apply it.
+   * Runs after every auth state change (login, signup, profile refresh).
+   */
+  async function syncUserTheme() {
+    if (!token.value) return
+    try {
+      const { useUiStore } = await import('../stores/ui')
+      const ui = useUiStore()
+      await ui.syncUserThemePreference()
+    } catch {
+      // Non-fatal: theme falls back to the local setting.
+    }
+  }
+
+  /**
+   * Reset the theme session (per-user preference + sync flag) to the global
+   * default. Called on login/logout so one account's theme never leaks into
+   * the next account's session.
+   */
+  async function resetThemeSession() {
+    try {
+      const { useUiStore } = await import('../stores/ui')
+      useUiStore().resetThemeSession()
+    } catch {
+      // Store not available yet — the default stays in place.
+    }
+  }
+
+  /**
    * The auth (login/signup) payload carries no avatarUrl, so the avatar in
    * the sidebar only appeared after the profile modal was opened. This
    * fetches /users/me once and syncs the full profile (avatar included)
@@ -116,6 +145,7 @@ export const useAuthStore = defineStore('auth', () => {
         console.warn('Profile refresh failed:', err)
       }
     }
+    await syncUserTheme()
   }
 
   async function login(email: string, password: string): Promise<boolean> {
@@ -123,6 +153,9 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null
     try {
       const response = await authService.login(email.trim().toLowerCase(), password)
+      // Start this user's theme session fresh: never inherit the previous
+      // account's backend preference.
+      await resetThemeSession()
       setSession(response.user, response.accessToken, response.refreshToken)
       await refreshProfile()
       await refreshIdentity()
@@ -149,6 +182,7 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null
     try {
       const response = await authService.signup(email, password, displayName)
+      await resetThemeSession()
       setSession(response.user, response.accessToken, response.refreshToken)
       await refreshProfile()
       await refreshIdentity()
@@ -180,6 +214,8 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.removeItem('user')
       localStorage.removeItem('token')
       localStorage.removeItem('refreshToken')
+      // Return to the global default theme for the next (possibly different) user.
+      await resetThemeSession()
     }
   }
 

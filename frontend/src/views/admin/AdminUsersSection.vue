@@ -36,7 +36,7 @@ const editingUser = ref<AdminUser | null>(null)
 
 // Column definitions with explicit widths for perfect alignment
 const userColumns: TableColumn[] = [
-  { key: 'user', label: 'کاربر (نام و ایمیل)', width: '240px', sortable: true },
+  { key: 'displayName', label: 'کاربر (نام و ایمیل)', width: '240px', sortable: true },
   { key: 'role', label: 'نقش کاربری', width: '120px', sortable: true, align: 'center' },
   { key: 'creditStatus', label: 'وضعیت سقف و مصرف توکن', width: '170px', sortable: true, align: 'center' },
   { key: 'remaining', label: 'باقی‌مانده', width: '110px', sortable: false, align: 'center' },
@@ -87,19 +87,26 @@ function effectiveLimitFor(user: AdminUser): number | null {
 }
 
 function getUserStats(user: AdminUser) {
-  const used = Number(user.usedTokens || 0)
+  const used = Number(user.periodUsedTokens ?? user.usedTokens ?? 0)
   const limit = effectiveLimitFor(user)
   const limitSource = limitSourceFor(user)
   const hasLimit = limit !== null && limit > 0
   const remaining = hasLimit ? Math.max(0, limit! - used) : null
-  const remainingPercent = hasLimit ? Math.round((remaining! / limit!) * 100) : null
+  // درصد مؤثر از بک‌اند می‌آید (min سقف توکن و سقف پیام، مطابق سایدبار کاربر).
+  // اگر نیامد، fallback فقط توکن محاسبه می‌شود تا عدد همیشه با سایدبار سینک باشد.
+  const remainingPercent =
+    user.remainingPercent !== undefined && user.remainingPercent !== null
+      ? Number(user.remainingPercent)
+      : hasLimit
+        ? Math.round((remaining! / limit!) * 100)
+        : null
 
   // رنگ‌بندی بر اساس میزان باقی‌مانده: >۵۰٪ سبز، ۲۰-۵۰٪ نارنجی، <۲۰٪ قرمز
   let statusColor = 'text-emerald-500'
-  if (hasLimit) {
-    if (remainingPercent! <= 20) {
+  if (hasLimit && remainingPercent !== null) {
+    if (remainingPercent <= 20) {
       statusColor = 'text-rose-500'
-    } else if (remainingPercent! <= 50) {
+    } else if (remainingPercent <= 50) {
       statusColor = 'text-amber-500'
     }
   }
@@ -122,10 +129,11 @@ const sortBy = ref<string | undefined>(undefined)
 const sortOrder = ref<'ASC' | 'DESC' | undefined>(undefined)
 const columnFilters = ref<Record<string, string>>({})
 const tableSearchQuery = ref(props.searchQuery || '')
+const searchField = ref('')
 
-async function loadUsers() {
-  isLoading.value = true
-  errorMessage.value = ''
+async function loadUsers(silent = false) {
+  isLoading.value = silent ? isLoading.value : true
+  errorMessage.value = silent ? '' : errorMessage.value
   try {
     const combinedSearch = (tableSearchQuery.value || props.searchQuery || '').trim()
     const params: any = {
@@ -135,6 +143,7 @@ async function loadUsers() {
     if (combinedSearch) {
       params.search = combinedSearch
     }
+    if (searchField.value) params.searchField = searchField.value
     if (sortBy.value) {
       params.sortBy = sortBy.value
       params.sortOrder = sortOrder.value
@@ -190,8 +199,9 @@ function handlePageSizeChange(newSize: number) {
   loadUsers()
 }
 
-function handleSearch(query: string) {
+function handleSearch(query: string, field?: string) {
   tableSearchQuery.value = query
+  searchField.value = field || ''
   page.value = 1
   loadUsers()
 }
@@ -213,6 +223,38 @@ function openEditModal(user: AdminUser) {
   isEditorModalOpen.value = true
 }
 
+/** فقط کلیدهای مشخص‌شده (non-undefined) را روی ردیف اعمال می‌کند. */
+function patchUserRow(row: AdminUser, fields: Record<string, any>) {
+  for (const [k, v] of Object.entries(fields)) {
+    // `k in row` نادیده گرفته می‌شود تا فیلدهای جدید (مثل remainingPercent)
+    // که بک‌اند تازه اضافه کرده هم روی ردیف ست شوند.
+    if (v !== undefined) (row as any)[k] = v
+  }
+}
+
+/**
+ * درصد باقی‌ماندهٔ مؤثر را محلی (optimistic) با فرمول مشترک بک‌اند محاسبه می‌کند:
+ * min(درصد توکن، درصد پیام). در غیر این صورت سایدبار کاربر و جدول ادمین
+ * بلافاصله بعد از ادیت از هم دور می‌شوند.
+ */
+function computeLocalRemainingPercent(
+  row: AdminUser,
+  tokenLimit: number | null,
+  messageLimit: number | null,
+): number | null {
+  const usedTokens = Number(row.periodUsedTokens ?? row.usedTokens ?? 0)
+  const usedMessages = Number(row.periodUsedMessages ?? 0)
+  const pcts: number[] = []
+  if (tokenLimit && tokenLimit > 0) {
+    pcts.push(Math.max(0, Math.min(100, Math.round(((tokenLimit - usedTokens) / tokenLimit) * 100))))
+  }
+  if (messageLimit && messageLimit > 0) {
+    pcts.push(Math.max(0, Math.min(100, Math.round(((messageLimit - usedMessages) / messageLimit) * 100))))
+  }
+  if (pcts.length === 0) return null
+  return Math.min(...pcts)
+}
+
 async function handleSaveUser(payload: {
   displayName?: string
   email?: string
@@ -224,8 +266,23 @@ async function handleSaveUser(payload: {
 }) {
   if (!editingUser.value) return
   isSaving.value = true
+  const target = users.value.find((u) => u.id === editingUser.value!.id)
+  const { newPlanId, durationDays, ...userFields } = payload
+  // snapshot برای rollback در صورت خطا
+  const backup = target ? { ...target } : null
+  if (target) {
+    // optimistic: بلافاصله روی ردیف جدول اعمال می‌شود
+    patchUserRow(target, { ...userFields, tokenLimit: userFields.tokenLimit ?? null, messageLimit: userFields.messageLimit ?? null })
+    // درصد مؤثر هم فوراً با سقف جدید recompute می‌شود تا با سایدبار همگام بماند
+    patchUserRow(target, {
+      remainingPercent: computeLocalRemainingPercent(
+        target,
+        userFields.tokenLimit ?? target.tokenLimit ?? null,
+        userFields.messageLimit ?? target.messageLimit ?? null,
+      ),
+    })
+  }
   try {
-    const { newPlanId, durationDays, ...userFields } = payload
     await adminService.updateUser(editingUser.value.id, userFields)
 
     if (newPlanId) {
@@ -238,8 +295,12 @@ async function handleSaveUser(payload: {
 
     uiStore.showToast('اطلاعات کاربر با موفقیت به‌روزرسانی شد.', 'success')
     isEditorModalOpen.value = false
-    await loadUsers()
+    // همگام‌سازی بی‌صدا با سرور (بدون فلش لودینگ)؛ در صورت خطا rollback شده‌ایم
+    await loadUsers(true).catch(() => {})
   } catch (err: any) {
+    if (target && backup) {
+      Object.assign(target, backup)
+    }
     uiStore.showToast(err?.message || 'خطا در ویرایش کاربر', 'error')
   } finally {
     isSaving.value = false
@@ -313,6 +374,11 @@ onMounted(loadUsers)
       :totalItems="totalItems"
       :pageSizes="[10, 25, 50, 100]"
       :searchQuery="tableSearchQuery"
+      :searchFields="[
+        { key: 'displayName', label: 'نام کاربر' },
+        { key: 'email', label: 'ایمیل' },
+        { key: 'username', label: 'نام کاربری' },
+      ]"
       @update:page="handlePageChange"
       @update:pageSize="handlePageSizeChange"
       @search="handleSearch"
@@ -350,7 +416,7 @@ onMounted(loadUsers)
           <div class="credit-metric-cell space-y-1 py-1">
             <div class="text-xs flex items-center justify-center gap-1.5 flex-wrap">
               <span class="font-mono font-bold text-foreground">
-                {{ Number(user.usedTokens || 0).toLocaleString('fa-IR') }}
+                {{ Number(getUserStats(user).used).toLocaleString('fa-IR') }}
                 <span class="text-[11px] font-normal text-muted-foreground">
                   / {{ getUserStats(user).hasLimit ? Number(getUserStats(user).limit).toLocaleString('fa-IR') : 'نامحدود' }}
                 </span>

@@ -43,6 +43,20 @@ export function calculateEffectiveTokens(
   return Math.ceil(baseTokens * mult);
 }
 
+/**
+ * Resolves the admin-configured multiplier for a given task type.
+ * Falls back to 1.0 (no extra cost) if not configured.
+ * Keys: 'image', 'document', 'normal', 'thinking'
+ */
+export function resolveAttachmentMultiplier(
+  taskType: 'image' | 'document' | 'normal',
+  taskMultipliers: Record<string, number>,
+): number {
+  if (taskType === 'normal') return 1.0;
+  const val = Number(taskMultipliers[taskType]);
+  return Number.isFinite(val) && val > 0 ? val : 1.0;
+}
+
 export class QuotaExceededException extends BadRequestException {
   constructor(public reason: 'tokens' | 'messages', public resetAt: Date | null) {
     super({
@@ -71,26 +85,40 @@ const paceToken = () =>
  * ۱. اگر ابعاد تصویر مشخص باشد: تصویر به کاشی‌های ۵۱۲×۵۱۲ تقسیم شده و به ازای هر تایل ۱۷۰ توکن + ۸۵ توکن پایه محاسبه می‌شود.
  * ۲. در صورت نامشخص بودن ابعاد، بر اساس حجم تخمین زده می‌شود.
  * ۳. اسناد و متن‌ها: هر ۵۰۰ بایت معادل تقریباً ۱۰۰ توکن در نظر گرفته می‌شود.
+ *
+ * ضرایب تنظیم‌شده توسط ادمین (taskMultipliers) روی توکن‌های محاسبه‌شده هر نوع فایل اعمال می‌شوند.
+ * اگر taskMultipliers ارسال نشود یا ضریب صفر/تعریف‌نشده باشد، مقدار پیش‌فرض ۱.۰ (بدون ضریب) استفاده می‌شود.
  */
 export function calculateAttachmentTokens(
   attachments: Array<{ fileType?: string; fileSize?: number | string; metadata?: any }>,
+  taskMultipliers: Record<string, number> = {},
 ): number {
   let totalAttachmentTokens = 0;
   if (!attachments || attachments.length === 0) return 0;
+
+  const imageMult = resolveAttachmentMultiplier('image', taskMultipliers);
+  const documentMult = resolveAttachmentMultiplier('document', taskMultipliers);
 
   for (const att of attachments) {
     if (att.fileType === 'image') {
       const width = att.metadata?.width;
       const height = att.metadata?.height;
+      let rawTokens: number;
       if (typeof width === 'number' && typeof height === 'number' && width > 0 && height > 0) {
         const tilesX = Math.ceil(width / 512);
         const tilesY = Math.ceil(height / 512);
-        totalAttachmentTokens += 85 + tilesX * tilesY * 170;
+        rawTokens = 85 + tilesX * tilesY * 170;
       } else {
         const size = Number(att.fileSize) || 0;
         const chunks = Math.ceil(size / (128 * 1024));
-        totalAttachmentTokens += 85 + Math.max(1, chunks) * 65;
+        rawTokens = 85 + Math.max(1, chunks) * 65;
       }
+      totalAttachmentTokens += Math.ceil(rawTokens * imageMult);
+    } else if (att.fileType && ['pdf', 'excel', 'text'].includes(att.fileType)) {
+      // سند: هر ۵۰۰ بایت ≈ ۱۰۰ توکن
+      const size = Number(att.fileSize) || 0;
+      const rawTokens = size > 0 ? Math.ceil((size / 500) * 100) : 100;
+      totalAttachmentTokens += Math.ceil(rawTokens * documentMult);
     }
   }
   return totalAttachmentTokens;
@@ -159,6 +187,11 @@ export class ChatService {
   }
 
   async create(userId: string, modelId?: string, title?: string) {
+    if (typeof this.users?.findById === 'function') {
+      const user = await this.users.findById(userId);
+      if (user) await this.assertQuota(user);
+    }
+
     // If user's latest conversation is empty (has 0 messages), reuse it instead of creating a duplicate.
     // Soft-deleted conversations must never be reused — sending to them would 404 (assertOwned
     // filters isDeleted), which is exactly the "delete a chat then send → 404" bug.
@@ -455,6 +488,9 @@ export class ChatService {
     const quota = await this.resolveQuota(user);
     if (quota.isAdmin) return;
     if (typeof this.users?.syncPeriod === 'function') await this.users.syncPeriod(user, quota.resetHours);
+    quota.resetAt = quota.resetHours > 0 && user.periodStart
+      ? new Date(new Date(user.periodStart).getTime() + quota.resetHours * 3600_000)
+      : null;
     const usedTokens = user.periodUsedTokens ?? user.usedTokens ?? 0;
     const usedMessages = user.periodUsedMessages || 0;
     if (quota.tokenLimit > 0 && usedTokens >= quota.tokenLimit) {
@@ -487,8 +523,10 @@ export class ChatService {
     }
     const quota = await this.resolveQuota(user);
     if (typeof this.users?.syncPeriod === 'function') await this.users.syncPeriod(user, quota.resetHours);
+    quota.resetAt = quota.resetHours > 0 && user.periodStart
+      ? new Date(new Date(user.periodStart).getTime() + quota.resetHours * 3600_000)
+      : null;
     const usedTokens = user.periodUsedTokens ?? user.usedTokens ?? 0;
-    const displayUsedTokens = user.usedTokens ?? usedTokens;
     const usedMessages = user.periodUsedMessages || 0;
     const blockedTokens = !quota.isAdmin && quota.tokenLimit > 0 && usedTokens >= quota.tokenLimit;
     const blockedMessages = !quota.isAdmin && !!quota.messageLimit && quota.messageLimit > 0 && usedMessages >= quota.messageLimit;
@@ -497,11 +535,11 @@ export class ChatService {
     if (quota.isAdmin) {
       remainingPercent = null;
     } else if (quota.tokenLimit > 0 && quota.messageLimit && quota.messageLimit > 0) {
-      const tokenPct = Math.max(0, Math.min(100, Math.round(((quota.tokenLimit - displayUsedTokens) / quota.tokenLimit) * 100)));
+      const tokenPct = Math.max(0, Math.min(100, Math.round(((quota.tokenLimit - usedTokens) / quota.tokenLimit) * 100)));
       const msgPct = Math.max(0, Math.min(100, Math.round(((quota.messageLimit - usedMessages) / quota.messageLimit) * 100)));
       remainingPercent = Math.min(tokenPct, msgPct);
     } else if (quota.tokenLimit > 0) {
-      remainingPercent = Math.max(0, Math.min(100, Math.round(((quota.tokenLimit - displayUsedTokens) / quota.tokenLimit) * 100)));
+      remainingPercent = Math.max(0, Math.min(100, Math.round(((quota.tokenLimit - usedTokens) / quota.tokenLimit) * 100)));
     } else if (quota.messageLimit && quota.messageLimit > 0) {
       remainingPercent = Math.max(0, Math.min(100, Math.round(((quota.messageLimit - usedMessages) / quota.messageLimit) * 100)));
     }
@@ -750,7 +788,10 @@ export class ChatService {
         }),
       );
       // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست و ضرایب وب سرچ و تفکر
-      const attachmentTokens = calculateAttachmentTokens(attachments);
+      const taskMultipliers = typeof this.settings?.getTaskMultipliers === 'function'
+        ? await this.settings.getTaskMultipliers()
+        : {};
+      const attachmentTokens = calculateAttachmentTokens(attachments, taskMultipliers);
       const baseTokens = Math.ceil((content.length + full.length) / 4) + attachmentTokens;
       const searchMult = typeof this.settings?.getWebSearchMultiplier === 'function'
         ? await this.settings.getWebSearchMultiplier()
@@ -926,7 +967,10 @@ export class ChatService {
           }),
         );
         // محاسبه کل توکن مصرف‌شده شامل متن گفتگو به اضافه توکن‌های عکس‌ها و فایل‌های پیوست و ضرایب وب سرچ و تفکر
-        const attachmentTokens = calculateAttachmentTokens(attachments);
+        const taskMultipliers = typeof this.settings?.getTaskMultipliers === 'function'
+          ? await this.settings.getTaskMultipliers()
+          : {};
+        const attachmentTokens = calculateAttachmentTokens(attachments, taskMultipliers);
         const baseTokens = Math.ceil((content.length + full.length) / 4) + attachmentTokens;
         const searchMult = typeof this.settings?.getWebSearchMultiplier === 'function'
           ? await this.settings.getWebSearchMultiplier()

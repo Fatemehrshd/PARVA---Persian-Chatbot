@@ -154,9 +154,9 @@ async function handleFork() {
           type="button"
           @click="uiStore.toggleTheme"
           class="p-2 rounded-lg border border-border bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
-          :title="uiStore.theme === 'dark' ? 'حالت روشن' : 'حالت تیره'"
+          :title="uiStore.effectiveTheme === 'dark' ? 'حالت روشن' : 'حالت تیره'"
         >
-          <Moon v-if="uiStore.theme === 'dark'" :size="15" />
+          <Moon v-if="uiStore.effectiveTheme === 'dark'" :size="15" />
           <Sun v-else :size="15" />
         </button>
       </div>

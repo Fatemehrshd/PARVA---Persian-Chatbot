@@ -87,6 +87,16 @@ it('changePassword: verifies current, stores new bcrypt hash', async () => {
   expect(await bcrypt.compare('current123', stored.user.passwordHash)).toBe(false);
 });
 
+it('theme preference: GET returns the { preference } envelope; PATCH persists it', async () => {
+  const { svc, stored } = await makeProfile();
+  expect(await svc.getThemePreference('u1')).toEqual({ preference: null });
+  await svc.updateThemePreference('u1', 'dark');
+  expect(stored.user.themePreference).toBe('dark');
+  expect(await svc.getThemePreference('u1')).toEqual({ preference: 'dark' });
+  await svc.updateThemePreference('u1', null);
+  expect(await svc.getThemePreference('u1')).toEqual({ preference: null });
+});
+
 it('setAvatar: png ok -> stored, url built, OLD object removed; webp/exe/oversize/missing rejected; 503 propagates', async () => {
   const { svc, stored, puts, removes } = await makeProfile();
   stored.user.avatarKey = 'avatars/u1/old.png';

@@ -99,6 +99,43 @@ describe('AdminTable.vue Component', () => {
     expect(wrapper.text()).not.toContain('GPT-4o')
   })
 
+  it('searches and filters nested fields used by admin tables', async () => {
+    const wrapper = mount(AdminTable, {
+      props: {
+        columns: [
+          { key: 'user.email', label: 'ایمیل کاربر' },
+          { key: 'plan.name', label: 'طرح' },
+        ],
+        items: [
+          { id: '1', user: { email: 'ali@example.com' }, plan: { name: 'Pro' } },
+          { id: '2', user: { email: 'sara@example.com' }, plan: { name: 'Free' } },
+        ],
+        searchable: true,
+        defaultShowColumnFilters: true,
+      },
+    })
+
+    await wrapper.find('.search-text-input').setValue('sara')
+    await new Promise((resolve) => setTimeout(resolve, 260))
+    expect(wrapper.findAll('tbody tr.table-row')).toHaveLength(1)
+    expect(wrapper.text()).toContain('sara@example.com')
+  })
+
+  it('lets server-side tables open column filters from the toolbar', async () => {
+    const wrapper = mount(AdminTable, {
+      props: {
+        columns,
+        items,
+        searchable: true,
+        serverSide: true,
+      },
+    })
+
+    expect(wrapper.find('.column-filters-row').exists()).toBe(false)
+    await wrapper.get('[data-testid="toggle-column-filters"]').trigger('click')
+    expect(wrapper.find('.column-filters-row').exists()).toBe(true)
+  })
+
   it('supports column sorting on header click', async () => {
     const wrapper = mount(AdminTable, {
       props: {

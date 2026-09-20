@@ -20,12 +20,16 @@ export class AdminPaymentsController {
     @Query('limit') limit?: number,
     @Query('userId') userId?: string,
     @Query('status') status?: PaymentStatus,
+    @Query('search') search?: string,
+    @Query('searchField') searchField?: string,
   ) {
     return this.paymentsService.findAllForAdmin({
       page,
       limit,
       userId,
       status,
+      search,
+      searchField,
     });
   }
 }

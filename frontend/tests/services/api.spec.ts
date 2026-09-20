@@ -60,7 +60,7 @@ describe('Base API Client (api.ts)', () => {
     expect(result).toEqual({})
   })
 
-  it('throws ApiError with status and message when response is not ok', async () => {
+  it('throws ApiError with a Persian localized message when response is not ok', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 409,
@@ -71,7 +71,34 @@ describe('Base API Client (api.ts)', () => {
       })
     } as any)
 
-    await expect(request('/auth/signup', { method: 'POST' })).rejects.toThrow('Email is already registered')
+    // The raw English server message must be localized before reaching callers.
+    await expect(request('/auth/signup', { method: 'POST' })).rejects.toThrow(
+      'این نشانی ایمیل قبلاً ثبت شده است.'
+    )
+  })
+
+  it('replaces unknown non-Persian server messages with a generic Persian fallback', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({
+        statusCode: 500,
+        message: 'relation "users" does not exist',
+        error: 'Internal Server Error'
+      })
+    } as any)
+
+    // Unknown English/framework text → generic Persian fallback (never raw)
+    await expect(request('/anything')).rejects.toThrow('خطای غیرمنتظره‌ای رخ داد. لطفاً دوباره تلاش کنید.')
+  })
+
+  it('translates network-level failures into a Persian offline message', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+
+    await expect(request('/anything')).rejects.toMatchObject({
+      statusCode: 0,
+      message: expect.stringContaining('ارتباط با سرور برقرار نشد')
+    })
   })
 
   it('checkBackendHealth returns true when backend /health returns 200 ok', async () => {
@@ -94,5 +121,40 @@ describe('Base API Client (api.ts)', () => {
     const isHealthy = await checkBackendHealth(1000)
     expect(isHealthy).toBe(false)
   })
+
+  it('translates known English backend messages and never leaks unknown ones', async () => {
+    const { translateServerMessage } = await import('../../src/utils/errorMessages')
+
+    // Exact backend messages → Persian
+    expect(translateServerMessage('Resource not found')).toBe('منبع مورد نظر پیدا نشد.')
+    expect(translateServerMessage('Admin only')).toBe('این عملیات فقط برای مدیر سیستم مجاز است.')
+    expect(translateServerMessage('Email is already registered')).toBe('این نشانی ایمیل قبلاً ثبت شده است.')
+    expect(translateServerMessage('Selected AI model is currently disabled')).toBe(
+      'مدل انتخاب‌شده در حال حاضر غیرفعال است.'
+    )
+    expect(translateServerMessage('Internal server error')).toContain('خطای غیرمنتظره')
+
+    // Dynamic patterns
+    expect(translateServerMessage('Provider "OpenAI" already exists')).toContain('قبلاً ثبت شده')
+    expect(translateServerMessage("The model 'gpt-x' does not exist")).toContain('وجود ندارد')
+    expect(translateServerMessage('property foo should not exist')).toContain('مجاز نیست')
+
+    // Persian passes through untouched
+    expect(translateServerMessage('ایمیل یا رمز عبور اشتباه است')).toBe('ایمیل یا رمز عبور اشتباه است')
+
+    // Unknown English/framework text → generic Persian fallback (never raw)
+    expect(translateServerMessage('QueryFailedError: column does not exist')).toBe(
+      'خطای غیرمنتظره‌ای رخ داد. لطفاً دوباره تلاش کنید.'
+    )
+    expect(translateServerMessage('')).toBe('خطای غیرمنتظره‌ای رخ داد. لطفاً دوباره تلاش کنید.')
+    expect(translateServerMessage(undefined)).toBe('خطای غیرمنتظره‌ای رخ داد. لطفاً دوباره تلاش کنید.')
+
+    // Arrays are translated per-element and stay arrays (field-level mapping)
+    expect(translateServerMessage(['Resource not found', 'ایمیل الزامی است'])).toEqual([
+      'منبع مورد نظر پیدا نشد.',
+      'ایمیل الزامی است',
+    ])
+  })
 })
+
 

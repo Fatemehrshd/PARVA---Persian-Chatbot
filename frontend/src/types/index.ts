@@ -21,6 +21,7 @@ export interface UserProfile extends User {
   displayName: string | null
   username: string | null
   avatarUrl: string | null
+  themePreference?: 'dark' | 'light' | null
 }
 
 export interface UpdateProfileRequest {
@@ -241,6 +242,8 @@ export interface AdminUser extends User {
   periodUsedMessages?: number
   usageByType?: Record<string, number>
   usedCostUsd?: number
+  /** درصد باقی‌مانده مؤثر (min توکن و پیام) که بک‌اند محاسبه می‌کند؛ null = نامحدود */
+  remainingPercent?: number | null
 }
 
 export interface UpdateAdminUserRequest {
@@ -457,6 +460,8 @@ export interface UserEntitlements {
   effectiveTokenLimit: number | null
   effectiveMessageLimit: number | null
   limitSource: 'personal' | 'plan' | 'role' | 'global' | 'admin'
+  subscriptionExpired?: boolean
+  expiredPlanName?: string | null
   features: {
     webSearch: boolean
     thinking: boolean

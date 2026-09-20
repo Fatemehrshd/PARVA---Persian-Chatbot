@@ -61,14 +61,14 @@ const uiStore = useUiStore()
             <!-- Dark Theme Card -->
             <button
               type="button"
-              @click="uiStore.setTheme('dark')"
+              @click="uiStore.setUserThemePreference('dark')"
               :class="[
                 'theme-card group relative text-start flex flex-col rounded-xl border p-3 transition-all duration-200 cursor-pointer overflow-hidden',
-                uiStore.theme === 'dark'
+                uiStore.effectiveTheme === 'dark'
                   ? 'border-primary ring-2 ring-primary/40 bg-primary/[0.06] shadow-md shadow-primary/5'
                   : 'border-border/80 bg-secondary/30 hover:border-muted-foreground/40 hover:bg-secondary/50'
               ]"
-              :aria-pressed="uiStore.theme === 'dark'"
+              :aria-pressed="uiStore.effectiveTheme === 'dark'"
             >
               <!-- Mockup Graphic: Dark -->
               <div class="mockup-frame bg-[#0d0f18] border border-[#202336] rounded-lg p-2.5 mb-3 flex flex-col gap-1.5 shadow-inner select-none pointer-events-none">
@@ -123,7 +123,7 @@ const uiStore = useUiStore()
                 <div
                   :class="[
                     'w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors',
-                    uiStore.theme === 'dark'
+                    uiStore.effectiveTheme === 'dark'
                       ? 'bg-primary text-primary-foreground'
                       : 'border border-border text-transparent'
                   ]"
@@ -136,14 +136,14 @@ const uiStore = useUiStore()
             <!-- Light Theme Card -->
             <button
               type="button"
-              @click="uiStore.setTheme('light')"
+              @click="uiStore.setUserThemePreference('light')"
               :class="[
                 'theme-card group relative text-start flex flex-col rounded-xl border p-3 transition-all duration-200 cursor-pointer overflow-hidden',
-                uiStore.theme === 'light'
+                uiStore.effectiveTheme === 'light'
                   ? 'border-primary ring-2 ring-primary/40 bg-primary/[0.06] shadow-md shadow-primary/5'
                   : 'border-border/80 bg-secondary/30 hover:border-muted-foreground/40 hover:bg-secondary/50'
               ]"
-              :aria-pressed="uiStore.theme === 'light'"
+              :aria-pressed="uiStore.effectiveTheme === 'light'"
             >
               <!-- Mockup Graphic: Light -->
               <div class="mockup-frame bg-[#F5F3EE] border border-[#ded8c4] rounded-lg p-2.5 mb-3 flex flex-col gap-1.5 shadow-inner select-none pointer-events-none">
@@ -198,7 +198,7 @@ const uiStore = useUiStore()
                 <div
                   :class="[
                     'w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors',
-                    uiStore.theme === 'light'
+                    uiStore.effectiveTheme === 'light'
                       ? 'bg-primary text-primary-foreground'
                       : 'border border-border text-transparent'
                   ]"
@@ -208,6 +208,21 @@ const uiStore = useUiStore()
               </div>
             </button>
 
+          </div>
+
+          <!-- Reset to default -->
+          <div class="flex items-center justify-between gap-3 mt-1">
+            <span class="text-xs text-muted-foreground">
+              این تنظیم فقط برای حساب کاربری شما ذخیره می‌شود.
+            </span>
+            <button
+              v-if="uiStore.userThemePreference"
+              type="button"
+              class="text-xs text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
+              @click="uiStore.clearUserThemePreference"
+            >
+              بازگشت به حالت پیش‌فرض
+            </button>
           </div>
         </div>
 

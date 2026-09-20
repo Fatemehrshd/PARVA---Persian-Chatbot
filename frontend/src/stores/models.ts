@@ -89,7 +89,7 @@ export const useModelsStore = defineStore('models', () => {
         }
       }
     } catch (err: any) {
-      error.value = err?.message || 'Failed to fetch models'
+      error.value = err?.message || 'خطا در دریافت فهرست مدل‌ها'
       // Keep initial fallback models for offline/unauthenticated views
     } finally {
       loading.value = false

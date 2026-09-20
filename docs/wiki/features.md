@@ -163,6 +163,50 @@
   - ستون اختصاصی هویت در جدول: آواتار با حروف اختصاری نام، نام نمایشی، ایمیل، برچسب نقش کاربر (`مدیر` / `کاربر` / `سیستم`) و دکمه جستجوی یک‌کلیکه لاگ‌های کاربر.
   - کارت جامع هویت عامل در مودال جزئیات (Actor Card) با نمایش نام، ایمیل (همراه دکمه کپی)، شناسه یکتای کاربر (همراه دکمه کپی)، نقش، IP و User-Agent.
 
+## Load Testing Tooling (k6)
+- Added `perf/k6/load-test.js` — a k6 v2 stress test for the backend: a ramping-VU
+  scenario exercising auth (login-or-signup in `setup()`) + the conversation
+  lifecycle (`POST`/`GET`/`DELETE /chat/conversations`). Safe by default: it does
+  NOT call any upstream LLM and only touches the auth guard + PostgreSQL rows.
+- Opt-in `RUN_CHAT=true` also sends `POST .../messages` in JSON-fallback mode
+  (`Accept: application/json`). ⚠️ With a real provider configured this incurs real
+  token cost + provider rate limits (~12 s/message at 25 ms/token pacing); prefer
+  the offline echo (blank the provider's `apiKey`) for cost-free chat load tests.
+- SSE caveat: k6 buffers the whole response, so the raw `text/event-stream`
+  endpoint can't be measured directly — the JSON-fallback path still exercises the
+  full `ChatService.generate()` pipeline.
+- Docs: `perf/k6/README.md` + `docs/wiki/load-testing-with-k6.md`.
+- Validated against the live dev backend: 3 VUs / 6 iterations → 0% `http_req_failed`,
+  ~42 ms create / 6 ms list / 8 ms delete (p95 ~85 ms).
+
+## مدیریت سراسری خطاها (Global Error Handling)
+- همه‌ی خطاهای HTTP از یک نقطه‌ی واحد (`frontend/src/services/api.ts`) عبور می‌کنند و قبل از رسیدن به هر کامپوننتی، از `translateServerMessage` در `frontend/src/utils/errorMessages.ts` فارسی‌سازی می‌شوند.
+- **هیچ پیام خام سروری/فریم‌ورکی به کاربر نشان داده نمی‌شود**: هر پیام ناشناخته‌ی غیرفارسی به یک پیام عمومی فارسی تبدیل می‌شود.
+- خطاهای شبکه (قطع اینترنت/سرور) با پیام فارسی مشخص و `statusCode: 0` گزارش می‌شوند.
+- در بک‌اند، فیلتر سراسری `HttpExceptionFilter` + فایل `messages.fa.ts` پیام‌های اعتبارسنجی را فارسی می‌کنند؛ خطاهای ۵۰۰ هرگز شامل stack یا جزئیات دیتابیس نیستند (فقط در لاگ سرور ثبت می‌شوند).
+- **ولیدیشن فرم‌ها بدون حباب native مرورگر**: فرم‌های ورود/ثبت‌نام و تغییر ایمیل `novalidate` دارند؛ اعتبارسنجی ایمیل (وجود `@` و نقطه در دامنه) با `isValidEmail` در `frontend/src/utils/validators.ts` سمت کلاینت انجام و نتیجه به‌صورت پیام فارسی inline نشان داده می‌شود.
+- تست‌های پوشش: `frontend/tests/services/api.spec.ts` (ترجمه، fallback، خطای شبکه) و `frontend/tests/LoginView.spec.ts` (خطای inline ایمیل نامعتبر).
+
+## Per-User Theme Preference (تم اختصاصی به ازای هر کاربر)
+- هر کاربر می‌تواند تم خود را مستقل از سایر کاربران و مدیر سیستم انتخاب کند (تیره یا روشن).
+- تنظیم تم به صورت لوکال در `localStorage` (کلید `theme`) و همچنین به صورت اختصاصی در دیتابیس (ستون `themePreference` در جدول `users`) ذخیره می‌شود.
+- اندپوینت‌های جدید:
+  - `GET /api/v1/users/me/theme` — دریافت تم اختصاصی کاربر فعلی؛ پاسخ به شکل پاکت `{ preference: 'dark' | 'light' | null }` است (کلاینت فرانت‌اند هر دو شکل پاکت و مقدار خام را می‌پذیرد).
+  - `PATCH /api/v1/users/me/theme` — ذخیره یا پاک کردن تم اختصاصی (مقدار `null` = بازگشت به پیش‌=default).
+- اولویت نمایش: **تم اختصاصی کاربر** > تنظیم محلی (`localStorage`) > پیش‌=default سیستم (روشن).
+- در فرانت‌اند:
+  - استور `ui` دو فیلد جدید دارد: `userThemePreference` و `effectiveTheme` (کامپیوت شده).
+  - هنگام ورود/roudock هویت، `syncUserThemePreference` به صورت خودکار تم را از بک‌اند بارگذاری و اعمال می‌کند.
+  - مودال تنظیمات (`SettingsModal.vue`) و منوی پروفایل (`ProfileMenu.vue`) اکنون از `effectiveTheme` استفاده می‌کنند و کلیک روی کارت تم، تم را به صورت اختصاصی روی حساب کاربر ذخیره می‌کند.
+- **پایداری با رفرش و استقلال کامل بین کاربران:**
+  - با هر رفرش صفحه، `refreshProfile` در استور `auth` تم اختصاصی کاربر را دوباره از بک‌اند سینک می‌کند (`themeSynced` در هر سشن جدید re-arm می‌شود)؛ بنابراین تم با رفرش تغییر نمی‌کند.
+  - هنگام خروج/ورود، `resetThemeSession` تم را به پیش‌فرض سراسری (روشن) برمی‌گرداند تا تم یک کاربر هرگز به کاربر بعدی نشت نکند.
+- **صفحه لاگین همیشه روشن است:**
+  - استور `ui` فلگ `authPageLightMode` دارد که `effectiveTheme` را روی روشن قفل می‌کند؛ `LoginView.vue` آن را در `onMounted` فعال و در `onUnmounted` غیرفعال می‌کند.
+  - این override صرفاً view-local است: چیزی در `localStorage` نوشته نمی‌شود و چیزی به بک‌اند پرسسست نمی‌شود؛ تم کاربر لاگین‌شده‌ای که موقتاً به `/login` سر بزند نیز دست‌نخورده باقی می‌ماند.
+- مهاجرت `1762400000000-AddUserThemePreference.ts`: افزودن ستون nullable `themePreference` به جدول `users`.
+- تست‌های رفتاری: `frontend/tests/ThemePerUser.spec.ts` (پیش‌فرض روشن، استقلال دو کاربر، پایداری با رفرش، همیشه‌روشن بودن صفحه لاگین).
+
 ## درگاه پرداخت زرین‌پال (سندباکس رسمی ایران) و سیستم کدهای تخفیف (Zarinpal Sandbox Gateway & Coupons)
 - **درگاه پرداخت رسمی زرین‌پال در حالت سندباکس (`ZarinpalPaymentGateway`)**:
   - اتصال به وب‌سرویس REST v4 رسمی زرین‌پال (`https://sandbox.zarinpal.com/pg/v4/payment/request.json` و `verify.json` و `StartPay/{authority}`).
@@ -193,6 +237,7 @@
     - انتخاب تاریخ و ساعت انقضای کوپن بر اساس تقویم جلالی (شمسی) با دقت محاسباتی ۱۰۰٪ بدون نیاز به کتابخانه‌های سنگین خارجی.
     - پشتیبانی کامل از تم‌های روشن و تاریک (Light & Dark Themes) با هماهنگی کامل متغیرهای رنگی سیستم (Obsidian Dark و Warm Cream Light).
     - قابلیت انتخاب ماه، سال (از ۱۴۰۲ تا ۱۴۱۵)، روزهای ماه بر اساس قوانین سال‌های کبیسه، ساعت و دقیقه، دکمهٔ «امروز» و گزینهٔ «بدون انقضا».
+    - هر مدل که به‌عنوان مدل پیش‌فرض سامانه انتخاب شود، به‌صورت خودکار به پلن رایگان نیز متصل می‌شود تا کاربران عادی و کاربران بازگشته از اشتراک منقضی‌شده بتوانند از آن استفاده کنند.
 
 ## Chat Snapshot Share (اشتراک‌گذاری گفتگو با پیوند عمومی و منجمد)
 - **موتور اسنپ‌شات منجمد با ذخیره‌سازی JSONB (`Immutable Snapshot Engine`)**:
@@ -210,6 +255,17 @@
   - **دسترسی از سایدبار**: حذف کامل هدر بالای صفحه چت جهت ایجاد یک نمای مینیمال و تمرکز بر گفتگو؛ دکمهٔ «اشتراک‌گذاری گفتگو» به صورت انحصاری در منوی سه‌نقطهٔ هر گفتگو در سایدبار (`AppSidebar.vue`) تعبیه شده است.
   - **صفحه عمومی چت منجمد (`SharedChatView.vue`)**: صفحه مستقل و سبک در مسیر `/share/:shareCode` با هدر اختصاصی برند پروا، بنر هشدار منجمد بودن گفتگو، رندرینگ کامل پیام‌ها (مارک‌داون، فرمول‌های ریاضی، کدها، استدلال و منابع جستجو)، تغییر تم روشن/تیره و دکمهٔ «ادامه این گفتگو در پروا».
 
+## Admin Search & Commercial Data Grid Fixes
+- **رفع خطای جستجوی فیلدهای تو در تو در پنل ادمین (`Nested Admin Search Fix`)**:
+  - جست‌وجوهای بخش‌های `AdminSubscriptionsSection`, `AdminPaymentsSection` و `AdminCouponsSection` با استفاده از فیلدهای تو در تو مانند `user.email`, `plan.name`, `refId` و `authority` هماهنگ شدند.
+  - ورودی `searchField` به‌صورت صریح همراه با `search` به بک‌اند ارسال می‌شود تا جدول‌های ادمین دقیقاً روی همان فیلد منتخب فیلتر کنند.
+  - این اصلاح همان الگوی قبلی ساخته‌شده برای `AdminTable.vue` را ادامه می‌دهد: جست‌وجو روی فیلدهای تو در تو، انتخاب فیلد از منوی dropdown، و نگه‌داشتن فیلتر وضعیت/دست‌ساز بدون حذف رفتار اصلی جست‌وجو.
+- **پشتیبانی سرور-ساید برای جستجوی تراکنش‌های مالی (`payments admin search`)**:
+  - `GET /admin/payments` اکنون پارامترهای `search` و `searchField` را می‌پذیرد و روی فیلدهای مجاز `user.displayName`, `user.email`, `plan.name`, `status`, `refId` و `authority` اعمال می‌کند.
+  - این مسیر همچنان `userId` و `status` را حفظ می‌کند و در صورت عدم انتخاب فیلد خاص، روی مجموعه‌ای کامل از فیلدهای قابل جست‌وجو اجرا می‌شود.
+- **رعایت فیلتر وضعیت در بخش کدهای تخفیف**:
+  - `AdminCouponsSection` با استفاده از `isActive` و جست‌وجوی متن، دقیقاً رفتار مورد انتظار نسخهٔ کاربر را حفظ می‌کند و فیلتر «همه/فعال/غیرفعال» با جست‌وجوی کد یا توضیحات در کنار هم عمل می‌کنند.
+
 ## Subscription & Commercialization Platform (Task 44 / فاز تجاری‌سازی و مدیریت اشتراک‌ها)
 - **سیستم مدیریت پلن‌های اشتراک (`Subscription Plans`)**:
   - جدول‌های دیتابیس `subscription_plans`, `plan_models`, `subscriptions`, `payments`, `audit_logs`.
@@ -217,6 +273,7 @@
   - امکان اتصال و اختصاص مدل‌های هوش مصنوعی مشخص به هر پلن از طریق جدول واسط `plan_models`.
   - تعیین سقف سهمیه توکن و پیام، و پرچم‌های دسترسی به قابلیت‌ها (`webSearch`, `thinking`, `document`, `customPrompts`) در سطح پلن.
   - انقضای تنبل (`Lazy Expiration`): بررسی تاریخ انقضای اشتراک در هنگام احراز هویت و بررسی سهمیه؛ اشتراک‌های منقضی‌شده به صورت خودکار به وضعیت `expired` منتقل شده و کاربر به پلن پیش‌فرض سیستم بازمی‌گردد.
+  - اطلاع‌رسانی انقضای اشتراک: entitlement وضعیت `subscriptionExpired` و نام پلن قبلی را به فرانت‌اند اعلام می‌کند؛ کاربر با حفظ حساب عادی به پلن رایگان برمی‌گردد و امکانات Pro/Enterprise تا خرید مجدد غیرفعال می‌مانند.
 - **حل قطعی تداخل اشتراک با نقش‌ها (Zero-Conflict RBAC vs Subscription)**:
   - تفکیک مطلق حیطه مسئولیت:
     - **نقش‌های سیستم (RBAC)** نظیر `admin` و `user` صرفاً ناظر بر اختیارات مدیریتی و سیستمی هستند (دسترسی به پنل مدیریت، امکان ایجاد/ویرایش مدل‌ها و کاربران). نقش `admin` همواره از تمام محدودیت‌های توکنی و قفل مدل‌ها عبور می‌کند.

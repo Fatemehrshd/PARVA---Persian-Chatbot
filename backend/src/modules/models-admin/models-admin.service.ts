@@ -7,6 +7,8 @@ import { maskSecret } from './mask-secret';
 import { OpenAiCompatForwarder } from '../ai/openai-compat.forwarder';
 import { SettingsService, resolveModelAccess } from '../admin/settings.service';
 import { EntitlementService } from '../subscriptions/entitlement.service';
+import { PlanModel } from '../subscriptions/plan-model.entity';
+import { SubscriptionPlan } from '../subscriptions/subscription-plan.entity';
 
 @Injectable()
 export class ModelsAdminService {
@@ -16,6 +18,8 @@ export class ModelsAdminService {
     @Optional() private forwarder?: OpenAiCompatForwarder,
     @Optional() private settings?: SettingsService,
     @Optional() private entitlements?: EntitlementService,
+    @Optional() @InjectRepository(PlanModel) private planModelRepo?: Repository<PlanModel>,
+    @Optional() @InjectRepository(SubscriptionPlan) private planRepo?: Repository<SubscriptionPlan>,
   ) {}
 
   private maskApiKey(m: AiModel): AiModel {
@@ -233,7 +237,23 @@ export class ModelsAdminService {
     await this.repo.update({ isDefault: true }, { isDefault: false });
     m.isDefault = true;
     const saved = await this.repo.save(m);
+    await this.ensureDefaultModelInFreePlan(m.id);
     return this.maskApiKey(saved);
+  }
+
+  private async ensureDefaultModelInFreePlan(modelId: string): Promise<void> {
+    if (!this.planModelRepo || !this.planRepo) return;
+    const freePlan = await this.planRepo.findOne({
+      where: { slug: 'free', isDefault: true, isActive: true, isDeleted: false },
+    });
+    if (!freePlan) return;
+    const existing = await this.planModelRepo.findOne({
+      where: { planId: freePlan.id, modelId },
+    });
+    if (existing) return;
+    await this.planModelRepo.save(
+      this.planModelRepo.create({ planId: freePlan.id, modelId }),
+    );
   }
 
   async getDefault(): Promise<AiModel | null> {

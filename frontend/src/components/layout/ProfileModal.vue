@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useFormSubmit } from '../../composables/useFormSubmit'
+import { isValidEmail } from '../../utils/validators'
 import { profileService } from '../../services/profile.service'
 import { paymentService } from '../../services/payment.service'
 import { useAuthStore } from '../../stores/auth'
@@ -124,7 +125,14 @@ const profileSubmit = useFormSubmit(
 )
 
 const emailSubmit = useFormSubmit(
-  () => profileService.changeEmail({ email: email.value.trim().toLowerCase(), password: emailPassword.value }),
+  async () => {
+    // Client-side check (mirrors the backend @IsEmail rule) so the Persian
+    // inline/toast message appears instead of the browser's native bubble.
+    if (!isValidEmail(email.value)) {
+      throw new Error('لطفاً یک ایمیل معتبر وارد کنید.')
+    }
+    return profileService.changeEmail({ email: email.value.trim().toLowerCase(), password: emailPassword.value })
+  },
   {
     successMessage: 'ایمیل با موفقیت تغییر کرد.',
     showErrorToast: true,
@@ -290,7 +298,7 @@ watch(
             </div>
           </form>
 
-          <form v-else-if="activeTab === 'email'" id="form-email" class="profile-form" @submit.prevent="emailSubmit.submit()">
+          <form v-else-if="activeTab === 'email'" id="form-email" class="profile-form" @submit.prevent="emailSubmit.submit()" novalidate>
             <div class="profile-tab-intro"><Mail :size="20" /><span>برای تغییر ایمیل، رمز عبور فعلی لازم است.</span></div>
             <div class="profile-field">
               <Label for="profile-email">ایمیل جدید</Label>

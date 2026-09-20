@@ -66,6 +66,45 @@ describe('LoginView.vue', () => {
     expect(wrapper.text()).toMatch(/ایمیل معتبر|valid email/i)
   })
 
+  it('shows the inline Persian error for an email missing the @ (no native browser bubble)', async () => {
+    const wrapper = mount(LoginView, {
+      global: {
+        stubs: {
+          'router-link': true,
+        },
+      },
+    })
+
+    // The form must suppress native HTML5 validation so the browser's English
+    // bubble ("Please include an '@'...") can never appear.
+    expect(wrapper.find('form').attributes('novalidate')).toBeDefined()
+
+    const emailInput = wrapper.find('input[type="email"]')
+    await emailInput.setValue('adminexample.com')
+
+    await wrapper.find('form').trigger('submit.prevent')
+    expect(wrapper.text()).toMatch(/ایمیل معتبر/)
+    // No auth request must have been attempted for an invalid email.
+    expect(pushMock).not.toHaveBeenCalled()
+  })
+
+  it('shows the same inline Persian error for an email missing the domain dot', async () => {
+    const wrapper = mount(LoginView, {
+      global: {
+        stubs: {
+          'router-link': true,
+        },
+      },
+    })
+
+    const emailInput = wrapper.find('input[type="email"]')
+    await emailInput.setValue('admin@example')
+
+    await wrapper.find('form').trigger('submit.prevent')
+    expect(wrapper.text()).toMatch(/ایمیل معتبر/)
+    expect(pushMock).not.toHaveBeenCalled()
+  })
+
   it('disables inputs and button with loading spinner during authentication submission', async () => {
     const wrapper = mount(LoginView, {
       global: {

@@ -29,6 +29,7 @@ const sortBy = ref<string | undefined>(undefined)
 const sortOrder = ref<'ASC' | 'DESC' | undefined>(undefined)
 const columnFilters = ref<Record<string, string>>({})
 const tableSearchQuery = ref(props.searchQuery || '')
+const searchField = ref('')
 
 const isViewerModalOpen = ref(false)
 const inspectingConversation = ref<AdminConversationDetail | null>(null)
@@ -36,7 +37,7 @@ const isLoadingDetail = ref(false)
 
 const chatColumns: TableColumn[] = [
   { key: 'title', label: 'عنوان گفتگو', width: '260px', sortable: true },
-  { key: 'user', label: 'کاربر', width: '220px', sortable: true },
+  { key: 'userDisplayName', label: 'کاربر', width: '220px', sortable: true },
   { key: 'messageCount', label: 'تعداد پیام‌ها', width: '130px', sortable: true },
   { key: 'updatedAt', label: 'تاریخ آخرین فعالیت', width: '160px', sortable: true },
   { key: 'actions', label: 'عملیات', align: 'center', width: '110px', sortable: false },
@@ -52,6 +53,7 @@ async function loadConversations() {
       limit: pageSize.value,
     }
     if (combinedSearch) params.search = combinedSearch
+    if (searchField.value) params.searchField = searchField.value
     if (sortBy.value) {
       params.sortBy = sortBy.value
       params.sortOrder = sortOrder.value
@@ -92,8 +94,9 @@ function handlePageSizeChange(newSize: number) {
   loadConversations()
 }
 
-function handleSearch(query: string) {
+function handleSearch(query: string, field?: string) {
   tableSearchQuery.value = query
+  searchField.value = field || ''
   page.value = 1
   loadConversations()
 }
@@ -158,6 +161,12 @@ onMounted(loadConversations)
       :totalItems="totalItems"
       :pageSizes="[10, 25, 50, 100]"
       :searchQuery="tableSearchQuery"
+      :searchFields="[
+        { key: 'title', label: 'عنوان گفتگو' },
+        { key: 'userDisplayName', label: 'نام کاربر' },
+        { key: 'userEmail', label: 'ایمیل کاربر' },
+        { key: 'modelId', label: 'شناسه مدل' },
+      ]"
       @update:page="handlePageChange"
       @update:pageSize="handlePageSizeChange"
       @search="handleSearch"

@@ -256,4 +256,46 @@ describe('Subscription & Commercialization UI Flow', () => {
     expect(wrapper.text()).toContain('شما دارای اشتراک فعال «طرح حرفه‌ای» هستید')
     expect(wrapper.text()).toContain('غیرقابل تغییر')
   })
+
+  it('informs the user that an expired paid subscription fell back to the free plan', async () => {
+    const { useAuthStore } = await import('../src/stores/auth')
+    const auth = useAuthStore()
+    auth.user = { id: 'u-1', email: 'test@example.com', role: 'user' } as any
+
+    vi.mocked(subscriptionService.getPublicPlans).mockResolvedValue([
+      {
+        id: 'p-free', slug: 'free', name: 'طرح رایگان', description: 'طرح پایه', price: '0',
+        currency: 'IRR', durationDays: 0, tokenQuota: 0, messageQuota: null, resetHours: 6,
+        features: { webSearch: false, thinking: false, document: false }, isActive: true,
+        isDefault: true, sortOrder: 0, createdAt: '', updatedAt: '',
+      },
+      {
+        id: 'p-pro', slug: 'pro', name: 'طرح حرفه‌ای', description: 'طرح قبلی', price: '500000',
+        currency: 'IRR', durationDays: 30, tokenQuota: 2000000, messageQuota: 500, resetHours: 12,
+        features: { webSearch: true, thinking: true, document: true }, isActive: true,
+        isDefault: false, sortOrder: 1, createdAt: '', updatedAt: '',
+      },
+    ])
+    vi.mocked(subscriptionService.getCurrentSubscription).mockResolvedValue({
+      activeSubscription: null,
+      entitlements: {
+        userId: 'u-1', role: 'user', isAdmin: false, plan: {
+          id: 'p-free', slug: 'free', name: 'طرح رایگان', price: '0', currency: 'IRR',
+          durationDays: 0, tokenQuota: 0, messageQuota: null, resetHours: 6,
+          features: { webSearch: false, thinking: false, document: false }, isActive: true,
+          isDefault: true, sortOrder: 0, createdAt: '', updatedAt: '',
+        },
+        hasActiveSubscription: false, effectiveTokenLimit: 50000, effectiveMessageLimit: null,
+        limitSource: 'global', features: { webSearch: false, thinking: false, document: false, maxFileSizeMb: 25 },
+        allowedModelIds: ['model-public'], subscriptionExpired: true, expiredPlanName: 'طرح حرفه‌ای',
+      },
+      history: [],
+    })
+
+    const wrapper = mount(SubscriptionView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('اشتراک «طرح حرفه‌ای» شما به پایان رسیده است')
+    expect(wrapper.text()).toContain('حساب شما به طرح رایگان برگشته است')
+  })
 })

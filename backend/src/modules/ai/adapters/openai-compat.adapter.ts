@@ -46,12 +46,8 @@ export class ThinkTagStreamParser {
   private inThinking = false;
   private pendingBuffer = '';
 
-  // Both open-tag variants map to the same close-tag logic with different lengths
   private readonly OPEN_TAGS = ['<think>', '<thought>'];
-  private readonly CLOSE_TAGS: Record<string, string> = {
-    '<think>': '</think>',
-    '<thought>': '</thought>',
-  };
+  private readonly CLOSE_TAGS = ['</think>', '</thought>'];
   private activeOpenTag = '';
 
   feedContent(chunk: string): StreamChunk[] {
@@ -62,14 +58,17 @@ export class ThinkTagStreamParser {
 
     while (text.length > 0) {
       if (!this.inThinking) {
-        // Find the earliest opening tag
+        // Find the earliest opening tag (case-insensitive)
         let earliest = -1;
         let earliestTag = '';
+        let matchedTagLen = 0;
+        const lowerText = text.toLowerCase();
         for (const tag of this.OPEN_TAGS) {
-          const idx = text.indexOf(tag);
+          const idx = lowerText.indexOf(tag);
           if (idx !== -1 && (earliest === -1 || idx < earliest)) {
             earliest = idx;
             earliestTag = tag;
+            matchedTagLen = tag.length;
           }
         }
 
@@ -79,7 +78,7 @@ export class ThinkTagStreamParser {
           }
           this.inThinking = true;
           this.activeOpenTag = earliestTag;
-          text = text.slice(earliest + earliestTag.length);
+          text = text.slice(earliest + matchedTagLen);
         } else {
           // Check for partial match of any open tag at end of text
           const partialMatch = this.getPartialMultiTagMatch(text, this.OPEN_TAGS);
@@ -96,17 +95,27 @@ export class ThinkTagStreamParser {
           }
         }
       } else {
-        const closeTag = this.CLOSE_TAGS[this.activeOpenTag] || '</think>';
-        const endIdx = text.indexOf(closeTag);
-        if (endIdx !== -1) {
-          if (endIdx > 0) {
-            out.push({ type: 'reasoning', text: text.slice(0, endIdx) });
+        // Close on ANY recognized close tag (case-insensitive)
+        let earliestEnd = -1;
+        let matchedCloseLen = 0;
+        const lowerText = text.toLowerCase();
+        for (const tag of this.CLOSE_TAGS) {
+          const idx = lowerText.indexOf(tag);
+          if (idx !== -1 && (earliestEnd === -1 || idx < earliestEnd)) {
+            earliestEnd = idx;
+            matchedCloseLen = tag.length;
+          }
+        }
+
+        if (earliestEnd !== -1) {
+          if (earliestEnd > 0) {
+            out.push({ type: 'reasoning', text: text.slice(0, earliestEnd) });
           }
           this.inThinking = false;
           this.activeOpenTag = '';
-          text = text.slice(endIdx + closeTag.length);
+          text = text.slice(earliestEnd + matchedCloseLen);
         } else {
-          const partialMatch = this.getPartialTagMatch(text, closeTag);
+          const partialMatch = this.getPartialMultiTagMatch(text, this.CLOSE_TAGS);
           if (partialMatch > 0) {
             const emitLen = text.length - partialMatch;
             if (emitLen > 0) {
@@ -133,9 +142,11 @@ export class ThinkTagStreamParser {
   }
 
   private getPartialTagMatch(text: string, tag: string): number {
-    const maxCheck = Math.min(text.length, tag.length - 1);
+    const lowerText = text.toLowerCase();
+    const lowerTag = tag.toLowerCase();
+    const maxCheck = Math.min(lowerText.length, lowerTag.length - 1);
     for (let len = maxCheck; len >= 1; len--) {
-      if (text.endsWith(tag.slice(0, len))) {
+      if (lowerText.endsWith(lowerTag.slice(0, len))) {
         return len;
       }
     }

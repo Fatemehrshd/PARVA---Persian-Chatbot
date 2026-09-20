@@ -70,8 +70,9 @@ export class OpenAiCompatForwarder {
     const req = this.adapter.buildRequest({ target, messages, options });
     const url = req.url;
 
-    const connectTimeoutMs = options?.connectTimeoutMs ?? 35000;
-    const stallTimeoutMs = options?.stallTimeoutMs ?? 25000;
+    const connectTimeoutMs = options?.connectTimeoutMs ?? 15000;
+    const defaultStall = options?.useThinking ? 35000 : 15000;
+    const stallTimeoutMs = options?.stallTimeoutMs ?? defaultStall;
 
     const connectAbortCtrl = new AbortController();
     let timedOutReason: string | null = null;
@@ -128,9 +129,13 @@ export class OpenAiCompatForwarder {
 
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
-      throw new BadGatewayException(
-        `AI provider "${target.apiIdentifier}" returned ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`,
-      );
+      let friendly = `AI provider "${target.apiIdentifier}" returned ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`;
+      if (res.status === 503 || detail.toLowerCase().includes('high demand') || detail.includes('UNAVAILABLE')) {
+        friendly = 'با عرض پوزش، به دلیل ترافیک بالای مدل هوش مصنوعی در این لحظه، لطفاً چند لحظه دیگر مجدداً پیام خود را ارسال فرمایید.';
+      } else if (res.status === 429 || detail.toLowerCase().includes('quota') || detail.toLowerCase().includes('rate limit')) {
+        friendly = 'سقف مجاز استفاده از این مدل به پایان رسیده است یا ترافیک بیش از حد مجاز است. لطفاً کمی بعد تلاش فرمایید.';
+      }
+      throw new BadGatewayException(friendly);
     }
     if (!res.body) {
       throw new BadGatewayException('AI provider returned an empty response body');
@@ -140,6 +145,29 @@ export class OpenAiCompatForwarder {
     const decoder = new TextDecoder();
     let buf = '';
     let emitted = false;
+    let gotDone = false;
+    let hasContentChunk = false;
+    let rawNonDataBuf = '';
+
+    const parseUpstreamError = (errObj: any): string => {
+      const rawMsg = typeof errObj === 'string' ? errObj : (errObj?.message || JSON.stringify(errObj));
+      const isHighDemand =
+        errObj?.code === 503 ||
+        rawMsg.toLowerCase().includes('high demand') ||
+        errObj?.status === 'UNAVAILABLE';
+      const isQuota =
+        errObj?.code === 429 ||
+        rawMsg.toLowerCase().includes('quota') ||
+        rawMsg.toLowerCase().includes('rate limit') ||
+        rawMsg.toLowerCase().includes('resource has been exhausted');
+      if (isHighDemand) {
+        return 'با عرض پوزش، به دلیل ترافیک بالای مدل هوش مصنوعی در این لحظه، لطفاً چند لحظه دیگر مجدداً پیام خود را ارسال فرمایید.';
+      }
+      if (isQuota) {
+        return 'سقف مجاز استفاده از این مدل به پایان رسیده است یا ترافیک بیش از حد مجاز است. لطفاً کمی بعد تلاش فرمایید.';
+      }
+      return `خطا در ارتباط با مدل هوش مصنوعی: ${rawMsg}`;
+    };
 
     const parser = new ThinkTagStreamParser();
     try {
@@ -173,9 +201,25 @@ export class OpenAiCompatForwarder {
         while ((idx = buf.indexOf('\n')) >= 0) {
           const line = buf.slice(0, idx).trim();
           buf = buf.slice(idx + 1);
-          if (!line.startsWith('data:')) continue;
+          if (!line.startsWith('data:')) {
+            // Buffer non-data lines to capture multi-line JSON error payloads from upstream
+            if (line) {
+              rawNonDataBuf += line + '\n';
+              try {
+                const rawParsed = JSON.parse(rawNonDataBuf.trim());
+                const errObj = Array.isArray(rawParsed) ? rawParsed[0]?.error : rawParsed?.error;
+                if (errObj) {
+                  throw new BadGatewayException(parseUpstreamError(errObj));
+                }
+              } catch (e) {
+                if (e instanceof BadGatewayException) throw e;
+              }
+            }
+            continue;
+          }
           const payload = line.slice(5).trim();
           if (payload === '[DONE]') {
+            gotDone = true;
             const flushed = parser.flush();
             for (const chunk of flushed) {
               if (chunk.type === 'reasoning') {
@@ -183,16 +227,20 @@ export class OpenAiCompatForwarder {
                 yield { reasoning: chunk.text };
               } else if (chunk.type === 'content') {
                 emitted = true;
+                hasContentChunk = true;
                 yield chunk.text;
               }
             }
             return;
           }
-          let parsed: unknown;
+          let parsed: any;
           try {
             parsed = JSON.parse(payload);
           } catch {
             continue; // keep-alives / partial frames from the upstream
+          }
+          if (parsed?.error) {
+            throw new BadGatewayException(parseUpstreamError(parsed.error));
           }
           const chunks = this.adapter.parseStreamChunk(parsed, parser);
           for (const chunk of chunks) {
@@ -201,10 +249,32 @@ export class OpenAiCompatForwarder {
               yield { reasoning: chunk.text };
             } else if (chunk.type === 'content') {
               emitted = true;
+              hasContentChunk = true;
               yield chunk.text;
             }
           }
         }
+      }
+
+      if (rawNonDataBuf.trim()) {
+        try {
+          const rawParsed = JSON.parse(rawNonDataBuf.trim());
+          const errObj = Array.isArray(rawParsed) ? rawParsed[0]?.error : rawParsed?.error;
+          if (errObj) {
+            throw new BadGatewayException(parseUpstreamError(errObj));
+          }
+        } catch (e) {
+          if (e instanceof BadGatewayException) throw e;
+        }
+      }
+
+      // If the provider terminated the connection mid-stream without [DONE],
+      // and only reasoning was ever emitted (never transitioning to content),
+      // that is a premature connection drop (e.g. 503 high demand spike).
+      if (!gotDone && !hasContentChunk && !options?.signal?.aborted) {
+        throw new BadGatewayException(
+          'با عرض پوزش، به دلیل ترافیک بالای مدل هوش مصنوعی در این لحظه، لطفاً چند لحظه دیگر مجدداً پیام خود را ارسال فرمایید.',
+        );
       }
 
       const flushed = parser.flush();
@@ -214,6 +284,7 @@ export class OpenAiCompatForwarder {
           yield { reasoning: chunk.text };
         } else if (chunk.type === 'content') {
           emitted = true;
+          hasContentChunk = true;
           yield chunk.text;
         }
       }
@@ -223,8 +294,9 @@ export class OpenAiCompatForwarder {
       }
     }
 
-    if (!emitted) {
+    if (!emitted && !options?.signal?.aborted) {
       this.logger.warn(`Provider "${target.apiIdentifier}" completed without any content`);
+      throw new BadGatewayException('مدل هوش مصنوعی هیچ پاسخی ارسال نکرد. لطفاً مجدداً تلاش فرمایید.');
     }
   }
 
@@ -237,6 +309,8 @@ export class OpenAiCompatForwarder {
     const url = target.baseUrl.endsWith('/chat/completions')
       ? target.baseUrl
       : `${target.baseUrl}/chat/completions`;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3000);
     try {
       const res = await tracedFetch(
         url,
@@ -252,6 +326,7 @@ export class OpenAiCompatForwarder {
             max_tokens: maxTokens,
             stream: false,
           }),
+          signal: ctrl.signal,
         },
         {
           name: 'ai.completion',
@@ -259,6 +334,7 @@ export class OpenAiCompatForwarder {
           metadata: { model: target.apiIdentifier },
         },
       );
+      clearTimeout(timer);
       if (!res.ok) {
         this.logger.warn(
           `AI provider non-streaming call returned ${res.status}: ${await res.text().catch(() => '')}`,
@@ -268,6 +344,7 @@ export class OpenAiCompatForwarder {
       const json = await res.json();
       return json?.choices?.[0]?.message?.content?.trim() || '';
     } catch (err) {
+      clearTimeout(timer);
       this.logger.warn(
         `AI provider non-streaming call failed: ${err instanceof Error ? err.message : String(err)}`,
       );

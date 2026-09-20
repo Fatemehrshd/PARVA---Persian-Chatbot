@@ -34,7 +34,9 @@ Directory structure:
     │   │   ├── 1761700000000-ModelAccessLevels.ts
     │   │   ├── 1762000000000-CreateSubscriptionsAndPayments.ts
     │   │   ├── 1762100000000-CreateChatShares.ts
-    │   │   └── 1762200000000-CreateCouponsAndZarinpal.ts
+    │   │   ├── 1762200000000-CreateCouponsAndZarinpal.ts
+    │   │   ├── 1762300000000-LinkDefaultModelToFreePlan.ts
+    │   │   └── 1762400000000-AddUserThemePreference.ts
     │   ├── modules/
     │   │   ├── admin/
     │   │   │   ├── admin-conversations.controller.ts
@@ -61,7 +63,8 @@ Directory structure:
     │   │   │   ├── auth.controller.ts
     │   │   │   ├── auth.module.ts
     │   │   │   ├── auth.service.ts
-    │   │   │   └── dto.ts
+    │   │   │   ├── dto.ts
+    │   │   │   └── refresh-token.entity.ts
     │   │   ├── chat/
     │   │   │   ├── active-stream.service.ts
     │   │   │   ├── chat-share.controller.ts
@@ -129,6 +132,11 @@ Directory structure:
     │   │   │   └── dto/
     │   │   │       ├── create-plan.dto.ts
     │   │   │       └── update-plan.dto.ts
+    │   │   ├── tts/
+    │   │   │   ├── tts.controller.ts
+    │   │   │   ├── tts.module.ts
+    │   │   │   ├── tts.service.ts
+    │   │   │   └── tts_stream.py
     │   │   ├── users/
     │   │   │   ├── dto.ts
     │   │   │   ├── profile.service.ts
@@ -155,17 +163,24 @@ Directory structure:
     │       ├── response-envelope.interceptor.ts
     │       ├── telemetry.ts
     │       ├── trace-context.service.ts
-    │       └── traced-fetch.ts
+    │       ├── traced-fetch.ts
+    │       └── logger/
+    │           ├── app-logger.service.ts
+    │           └── logger.module.ts
     └── test/
         ├── admin-files.spec.ts
         ├── admin-guard.spec.ts
         ├── admin-panel.spec.ts
+        ├── admin-user-edit-roundtrip.spec.ts
         ├── ai-adapter.spec.ts
         ├── ai-forwarder.spec.ts
+        ├── api-features-search-field.spec.ts
+        ├── app-logger.spec.ts
         ├── attachment-capabilities.spec.ts
         ├── audit-logging-signoz.spec.ts
         ├── auth-edge-cases.spec.ts
         ├── auth-logout.spec.ts
+        ├── auth-refresh.spec.ts
         ├── auth.e2e.spec.ts
         ├── chat-ownership.spec.ts
         ├── chat-pin.spec.ts
@@ -198,6 +213,7 @@ Directory structure:
         ├── subscriptions-and-payments.spec.ts
         ├── test-utils.ts
         ├── token-tariffs.spec.ts
+        ├── tts.spec.ts
         ├── validation-fa.spec.ts
         ├── web-search-module.spec.ts
         ├── web-search-quota.spec.ts
@@ -412,7 +428,7 @@ FILE: tsconfig.json
 ================================================
 FILE: .env.example
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x90 in position 1361: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x90 in position 1233: character maps to <undefined>
 
 
 ================================================
@@ -497,9 +513,12 @@ import { Coupon } from './modules/payments/coupon.entity';
 import { CouponUsage } from './modules/payments/coupon-usage.entity';
 import { AuditLog } from './modules/audit/audit-log.entity';
 import { ChatShare } from './modules/chat/chat-share.entity';
+import { RefreshToken } from './modules/auth/refresh-token.entity';
 import { AuditModule } from './modules/audit/audit.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { TtsModule } from './modules/tts/tts.module';
+import { LoggerModule } from './shared/logger/logger.module';
 import { ResponseEnvelopeInterceptor } from './shared/response-envelope.interceptor';
 import { HttpLoggingInterceptor } from './shared/http-logging.interceptor';
 import { TraceContextMiddleware } from './shared/trace-context.service';
@@ -529,10 +548,12 @@ import { TraceContextMiddleware } from './shared/trace-context.service';
         CouponUsage,
         AuditLog,
         ChatShare,
+        RefreshToken,
       ],
       migrations: [__dirname + '/migrations/*{.ts,.js}'],
       synchronize: (process.env.DB_SYNC ?? 'true') === 'true',
     }),
+    LoggerModule,
     UsersModule,
     AuthModule,
     ChatModule,
@@ -543,6 +564,7 @@ import { TraceContextMiddleware } from './shared/trace-context.service';
     AuditModule,
     SubscriptionsModule,
     PaymentsModule,
+    TtsModule,
   ],
   controllers: [AppController],
   providers: [
@@ -655,9 +677,12 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './shared/http-exception.filter';
 import { ResponseEnvelopeInterceptor } from './shared/response-envelope.interceptor';
+import { AppLoggerService } from './shared/logger/app-logger.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const appLogger = app.get(AppLoggerService);
+  app.useLogger(appLogger);
   // Match OpenAPI contract prefix: http://localhost:3000/api/v1, exclude root, direct /v1, static, and health routes
   app.setGlobalPrefix('api/v1', { exclude: ['/', 'v1/(.*)', 'v1', 'static/(.*)', 'health', 'api/v1/health'] });
   // Contract-shaped error envelope: {statusCode, message, error}.
@@ -1617,9 +1642,71 @@ export class CreateCouponsAndZarinpal1762200000000 implements MigrationInterface
 
 
 ================================================
+FILE: src/migrations/1762300000000-LinkDefaultModelToFreePlan.ts
+================================================
+import { MigrationInterface, QueryRunner } from 'typeorm';
+
+/** Ensures the current platform default model is usable on the free plan. */
+export class LinkDefaultModelToFreePlan1762300000000 implements MigrationInterface {
+  name = 'LinkDefaultModelToFreePlan1762300000000';
+
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
+      INSERT INTO "plan_models" ("planId", "modelId")
+      SELECT plan."id", model."id"
+      FROM "subscription_plans" plan
+      CROSS JOIN "ai_models" model
+      WHERE plan."slug" = 'free'
+        AND plan."isDefault" = true
+        AND plan."isActive" = true
+        AND plan."isDeleted" = false
+        AND model."isDefault" = true
+        AND model."isActive" = true
+        AND model."isDeleted" = false
+      ON CONFLICT ("planId", "modelId") DO NOTHING;
+    `);
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
+      DELETE FROM "plan_models" link
+      USING "subscription_plans" plan, "ai_models" model
+      WHERE link."planId" = plan."id"
+        AND link."modelId" = model."id"
+        AND plan."slug" = 'free'
+        AND model."isDefault" = true;
+    `);
+  }
+}
+
+
+
+================================================
+FILE: src/migrations/1762400000000-AddUserThemePreference.ts
+================================================
+import { MigrationInterface, QueryRunner } from 'typeorm';
+
+/** Adds per-user theme preference ('dark' | 'light'). Null = use global default. */
+export class AddUserThemePreference1762400000000 implements MigrationInterface {
+  name = 'AddUserThemePreference1762400000000';
+
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
+      ALTER TABLE "users"
+        ADD COLUMN IF NOT EXISTS "themePreference" varchar
+    `);
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`ALTER TABLE "users" DROP COLUMN IF EXISTS "themePreference"`);
+  }
+}
+
+
+================================================
 FILE: src/modules/admin/admin-conversations.controller.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 3010: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 3113: character maps to <undefined>
 
 
 ================================================
@@ -1631,7 +1718,7 @@ Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in posi
 ================================================
 FILE: src/modules/admin/admin-files.controller.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 4410: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 4481: character maps to <undefined>
 
 
 ================================================
@@ -1683,7 +1770,7 @@ export class AdminSettingsController {
 ================================================
 FILE: src/modules/admin/admin-users.controller.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1935: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1963: character maps to <undefined>
 
 
 ================================================
@@ -1847,6 +1934,34 @@ export function resolveEffectiveMessageLimit(
     return roleQuota.messageLimit > 0 ? roleQuota.messageLimit : null;
   }
   return null;
+}
+
+/**
+ * درصد باقی‌مانده مؤثر کاربر: اگر هم سقف توکن و هم سقف پیام فعال باشد،
+ * مینیمم هر دو در نظر گرفته می‌شود (مطابق getQuotaState سایدبار) تا پنل
+ * ادمین و سایدبار همیشه عدد یکسانی نشان دهند. بدون هیچ سقفی → null (نامحدود).
+ */
+export function computeRemainingPercent(
+  user: {
+    periodUsedTokens?: number;
+    periodUsedMessages?: number;
+    usedTokens?: number;
+    usedMessages?: number;
+  },
+  tokenLimit: number | null,
+  messageLimit: number | null,
+): number | null {
+  const usedTokens = Number(user.periodUsedTokens ?? user.usedTokens ?? 0);
+  const usedMessages = Number(user.periodUsedMessages ?? user.usedMessages ?? 0);
+  const pcts: number[] = [];
+  if (tokenLimit && tokenLimit > 0) {
+    pcts.push(Math.max(0, Math.min(100, Math.round(((tokenLimit - usedTokens) / tokenLimit) * 100))));
+  }
+  if (messageLimit && messageLimit > 0) {
+    pcts.push(Math.max(0, Math.min(100, Math.round(((messageLimit - usedMessages) / messageLimit) * 100))));
+  }
+  if (pcts.length === 0) return null;
+  return Math.min(...pcts);
 }
 
 const ACCESS_LEVELS: ModelAccessLevelName[] = ['public', 'commercial', 'private'];
@@ -2307,9 +2422,59 @@ FILE: src/modules/ai/adapters/openai-compat.adapter.ts
 ================================================
 import type { StreamAdapter, StreamChunk, StreamRequestContext } from './stream-adapter';
 
+/**
+ * Detects the provider family from the baseUrl / apiIdentifier so the adapter
+ * can emit the correct request shape and parse the right reasoning fields.
+ *
+ * Returns:
+ *  'anthropic' â€“ Claude models via Anthropic's OpenAI-compat endpoint
+ *  'gemini'    â€“ Gemini models via Google's OpenAI-compat endpoint
+ *  'openai'    â€“ OpenAI o-series (reasoning via delta.reasoning_content)
+ *  'deepseek'  â€“ DeepSeek R-series (reasoning via delta.reasoning_content)
+ *  'generic'   â€“ everything else (ThinkTag fallback only)
+ */
+export function detectProvider(
+  baseUrl: string,
+  apiIdentifier: string,
+): 'anthropic' | 'gemini' | 'openai' | 'deepseek' | 'generic' {
+  const url = (baseUrl || '').toLowerCase();
+  const id = (apiIdentifier || '').toLowerCase();
+  if (url.includes('anthropic.com') || url.includes('claude.ai') || id.startsWith('claude')) {
+    return 'anthropic';
+  }
+  if (
+    url.includes('generativelanguage.googleapis.com') ||
+    url.includes('aiplatform.googleapis.com') ||
+    id.startsWith('gemini') ||
+    id.startsWith('google/')
+  ) {
+    return 'gemini';
+  }
+  if (url.includes('api.openai.com') || id.startsWith('o1') || id.startsWith('o3') || id.startsWith('o4')) {
+    return 'openai';
+  }
+  if (url.includes('deepseek') || id.startsWith('deepseek')) {
+    return 'deepseek';
+  }
+  return 'generic';
+}
+
+/**
+ * Parses <think>...</think> and <thought>...</thought> tags out of streamed content.
+ * - <think>  used by: Qwen/QwQ and other open-source models
+ * - <thought> used by: Gemini via OpenAI-compat endpoint
+ */
 export class ThinkTagStreamParser {
   private inThinking = false;
   private pendingBuffer = '';
+
+  // Both open-tag variants map to the same close-tag logic with different lengths
+  private readonly OPEN_TAGS = ['<think>', '<thought>'];
+  private readonly CLOSE_TAGS: Record<string, string> = {
+    '<think>': '</think>',
+    '<thought>': '</thought>',
+  };
+  private activeOpenTag = '';
 
   feedContent(chunk: string): StreamChunk[] {
     if (!chunk) return [];
@@ -2319,15 +2484,27 @@ export class ThinkTagStreamParser {
 
     while (text.length > 0) {
       if (!this.inThinking) {
-        const thinkIdx = text.indexOf('<think>');
-        if (thinkIdx !== -1) {
-          if (thinkIdx > 0) {
-            out.push({ type: 'content', text: text.slice(0, thinkIdx) });
+        // Find the earliest opening tag
+        let earliest = -1;
+        let earliestTag = '';
+        for (const tag of this.OPEN_TAGS) {
+          const idx = text.indexOf(tag);
+          if (idx !== -1 && (earliest === -1 || idx < earliest)) {
+            earliest = idx;
+            earliestTag = tag;
+          }
+        }
+
+        if (earliest !== -1) {
+          if (earliest > 0) {
+            out.push({ type: 'content', text: text.slice(0, earliest) });
           }
           this.inThinking = true;
-          text = text.slice(thinkIdx + 7);
+          this.activeOpenTag = earliestTag;
+          text = text.slice(earliest + earliestTag.length);
         } else {
-          const partialMatch = this.getPartialTagMatch(text, '<think>');
+          // Check for partial match of any open tag at end of text
+          const partialMatch = this.getPartialMultiTagMatch(text, this.OPEN_TAGS);
           if (partialMatch > 0) {
             const emitLen = text.length - partialMatch;
             if (emitLen > 0) {
@@ -2341,15 +2518,17 @@ export class ThinkTagStreamParser {
           }
         }
       } else {
-        const endThinkIdx = text.indexOf('</think>');
-        if (endThinkIdx !== -1) {
-          if (endThinkIdx > 0) {
-            out.push({ type: 'reasoning', text: text.slice(0, endThinkIdx) });
+        const closeTag = this.CLOSE_TAGS[this.activeOpenTag] || '</think>';
+        const endIdx = text.indexOf(closeTag);
+        if (endIdx !== -1) {
+          if (endIdx > 0) {
+            out.push({ type: 'reasoning', text: text.slice(0, endIdx) });
           }
           this.inThinking = false;
-          text = text.slice(endThinkIdx + 8);
+          this.activeOpenTag = '';
+          text = text.slice(endIdx + closeTag.length);
         } else {
-          const partialMatch = this.getPartialTagMatch(text, '</think>');
+          const partialMatch = this.getPartialTagMatch(text, closeTag);
           if (partialMatch > 0) {
             const emitLen = text.length - partialMatch;
             if (emitLen > 0) {
@@ -2384,6 +2563,15 @@ export class ThinkTagStreamParser {
     }
     return 0;
   }
+
+  private getPartialMultiTagMatch(text: string, tags: string[]): number {
+    let best = 0;
+    for (const tag of tags) {
+      const m = this.getPartialTagMatch(text, tag);
+      if (m > best) best = m;
+    }
+    return best;
+  }
 }
 
 export class OpenAiCompatAdapter implements StreamAdapter {
@@ -2402,14 +2590,60 @@ export class OpenAiCompatAdapter implements StreamAdapter {
       messages: ctx.messages,
       stream: true,
     };
+
     if (ctx.options?.useThinking) {
-      if (ctx.target.thinkingBudgetTokens) {
-        bodyObj.max_completion_tokens = ctx.target.thinkingBudgetTokens;
-      }
-      if (ctx.target.apiIdentifier.startsWith('o1') || ctx.target.apiIdentifier.startsWith('o3')) {
-        bodyObj.reasoning_effort = 'medium';
+      const provider = detectProvider(ctx.target.baseUrl, ctx.target.apiIdentifier);
+
+      if (provider === 'openai') {
+        // OpenAI o-series: reasoning_effort activates CoT; max_completion_tokens caps it
+        const isOSeries =
+          ctx.target.apiIdentifier.startsWith('o1') ||
+          ctx.target.apiIdentifier.startsWith('o3') ||
+          ctx.target.apiIdentifier.startsWith('o4');
+        if (isOSeries) {
+          bodyObj.reasoning_effort = 'medium';
+        }
+        if (ctx.target.thinkingBudgetTokens) {
+          bodyObj.max_completion_tokens = ctx.target.thinkingBudgetTokens;
+        }
+
+      } else if (provider === 'anthropic') {
+        // Anthropic OpenAI-compat: thinking param is accepted but reasoning is NOT
+        // returned in the response stream (it requires the native /v1/messages API).
+        // We still send it so the model actually thinks; content is the final answer only.
+        bodyObj.thinking = {
+          type: 'enabled',
+          budget_tokens: ctx.target.thinkingBudgetTokens || 8000,
+        };
+
+      } else if (provider === 'gemini') {
+        // Gemini OpenAI-compat: thinking_config with include_thoughts enables
+        // <thought>...</thought> tags embedded in delta.content chunks.
+        bodyObj.extra_body = {
+          google: {
+            thinking_config: {
+              thinking_budget: ctx.target.thinkingBudgetTokens || 8000,
+              include_thoughts: true,
+            },
+          },
+        };
+
+      } else if (provider === 'deepseek') {
+        // DeepSeek R-series: no special param needed â€” reasoning_content is always
+        // returned in delta for R-series models when the model supports it.
+        if (ctx.target.thinkingBudgetTokens) {
+          bodyObj.max_tokens = ctx.target.thinkingBudgetTokens;
+        }
+
+      } else {
+        // Generic / unknown: send max_completion_tokens if configured, rely on
+        // ThinkTagStreamParser to extract <think> or <thought> from content.
+        if (ctx.target.thinkingBudgetTokens) {
+          bodyObj.max_completion_tokens = ctx.target.thinkingBudgetTokens;
+        }
       }
     }
+
     return {
       url,
       init: {
@@ -2421,6 +2655,14 @@ export class OpenAiCompatAdapter implements StreamAdapter {
     };
   }
 
+  /**
+   * Parses a single SSE data payload into typed StreamChunks.
+   *
+   * Reasoning source priority (first hit wins):
+   *   1. delta.reasoning_content  â€” DeepSeek R-series, OpenAI o-series
+   *   2. delta.reasoning          â€” some OpenAI-compat proxies
+   *   3. ThinkTagStreamParser     â€” Gemini (<thought>), Qwen (<think>), generic
+   */
   parseStreamChunk(payload: unknown, parser?: ThinkTagStreamParser): StreamChunk[] {
     if (!payload || typeof payload !== 'object') return [];
     const obj = payload as any;
@@ -2430,10 +2672,16 @@ export class OpenAiCompatAdapter implements StreamAdapter {
     if (!delta || typeof delta !== 'object') return [];
 
     const out: StreamChunk[] = [];
+
+    // â”€â”€ Path 1: explicit reasoning field (DeepSeek / OpenAI o-series) â”€â”€â”€â”€â”€â”€â”€â”€
     const reasoningText = delta.reasoning_content ?? delta.reasoning;
     if (typeof reasoningText === 'string' && reasoningText.length > 0) {
       out.push({ type: 'reasoning', text: reasoningText });
     }
+
+    // â”€â”€ Path 2: content â€” run through ThinkTag parser for embedded tags â”€â”€â”€â”€â”€â”€
+    // Gemini sends <thought>â€¦</thought> inside delta.content; the updated
+    // ThinkTagStreamParser handles both <think> and <thought> variants.
     if (typeof delta.content === 'string' && delta.content.length > 0) {
       if (parser) {
         out.push(...parser.feedContent(delta.content));
@@ -2441,6 +2689,7 @@ export class OpenAiCompatAdapter implements StreamAdapter {
         out.push({ type: 'content', text: delta.content });
       }
     }
+
     return out;
   }
 }
@@ -2488,6 +2737,14 @@ import { AdminGuard } from '../../shared/admin.guard';
 export class AdminAuditController {
   constructor(private readonly auditService: AuditService) {}
 
+  @Get('system-logs')
+  async getSystemLogs(
+    @Query('type') type?: 'app' | 'error',
+    @Query('lines') lines?: number,
+  ) {
+    return this.auditService.getSystemLogs(type, lines ? Number(lines) : 100);
+  }
+
   @Get()
   async getAuditLogs(
     @Query('page') page?: number,
@@ -2499,6 +2756,10 @@ export class AdminAuditController {
     @Query('action') action?: string,
     @Query('entityType') entityType?: string,
     @Query('actorId') actorId?: string,
+    @Query('id') id?: string,
+    @Query('actorEmail') actorEmail?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ) {
     return this.auditService.findAll({
       page,
@@ -2510,6 +2771,10 @@ export class AdminAuditController {
       action,
       entityType,
       actorId,
+      id,
+      actorEmail,
+      startDate,
+      endDate,
     });
   }
 }
@@ -2542,6 +2807,13 @@ export class AuditLog {
   @Index()
   @Column({ type: 'uuid', nullable: true })
   actorId: string | null;
+
+  @Index()
+  @Column({ length: 255, nullable: true })
+  actorEmail: string | null;
+
+  @Column({ length: 255, nullable: true })
+  actorName: string | null;
 
   @Column({ length: 30, default: 'user' })
   actorType: string;
@@ -2625,6 +2897,8 @@ FILE: src/modules/audit/audit.service.ts
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { AuditLog } from './audit-log.entity';
 import { traceContextService } from '../../shared/trace-context.service';
 import { registerTracedFetchAuditLogger } from '../../shared/traced-fetch';
@@ -2666,6 +2940,8 @@ export interface CreateAuditLogParams {
   traceId?: string | null;
   spanId?: string | null;
   actorId?: string | null;
+  actorEmail?: string | null;
+  actorName?: string | null;
   actorType?: 'admin' | 'user' | 'system' | string;
   action: string;
   entityType:
@@ -2693,12 +2969,16 @@ export interface FindAuditLogsOptions {
   page?: number;
   limit?: number;
   search?: string;
+  id?: string;
   traceId?: string;
   action?: string;
   entityType?: string;
   actorId?: string;
+  actorEmail?: string;
   status?: 'all' | 'success' | 'error' | string;
   type?: 'all' | 'http_request' | 'external_fetch' | 'security' | string;
+  startDate?: string;
+  endDate?: string;
 }
 
 @Injectable()
@@ -2735,6 +3015,8 @@ export class AuditService implements OnModuleInit {
         traceId: activeTraceId,
         spanId: activeSpanId,
         actorId: params.actorId ?? null,
+        actorEmail: params.actorEmail ?? null,
+        actorName: params.actorName ?? null,
         actorType: params.actorType ?? 'user',
         action: params.action,
         entityType: params.entityType,
@@ -2752,7 +3034,30 @@ export class AuditService implements OnModuleInit {
 
       return await this.auditRepo.save(entry);
     } catch (err: any) {
-      this.logger.error(`Failed to record audit log: ${err.message}`, err.stack);
+      const fallbackPayload = {
+        action: params.action,
+        entityType: params.entityType,
+        entityId: params.entityId,
+        actorId: params.actorId,
+        actorEmail: params.actorEmail,
+        actorType: params.actorType,
+        method: params.method,
+        path: params.path,
+        statusCode: params.statusCode,
+        metadata: params.metadata ? sanitizeAuditData(params.metadata) : undefined,
+        changes: params.changes
+          ? {
+              before: sanitizeAuditData(params.changes.before),
+              after: sanitizeAuditData(params.changes.after),
+            }
+          : undefined,
+        error: err.message,
+      };
+
+      this.logger.error(
+        `Failed to record audit log in PostgreSQL: ${err.message} | Payload: ${JSON.stringify(fallbackPayload)}`,
+        err.stack,
+      );
       // Audit log failures should not break the main business transaction, return a stub
       return {} as AuditLog;
     }
@@ -2765,11 +3070,32 @@ export class AuditService implements OnModuleInit {
 
     const qb = this.auditRepo.createQueryBuilder('log');
 
-    // 1. Text search across action, path, traceId, errorMessage
+    // Exclude regular chat messages (user or admin sending messages to chat) from audit logs
+    qb.andWhere(
+      '(log.path IS NULL OR (log.path NOT ILIKE :chatPath1 AND log.path NOT ILIKE :chatPath2))',
+      { chatPath1: '%/chat%', chatPath2: '%/messages%' },
+    );
+    qb.andWhere(
+      '(log.action IS NULL OR (log.action NOT ILIKE :chatAction1 AND log.action NOT ILIKE :chatAction2))',
+      { chatAction1: '%/chat%', chatAction2: '%/messages%' },
+    );
+
+    // 1. Multi-ID and Text search across action, path, traceId, log.id, actorId, actorEmail, entityId, errorMessage
     if (options.search && options.search.trim().length > 0) {
       const search = `%${options.search.trim()}%`;
       qb.andWhere(
-        '(log.action ILIKE :search OR log.path ILIKE :search OR log.traceId ILIKE :search OR log.errorMessage ILIKE :search OR log.entityType ILIKE :search)',
+        '(' +
+          'CAST(log.id AS TEXT) ILIKE :search ' +
+          'OR log.traceId ILIKE :search ' +
+          'OR CAST(log.actorId AS TEXT) ILIKE :search ' +
+          'OR log.actorEmail ILIKE :search ' +
+          'OR log.actorName ILIKE :search ' +
+          'OR log.entityId ILIKE :search ' +
+          'OR log.action ILIKE :search ' +
+          'OR log.path ILIKE :search ' +
+          'OR log.errorMessage ILIKE :search ' +
+          'OR log.entityType ILIKE :search' +
+        ')',
         { search },
       );
     }
@@ -2777,6 +3103,20 @@ export class AuditService implements OnModuleInit {
     // 2. Exact or partial traceId filter
     if (options.traceId && options.traceId.trim().length > 0) {
       qb.andWhere('log.traceId ILIKE :traceId', { traceId: `%${options.traceId.trim()}%` });
+    }
+
+    // 2.1 Direct ID filter (Log ID, Trace ID, User ID, or Entity ID)
+    if (options.id && options.id.trim().length > 0) {
+      const cleanId = options.id.trim();
+      qb.andWhere(
+        '(' +
+          'CAST(log.id AS TEXT) ILIKE :directId ' +
+          'OR log.traceId ILIKE :directId ' +
+          'OR CAST(log.actorId AS TEXT) ILIKE :directId ' +
+          'OR log.entityId ILIKE :directId' +
+        ')',
+        { directId: `%${cleanId}%` },
+      );
     }
 
     // 3. Status filter
@@ -2799,7 +3139,7 @@ export class AuditService implements OnModuleInit {
       });
     }
 
-    // 5. Explicit action / entityType / actorId
+    // 5. Explicit action / entityType / actorId / actorEmail
     if (options.action) {
       qb.andWhere('log.action = :action', { action: options.action });
     }
@@ -2807,7 +3147,24 @@ export class AuditService implements OnModuleInit {
       qb.andWhere('log.entityType = :entityType', { entityType: options.entityType });
     }
     if (options.actorId) {
-      qb.andWhere('log.actorId = :actorId', { actorId: options.actorId });
+      qb.andWhere('CAST(log.actorId AS TEXT) = :actorId', { actorId: options.actorId });
+    }
+    if (options.actorEmail) {
+      qb.andWhere('log.actorEmail ILIKE :actorEmail', { actorEmail: `%${options.actorEmail.trim()}%` });
+    }
+
+    // 6. Date Range filter (Jalali converted or ISO dates)
+    if (options.startDate && options.startDate.trim().length > 0) {
+      const parsedStart = new Date(options.startDate.trim());
+      if (!isNaN(parsedStart.getTime())) {
+        qb.andWhere('log.createdAt >= :startDate', { startDate: parsedStart });
+      }
+    }
+    if (options.endDate && options.endDate.trim().length > 0) {
+      const parsedEnd = new Date(options.endDate.trim());
+      if (!isNaN(parsedEnd.getTime())) {
+        qb.andWhere('log.createdAt <= :endDate', { endDate: parsedEnd });
+      }
     }
 
     qb.orderBy('log.createdAt', 'DESC');
@@ -2825,6 +3182,14 @@ export class AuditService implements OnModuleInit {
 
     try {
       const statsQb = this.auditRepo.createQueryBuilder('log');
+      statsQb.andWhere(
+        '(log.path IS NULL OR (log.path NOT ILIKE :chatPath1 AND log.path NOT ILIKE :chatPath2))',
+        { chatPath1: '%/chat%', chatPath2: '%/messages%' },
+      );
+      statsQb.andWhere(
+        '(log.action IS NULL OR (log.action NOT ILIKE :chatAction1 AND log.action NOT ILIKE :chatAction2))',
+        { chatAction1: '%/chat%', chatAction2: '%/messages%' },
+      );
       const statResults = await statsQb
         .select('COUNT(*)', 'total')
         .addSelect(
@@ -2856,6 +3221,32 @@ export class AuditService implements OnModuleInit {
       stats,
     };
   }
+
+  async getSystemLogs(type: 'app' | 'error' = 'app', lines = 100) {
+    const today = new Date().toISOString().split('T')[0];
+    const filename = `${type}-${today}.log`;
+    const filePath = path.join(process.cwd(), 'logs', filename);
+
+    try {
+      if (!fs.existsSync(filePath)) {
+        return { lines: [], filename, totalLines: 0, exists: false };
+      }
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+      const allLines = content
+        .split('\n')
+        .filter((l) => l.trim().length > 0);
+      const limit = Math.min(500, Math.max(10, lines));
+      const sliced = allLines.slice(-limit);
+      return {
+        lines: sliced,
+        filename,
+        totalLines: allLines.length,
+        exists: true,
+      };
+    } catch (err: any) {
+      return { lines: [], filename, totalLines: 0, exists: false, error: err.message };
+    }
+  }
 }
 
 
@@ -2874,7 +3265,7 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { SignupDto, LoginDto, LogoutDto } from './dto';
+import { SignupDto, LoginDto, LogoutDto, RefreshTokenDto } from './dto';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 
 @Controller('auth')
@@ -2883,8 +3274,12 @@ export class AuthController {
 
   @Post('signup')
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
-  signup(@Body() d: SignupDto) {
-    return this.auth.signup(d.email, d.password, d.displayName);
+  signup(@Body() d: SignupDto, @Req() req: any) {
+    const clientInfo = {
+      ip: req.ip || req.connection?.remoteAddress,
+      userAgent: req.headers?.['user-agent'],
+    };
+    return this.auth.signup(d.email, d.password, d.displayName, clientInfo);
   }
 
   // The OpenAPI contract specifies 200 for /auth/login. NestJS defaults POST
@@ -2892,20 +3287,35 @@ export class AuthController {
   @Post('login')
   @HttpCode(200)
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
-  login(@Body() d: LoginDto) {
-    return this.auth.login(d.email, d.password);
+  login(@Body() d: LoginDto, @Req() req: any) {
+    const clientInfo = {
+      ip: req.ip || req.connection?.remoteAddress,
+      userAgent: req.headers?.['user-agent'],
+    };
+    return this.auth.login(d.email, d.password, clientInfo);
+  }
+
+  @Post('refresh')
+  @HttpCode(200)
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  refresh(@Body() d: RefreshTokenDto, @Req() req: any) {
+    const clientInfo = {
+      ip: req.ip || req.connection?.remoteAddress,
+      userAgent: req.headers?.['user-agent'],
+    };
+    return this.auth.refresh(d.refreshToken, clientInfo);
   }
 
   // The OpenAPI contract secures every endpoint under /auth with bearerAuth
-  // (only signup and login override it). The caller is identified by their
-  // access token, so the body is no longer trusted for revocation.
+  // (only signup, login and refresh override it). The caller is identified by their
+  // access token, and can optionally pass refreshToken to invalidate it in the DB.
   @UseGuards(JwtAuthGuard)
   @Post('logout')
   @HttpCode(204)
-  logout(@Req() req: any, @Body() _d: LogoutDto) {
+  logout(@Req() req: any, @Body() d: LogoutDto) {
     const authHeader = req.headers?.['authorization'] as string;
     const token = req.token || (authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined);
-    this.auth.logout(token);
+    this.auth.logout(token, d?.refreshToken);
   }
 }
 
@@ -2915,14 +3325,17 @@ export class AuthController {
 FILE: src/modules/auth/auth.module.ts
 ================================================
 import { forwardRef, Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { UsersModule } from '../users/users.module';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
+import { RefreshToken } from './refresh-token.entity';
 import { JwtAuthGuard } from '../../shared/jwt-auth.guard';
 import { AdminGuard } from '../../shared/admin.guard';
 @Module({
   imports: [
+    TypeOrmModule.forFeature([RefreshToken]),
     forwardRef(() => UsersModule),
     JwtModule.register({
       global: true,
@@ -2941,13 +3354,13 @@ export class AuthModule {}
 ================================================
 FILE: src/modules/auth/auth.service.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1687: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 2988: character maps to <undefined>
 
 
 ================================================
 FILE: src/modules/auth/dto.ts
 ================================================
-import { IsEmail, IsString, MinLength, IsOptional } from 'class-validator';
+import { IsEmail, IsString, MinLength, IsOptional, Matches } from 'class-validator';
 import { FA } from '../../shared/messages.fa';
 
 export class SignupDto {
@@ -2956,6 +3369,9 @@ export class SignupDto {
 
   @IsString({ message: FA.passwordRequired })
   @MinLength(8, { message: FA.passwordMin })
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]).{8,}$/, {
+    message: FA.passwordComplexity,
+  })
   password: string;
 
   @IsOptional()
@@ -2971,12 +3387,59 @@ export class LoginDto {
   password: string;
 }
 
+export class RefreshTokenDto {
+  @IsString({ message: FA.refreshTokenRequired })
+  refreshToken: string;
+}
+
 export class LogoutDto {
-  // Body is preserved for forward-compat but logout is identified by the bearer token,
-  // so this field is intentionally unvalidated beyond being a string when present.
   @IsOptional()
   @IsString({ message: FA.string('refreshToken') })
   refreshToken?: string;
+}
+
+
+
+================================================
+FILE: src/modules/auth/refresh-token.entity.ts
+================================================
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  Index,
+} from 'typeorm';
+
+@Entity('refresh_tokens')
+export class RefreshToken {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Index()
+  @Column({ type: 'uuid' })
+  userId: string;
+
+  @Index()
+  @Column({ unique: true })
+  tokenHash: string;
+
+  @Index()
+  @Column({ type: 'timestamptz' })
+  expiresAt: Date;
+
+  @Index()
+  @Column({ default: false })
+  isRevoked: boolean;
+
+  @Column({ type: 'varchar', nullable: true })
+  ip?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  userAgent?: string | null;
+
+  @CreateDateColumn()
+  createdAt: Date;
 }
 
 
@@ -3568,7 +4031,7 @@ export class ChatModule {}
 ================================================
 FILE: src/modules/chat/chat.service.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 2051: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 2539: character maps to <undefined>
 
 
 ================================================
@@ -4310,7 +4773,7 @@ export class ModelsAdminController {
     }
     const result = ApiFeatures.applyToArray(all, query, {
       searchableFields: ['name', 'provider', 'apiIdentifier'],
-      allowedFilterFields: ['provider', 'isActive'],
+      allowedFilterFields: ['name', 'provider', 'apiIdentifier', 'accessLevel', 'isActive'],
     });
     if (query.page || query.limit) {
       return result;
@@ -4363,6 +4826,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { AiModel } from './ai-model.entity';
 import { AiProvider } from './ai-provider.entity';
+import { PlanModel } from '../subscriptions/plan-model.entity';
+import { SubscriptionPlan } from '../subscriptions/subscription-plan.entity';
 import { ModelsAdminService } from './models-admin.service';
 import { ModelsAdminController } from './models-admin.controller';
 import { ModelsController } from './models.controller';
@@ -4377,7 +4842,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([AiModel, AiProvider]),
+    TypeOrmModule.forFeature([AiModel, AiProvider, PlanModel, SubscriptionPlan]),
     JwtModule.register({ secret: process.env.JWT_SECRET ?? 'dev-secret' }),
     AiModule,
     // SettingsService supplies the role â†’ model-access map used to filter models.
@@ -4396,7 +4861,7 @@ export class ModelsAdminModule {}
 ================================================
 FILE: src/modules/models-admin/models-admin.service.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 7329: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 7668: character maps to <undefined>
 
 
 ================================================
@@ -4492,7 +4957,7 @@ export class ProvidersAdminController {
     }
     const result = ApiFeatures.applyToArray(all, query, {
       searchableFields: ['name', 'baseUrl'],
-      allowedFilterFields: ['isActive'],
+      allowedFilterFields: ['name', 'isActive'],
     });
     if (query.page || query.limit) {
       return result;
@@ -4752,12 +5217,16 @@ export class AdminPaymentsController {
     @Query('limit') limit?: number,
     @Query('userId') userId?: string,
     @Query('status') status?: PaymentStatus,
+    @Query('search') search?: string,
+    @Query('searchField') searchField?: string,
   ) {
     return this.paymentsService.findAllForAdmin({
       page,
       limit,
       userId,
       status,
+      search,
+      searchField,
     });
   }
 }
@@ -5244,13 +5713,13 @@ export interface PaymentGatewayProvider {
 ================================================
 FILE: src/modules/payments/gateway/sandbox-payment.gateway.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1570: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1882: character maps to <undefined>
 
 
 ================================================
 FILE: src/modules/payments/gateway/zarinpal-payment.gateway.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 2342: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 2340: character maps to <undefined>
 
 
 ================================================
@@ -5528,206 +5997,7 @@ export class AdminSubscriptionsController {
 ================================================
 FILE: src/modules/subscriptions/entitlement.service.ts
 ================================================
-import { Injectable, Inject, forwardRef } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { User } from '../users/user.entity';
-import { AiModel } from '../models-admin/ai-model.entity';
-import { SubscriptionsService } from './subscriptions.service';
-import { PlansService } from './plans.service';
-import { SettingsService } from '../admin/settings.service';
-import { SubscriptionPlan } from './subscription-plan.entity';
-import { PlanModel } from './plan-model.entity';
-import { SubscriptionStatus } from './subscription.entity';
-
-export interface UserEntitlements {
-  userId: string;
-  role: string;
-  isAdmin: boolean;
-  plan: SubscriptionPlan | null;
-  hasActiveSubscription: boolean;
-  effectiveTokenLimit: number | null;
-  effectiveMessageLimit: number | null;
-  limitSource: 'personal' | 'plan' | 'role' | 'global' | 'admin';
-  features: {
-    webSearch: boolean;
-    thinking: boolean;
-    document: boolean;
-    maxFileSizeMb: number;
-    [key: string]: any;
-  };
-  allowedModelIds: string[] | null; // null means all models allowed
-}
-
-@Injectable()
-export class EntitlementService {
-  constructor(
-    @InjectRepository(User)
-    private userRepo: Repository<User>,
-    @InjectRepository(AiModel)
-    private modelRepo: Repository<AiModel>,
-    @InjectRepository(PlanModel)
-    private planModelRepo: Repository<PlanModel>,
-    private subscriptionsService: SubscriptionsService,
-    private plansService: PlansService,
-    @Inject(forwardRef(() => SettingsService))
-    private settingsService: SettingsService,
-  ) {}
-
-  async getUserEntitlements(userId: string): Promise<UserEntitlements> {
-    const user = await this.userRepo.findOne({ where: { id: userId } });
-    const role = user?.role || 'user';
-    const isAdmin = role === 'admin';
-
-    if (isAdmin) {
-      return {
-        userId,
-        role,
-        isAdmin: true,
-        plan: null,
-        hasActiveSubscription: true,
-        effectiveTokenLimit: null,
-        effectiveMessageLimit: null,
-        limitSource: 'admin',
-        features: {
-          webSearch: true,
-          thinking: true,
-          document: true,
-          maxFileSizeMb: 100,
-        },
-        allowedModelIds: null, // all models allowed
-      };
-    }
-
-    // Regular user: lookup active subscription
-    const activeSub = await this.subscriptionsService.getActiveSubscription(userId);
-    let plan = activeSub?.plan ?? null;
-    const hasActiveSubscription = !!activeSub;
-
-    if (!plan) {
-      plan = await this.plansService.findDefaultPlan();
-    }
-
-    // Fetch global limits
-    const globalTokenLimit = await this.settingsService.getGlobalTokenLimit();
-    const roleQuotas = await this.settingsService.getRoleQuotas();
-    const roleQuotaLimit = roleQuotas[role]?.tokenLimit;
-
-    // 1. Quota cascade: personal > plan > role > global
-    let effectiveTokenLimit: number | null = null;
-    let limitSource: 'personal' | 'plan' | 'role' | 'global' = 'global';
-
-    if (user?.tokenLimit !== null && user?.tokenLimit !== undefined && Number(user.tokenLimit) > 0) {
-      effectiveTokenLimit = Number(user.tokenLimit);
-      limitSource = 'personal';
-    } else if (hasActiveSubscription && plan && plan.tokenQuota > 0) {
-      effectiveTokenLimit = Number(plan.tokenQuota);
-      limitSource = 'plan';
-    } else if (roleQuotaLimit !== undefined && roleQuotaLimit !== null && Number(roleQuotaLimit) > 0) {
-      effectiveTokenLimit = Number(roleQuotaLimit);
-      limitSource = 'role';
-    } else if (globalTokenLimit > 0) {
-      effectiveTokenLimit = globalTokenLimit;
-      limitSource = 'global';
-    }
-
-    // Message limit cascade
-    let effectiveMessageLimit: number | null = null;
-    if (user?.messageLimit !== null && user?.messageLimit !== undefined && Number(user.messageLimit) > 0) {
-      effectiveMessageLimit = Number(user.messageLimit);
-    } else if (hasActiveSubscription && plan && plan.messageQuota) {
-      effectiveMessageLimit = Number(plan.messageQuota);
-    } else if (roleQuotas[role]?.messageLimit) {
-      effectiveMessageLimit = Number(roleQuotas[role].messageLimit);
-    }
-
-    // Features
-    const planFeatures = plan?.features || {};
-    const features = {
-      webSearch: !!planFeatures.webSearch,
-      thinking: !!planFeatures.thinking,
-      document: !!planFeatures.document,
-      maxFileSizeMb: planFeatures.maxFileSizeMb || 25,
-    };
-
-    // Allowed model IDs
-    let allowedModelIds: string[] | null = null;
-    if (plan?.planModels) {
-      const planAssignedModelIds = plan.planModels.map((pm) => pm.modelId);
-      // Public models are always accessible
-      const publicModels = await this.modelRepo.find({
-        where: { accessLevel: 'public', isDeleted: false, isActive: true },
-        select: ['id'],
-      });
-      const publicIds = publicModels.map((m) => m.id);
-      allowedModelIds = Array.from(new Set([...planAssignedModelIds, ...publicIds]));
-    }
-
-    return {
-      userId,
-      role,
-      isAdmin: false,
-      plan,
-      hasActiveSubscription,
-      effectiveTokenLimit,
-      effectiveMessageLimit,
-      limitSource,
-      features,
-      allowedModelIds,
-    };
-  }
-
-  async isModelAllowedForUser(
-    model: AiModel,
-    user: { id: string; role?: string },
-  ): Promise<boolean> {
-    if (model.isActive === false || model.isDeleted === true) return false;
-    if (user.role === 'admin') return true;
-
-    // 1. Private access check
-    if (model.accessLevel === 'private') {
-      return (
-        !!user.id &&
-        Array.isArray(model.allowedUserIds) &&
-        model.allowedUserIds.includes(user.id)
-      );
-    }
-
-    // 2. Check if this model is assigned to any active, paid subscription plan(s)
-    const planModels = await this.planModelRepo.find({
-      where: { modelId: model.id },
-      relations: ['plan'],
-    });
-
-    const activePaidPlansWithModel = planModels
-      .map((pm) => pm.plan)
-      .filter((p) => p && p.isActive && !p.isDeleted && !p.isDefault && Number(p.price) > 0);
-
-    if (activePaidPlansWithModel.length > 0) {
-      // Model is tied to paid plan(s): User MUST have an active subscription to one of them
-      const activeSub = await this.subscriptionsService.getActiveSubscription(user.id);
-      if (!activeSub || activeSub.status !== SubscriptionStatus.ACTIVE) {
-        return false;
-      }
-      return activePaidPlansWithModel.some((p) => p.id === activeSub.planId);
-    }
-
-    // 3. Commercial access level check (for models marked commercial without explicit plan binding)
-    if (model.accessLevel === 'commercial') {
-      const entitlements = await this.getUserEntitlements(user.id);
-      if (!entitlements.hasActiveSubscription) {
-        return false;
-      }
-      if (entitlements.allowedModelIds && !entitlements.allowedModelIds.includes(model.id)) {
-        return false;
-      }
-      return true;
-    }
-
-    return true;
-  }
-}
-
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x90 in position 6762: character maps to <undefined>
 
 
 ================================================
@@ -6043,7 +6313,7 @@ export class SubscriptionsModule {}
 ================================================
 FILE: src/modules/subscriptions/subscriptions.service.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 4496: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 5667: character maps to <undefined>
 
 
 ================================================
@@ -6217,9 +6487,70 @@ export class UpdatePlanDto {
 
 
 ================================================
+FILE: src/modules/tts/tts.controller.ts
+================================================
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1481: character maps to <undefined>
+
+
+================================================
+FILE: src/modules/tts/tts.module.ts
+================================================
+import { Module } from '@nestjs/common';
+import { TtsController } from './tts.controller';
+import { TtsService } from './tts.service';
+
+@Module({
+  controllers: [TtsController],
+  providers: [TtsService],
+  exports: [TtsService],
+})
+export class TtsModule {}
+
+
+
+================================================
+FILE: src/modules/tts/tts.service.ts
+================================================
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1602: character maps to <undefined>
+
+
+================================================
+FILE: src/modules/tts/tts_stream.py
+================================================
+import sys
+import asyncio
+import edge_tts
+
+async def synthesize():
+    # Set stdin encoding to utf-8
+    if hasattr(sys.stdin, 'reconfigure'):
+        sys.stdin.reconfigure(encoding='utf-8')
+    
+    text = sys.stdin.read().strip()
+    if not text:
+        sys.exit(0)
+    
+    voice = sys.argv[1] if len(sys.argv) > 1 else 'fa-IR-DilaraNeural'
+    rate = sys.argv[2] if len(sys.argv) > 2 else '+0%'
+    pitch = sys.argv[3] if len(sys.argv) > 3 else '+0Hz'
+
+    communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            sys.stdout.buffer.write(chunk["data"])
+    sys.stdout.buffer.flush()
+
+if __name__ == "__main__":
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    asyncio.run(synthesize())
+
+
+
+================================================
 FILE: src/modules/users/dto.ts
 ================================================
-import { IsString, IsOptional, IsEmail, MinLength, Matches, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsEmail, MinLength, Matches, MaxLength, IsIn } from 'class-validator';
 import { FA } from '../../shared/messages.fa';
 
 export class UpdateProfileDto {
@@ -6252,12 +6583,18 @@ export class ChangePasswordDto {
   newPassword: string;
 }
 
+export class UpdateThemePreferenceDto {
+  @IsOptional()
+  @IsIn(['dark', 'light'], { message: 'تم نامعتبر است' })
+  preference?: 'dark' | 'light' | null;
+}
+
 
 
 ================================================
 FILE: src/modules/users/profile.service.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1926: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 2587: character maps to <undefined>
 
 
 ================================================
@@ -6269,7 +6606,7 @@ Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in posi
 ================================================
 FILE: src/modules/users/users.controller.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1844: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 2195: character maps to <undefined>
 
 
 ================================================
@@ -6876,13 +7213,17 @@ export class ApiFeatures<T extends Record<string, any>> {
     if (!searchVal || !this.queryBuilder || !searchableFields.length) return this;
 
     const q = `%${searchVal.toLowerCase()}%`;
-    const conditions = searchableFields.map((field, idx) => {
+    const selectedField = this.queryString.searchField;
+    const fields = selectedField && searchableFields.includes(selectedField)
+      ? [selectedField]
+      : searchableFields;
+    const conditions = fields.map((field, idx) => {
       const fieldPath = field.includes('.') ? field : `${this.alias}.${field}`;
       return `LOWER(CAST(${fieldPath} AS text)) LIKE :searchParam_${idx}`;
     });
 
     const params: Record<string, string> = {};
-    searchableFields.forEach((_, idx) => {
+    fields.forEach((_, idx) => {
       params[`searchParam_${idx}`] = q;
     });
 
@@ -6896,7 +7237,7 @@ export class ApiFeatures<T extends Record<string, any>> {
   filter(allowedFields?: string[]): this {
     if (!this.queryBuilder) return this;
 
-    const reservedKeys = new Set(['page', 'limit', 'search', 'q', 'sortBy', 'sortOrder', 'sort']);
+    const reservedKeys = new Set(['page', 'limit', 'search', 'q', 'searchField', 'sortBy', 'sortOrder', 'sort']);
     const keys = allowedFields || Object.keys(this.queryString).filter((k) => !reservedKeys.has(k));
 
     for (const key of keys) {
@@ -6996,8 +7337,12 @@ export class ApiFeatures<T extends Record<string, any>> {
     // ۱. جستجوی متنی روی فیلدهای مشخص
     const searchVal = (queryString.search || queryString.q || '')?.toString().trim().toLowerCase();
     if (searchVal && options.searchableFields?.length) {
+      const selectedField = queryString.searchField;
+      const searchableFields = selectedField && options.searchableFields.includes(selectedField)
+        ? [selectedField]
+        : options.searchableFields;
       result = result.filter((item) => {
-        return options.searchableFields!.some((field) => {
+        return searchableFields.some((field) => {
           const val = (item as any)[field];
           return val !== undefined && val !== null && String(val).toLowerCase().includes(searchVal);
         });
@@ -7005,7 +7350,7 @@ export class ApiFeatures<T extends Record<string, any>> {
     }
 
     // ۲. فیلتر ستونی / مقداری
-    const reservedKeys = new Set(['page', 'limit', 'search', 'q', 'sortBy', 'sortOrder', 'sort']);
+    const reservedKeys = new Set(['page', 'limit', 'search', 'q', 'searchField', 'sortBy', 'sortOrder', 'sort']);
     for (const [key, rawVal] of Object.entries(queryString)) {
       if (reservedKeys.has(key) || rawVal === undefined || rawVal === null || rawVal === '') continue;
       if (options.allowedFilterFields && !options.allowedFilterFields.includes(key)) continue;
@@ -7016,7 +7361,7 @@ export class ApiFeatures<T extends Record<string, any>> {
         if (typeof itemVal === 'boolean') {
           return itemVal === (rawVal === 'true' || rawVal === true);
         }
-        return String(itemVal).toLowerCase() === String(rawVal).toLowerCase();
+        return String(itemVal).toLowerCase().includes(String(rawVal).toLowerCase());
       });
     }
 
@@ -7162,7 +7507,7 @@ import { tap } from 'rxjs/operators';
 import type { Request, Response } from 'express';
 import { telemetry } from './telemetry';
 import { AuditService } from '../modules/audit/audit.service';
-import { traceContextService } from './trace-context.service';
+import { traceContextService, TraceContextService } from './trace-context.service';
 
 @Injectable()
 export class HttpLoggingInterceptor implements NestInterceptor {
@@ -7198,18 +7543,42 @@ export class HttpLoggingInterceptor implements NestInterceptor {
     const method = req.method;
     const path = rawUrl.split('?')[0];
 
-    const span = telemetry.startSpan('http.server.request', {
-      'http.method': method,
-      'http.url': rawUrl,
-      'http.path': path,
-    });
+    const activeTraceId =
+      traceContextService.getTraceId() || TraceContextService.generateTraceId();
+    const activeSpanId =
+      traceContextService.getSpanId() || TraceContextService.generateSpanId();
+    const incomingParentSpanId = traceContextService.getParentSpanId();
 
-    const actor = (req as any).user;
-    const actorId = actor?.id ?? null;
-    const actorType = actor?.role === 'admin' ? 'admin' : actor ? 'user' : 'system';
+    const span = telemetry.startSpan(
+      'http.server.request',
+      {
+        'http.method': method,
+        'http.url': rawUrl,
+        'http.path': path,
+        'http.route': path,
+      },
+      {
+        traceId: activeTraceId,
+        spanId: activeSpanId,
+        parentSpanId: incomingParentSpanId,
+        kind: 2, // SPAN_KIND_SERVER
+      },
+    );
+
     const ip =
       (req.headers['x-forwarded-for'] as string) || req.socket?.remoteAddress || null;
     const userAgent = req.headers['user-agent'] || null;
+
+    const resolveActorInfo = () => {
+      const user = (req as any).user;
+      const actorId = user?.id ?? null;
+      const actorEmail =
+        user?.email ??
+        (req.body && typeof req.body.email === 'string' ? req.body.email : null);
+      const actorName = user?.displayName || user?.username || null;
+      const actorType = user?.role === 'admin' ? 'admin' : user ? 'user' : 'system';
+      return { actorId, actorEmail, actorName, actorType };
+    };
 
     return next.handle().pipe(
       tap({
@@ -7218,12 +7587,49 @@ export class HttpLoggingInterceptor implements NestInterceptor {
           const statusCode = res.statusCode || 200;
           span.end('ok');
 
-          if (this.auditService) {
+          const { actorId, actorEmail, actorName, actorType } = resolveActorInfo();
+
+          // 1. Dispatch OTLP Log to SigNoz Logs Engine (ClickHouse)
+          telemetry.sendLog(
+            statusCode >= 400 ? 'WARN' : 'INFO',
+            `${method} ${path} - ${statusCode} (${durationMs}ms)`,
+            {
+              'http.method': method,
+              'http.url': rawUrl,
+              'http.route': path,
+              'http.status_code': statusCode,
+              'http.duration_ms': durationMs,
+              'client.ip': ip,
+              'user.id': actorId,
+              'user.email': actorEmail,
+            },
+            span.traceId,
+            span.spanId,
+          );
+
+          // 2. Persist business audit log in PostgreSQL
+          // Only state-changing operations (POST, PUT, PATCH, DELETE) or error statuses are persisted to PostgreSQL.
+          // Mundane read queries (successful GET) are streamed to SigNoz and file logs only to prevent database bloat.
+          const isStateChanging = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase());
+          const isAuditWorthy = isStateChanging || statusCode >= 400;
+
+          // Exclude regular chat messages (user or admin sending messages to chat) from audit log
+          const isChatMessaging =
+            path.includes('/messages') ||
+            path.includes('/chat/conversations') ||
+            path.includes('/chat/completions') ||
+            path.startsWith('/chat') ||
+            path.startsWith('/api/chat') ||
+            path.startsWith('/api/v1/chat');
+
+          if (this.auditService && isAuditWorthy && !isChatMessaging) {
             this.auditService
               .log({
                 traceId: span.traceId || traceContextService.getTraceId(),
                 spanId: span.spanId || traceContextService.getSpanId(),
                 actorId,
+                actorEmail,
+                actorName,
                 actorType,
                 action: `${method} ${path}`,
                 entityType: 'http_request',
@@ -7248,12 +7654,44 @@ export class HttpLoggingInterceptor implements NestInterceptor {
           const errorMessage = err?.message || String(err);
           span.end('error', errorMessage);
 
-          if (this.auditService) {
+          const { actorId, actorEmail, actorName, actorType } = resolveActorInfo();
+
+          // 1. Dispatch OTLP Error Log to SigNoz Logs Engine (ClickHouse)
+          telemetry.sendLog(
+            'ERROR',
+            `${method} ${path} FAILED (${statusCode}): ${errorMessage}`,
+            {
+              'http.method': method,
+              'http.url': rawUrl,
+              'http.route': path,
+              'http.status_code': statusCode,
+              'http.duration_ms': durationMs,
+              'error.message': errorMessage,
+              'client.ip': ip,
+              'user.id': actorId,
+              'user.email': actorEmail,
+            },
+            span.traceId,
+            span.spanId,
+          );
+
+          // 2. Persist error audit log in PostgreSQL (excluding regular chat messaging)
+          const isChatMessaging =
+            path.includes('/messages') ||
+            path.includes('/chat/conversations') ||
+            path.includes('/chat/completions') ||
+            path.startsWith('/chat') ||
+            path.startsWith('/api/chat') ||
+            path.startsWith('/api/v1/chat');
+
+          if (this.auditService && !isChatMessaging) {
             this.auditService
               .log({
                 traceId: span.traceId || traceContextService.getTraceId(),
                 spanId: span.spanId || traceContextService.getSpanId(),
                 actorId,
+                actorEmail,
+                actorName,
                 actorType,
                 action: `${method} ${path} (FAILED)`,
                 entityType: 'http_request',
@@ -7318,7 +7756,55 @@ export class JwtAuthGuard implements CanActivate {
 ================================================
 FILE: src/shared/messages.fa.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 1268: character maps to <undefined>
+/**
+ * Centralized Persian error messages for class-validator decorators.
+ * One place to update wording; imported by every DTO.
+ *
+ * Every request body field is validated against at least one of these.
+ * Adding a new constraint = add a new constant here and reference it from
+ * the decorator on the DTO.
+ */
+export const FA = {
+  // ---- shared ----
+  required: (field: string) => `${field} الزامی است`,
+  string: (field: string) => `${field} باید متن باشد`,
+  boolean: (field: string) => `${field} باید true یا false باشد`,
+  uuid: (field: string) => `${field} باید یک شناسه معتبر باشد`,
+
+  // ---- auth ----
+  emailInvalid: 'ایمیل نامعتبر است',
+  emailRequired: 'ایمیل الزامی است',
+  passwordMin: 'رمز عبور باید حداقل ۸ کاراکتر باشد',
+  passwordRequired: 'رمز عبور الزامی است',
+  passwordComplexity: 'رمز عبور باید حداقل ۸ کاراکتر و شامل حروف بزرگ، کوچک، عدد و نماد باشد',
+  displayNameString: 'نام نمایشی باید متن باشد',
+  invalidCredentials: 'ایمیل یا رمز عبور اشتباه است',
+  refreshTokenRequired: 'ارائه رفرش توکن الزامی است',
+  refreshTokenInvalid: 'نشست نامعتبر یا منقضی شده است',
+
+  // ---- chat ----
+  contentMin: 'پیام نمی‌تواند خالی باشد',
+  contentString: 'محتوای پیام باید متن باشد',
+  conversationIdUuid: 'شناسه گفتگو باید یک UUID معتبر باشد',
+  modelIdUuid: 'شناسه مدل باید یک UUID معتبر باشد',
+  titleString: 'عنوان گفتگو باید متن باشد',
+
+  // ---- uploads ----
+  fileTooLarge: 'حجم فایل بیش از حد مجاز است (حداکثر ۲ مگابایت)',
+
+  // ---- admin models ----
+  nameRequired: 'نام مدل الزامی است',
+  nameString: 'نام مدل باید متن باشد',
+  providerRequired: 'ارائه‌دهنده مدل الزامی است',
+  providerString: 'ارائه‌دهنده مدل باید متن باشد',
+  apiIdentifierRequired: 'شناسه API مدل الزامی است',
+  apiIdentifierString: 'شناسه API مدل باید متن باشد',
+  modelIdParamUuid: 'شناسه مدل در URL باید یک UUID معتبر باشد',
+
+  // ---- model access ----
+  modelAccessDenied: 'به این مدل دسترسی ندارید',
+};
+
 
 
 ================================================
@@ -7376,9 +7862,11 @@ export class ResponseEnvelopeInterceptor<T> implements NestInterceptor<
     if (
       accept.includes('text/event-stream') ||
       contentType.includes('text/event-stream') ||
+      contentType.includes('audio/') ||
       res.headersSent ||
       req.url?.includes('/v1/models') ||
-      req.url?.includes('/v1/chat/completions')
+      req.url?.includes('/v1/chat/completions') ||
+      req.url?.includes('/tts/synthesize')
     ) {
       return next.handle();
     }
@@ -7458,6 +7946,7 @@ export interface TraceSpan {
   traceId: string;
   spanId: string;
   parentSpanId?: string;
+  kind?: number;
   startTime: number;
   attributes: Record<string, any>;
   end: (status?: 'ok' | 'error', errorMsg?: string) => void;
@@ -7469,21 +7958,42 @@ class TelemetryService {
     process.env.SIGNOZ_OTLP_URL ||
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
     'http://localhost:4318/v1/traces';
+  private readonly otlpLogsUrl =
+    process.env.SIGNOZ_OTLP_LOGS_URL ||
+    (this.otlpUrl.includes('/v1/traces')
+      ? this.otlpUrl.replace('/v1/traces', '/v1/logs')
+      : 'http://localhost:4318/v1/logs');
   // Enabled by default unless explicitly set to 'false'
   private readonly isEnabled = process.env.ENABLE_TELEMETRY !== 'false';
 
   startSpan(
     name: string,
     attributes: Record<string, any> = {},
-    parentContext?: { traceId?: string; parentSpanId?: string },
+    options?: {
+      traceId?: string;
+      spanId?: string;
+      parentSpanId?: string;
+      kind?: number;
+    },
   ): TraceSpan {
     const activeTraceId =
-      parentContext?.traceId ||
+      options?.traceId ||
       traceContextService.getTraceId() ||
       randomBytes(16).toString('hex');
 
-    const parentSpanId = parentContext?.parentSpanId || traceContextService.getSpanId();
-    const spanId = randomBytes(8).toString('hex');
+    // If parentSpanId is explicitly specified, use it.
+    // Otherwise, if options.spanId was passed (like in server requests), use getParentSpanId() (which is undefined for roots).
+    // Otherwise, use getSpanId() (making this span a child of the current context span).
+    const parentSpanId =
+      options?.parentSpanId !== undefined
+        ? options.parentSpanId
+        : options?.spanId
+          ? traceContextService.getParentSpanId()
+          : traceContextService.getSpanId();
+
+    const spanId = options?.spanId || randomBytes(8).toString('hex');
+    // OpenTelemetry span kinds: 1=INTERNAL, 2=SERVER, 3=CLIENT, 4=PRODUCER, 5=CONSUMER
+    const kind = options?.kind ?? (parentSpanId ? 3 : 2);
     const startTime = Date.now();
 
     return {
@@ -7491,6 +8001,7 @@ class TelemetryService {
       traceId: activeTraceId,
       spanId,
       parentSpanId,
+      kind,
       startTime,
       attributes,
       end: (status = 'ok', errorMsg?: string) => {
@@ -7507,6 +8018,7 @@ class TelemetryService {
             activeTraceId,
             spanId,
             parentSpanId,
+            kind,
             startTime,
             duration,
             status,
@@ -7524,18 +8036,23 @@ class TelemetryService {
     traceId: string,
     spanId: string,
     parentSpanId: string | undefined,
+    kind: number,
     startTime: number,
     durationMs: number,
     status: string,
     attributes: Record<string, any>,
   ) {
+    if (process.env.NODE_ENV === 'test' && !process.env.FORCE_TELEMETRY_IN_TEST) {
+      return;
+    }
+
     try {
       const safeDuration = Math.max(1, durationMs);
       const spanObj: any = {
         traceId,
         spanId,
         name,
-        kind: parentSpanId ? 3 : 1, // 1 = SPAN_KIND_INTERNAL/SERVER, 3 = SPAN_KIND_CLIENT
+        kind,
         startTimeUnixNano: String(BigInt(startTime) * BigInt(1_000_000)),
         endTimeUnixNano: String(BigInt(startTime + safeDuration) * BigInt(1_000_000)),
         status: {
@@ -7553,8 +8070,10 @@ class TelemetryService {
         })),
       };
 
-      if (parentSpanId) {
-        spanObj.parentSpanId = parentSpanId;
+      // CRITICAL: SigNoz / ClickHouse requires parent_span_id to be omitted or empty
+      // for root spans so they appear in root_operations and flamegraph.
+      if (parentSpanId && parentSpanId.trim().length > 0) {
+        spanObj.parentSpanId = parentSpanId.trim();
       }
 
       const payload = {
@@ -7592,6 +8111,78 @@ class TelemetryService {
       this.logger.debug(`Failed to dispatch span to SigNoz: ${err?.message}`);
     }
   }
+
+  async sendLog(
+    level: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR',
+    message: string,
+    attributes: Record<string, any> = {},
+    traceId?: string,
+    spanId?: string,
+  ) {
+    if (!this.isEnabled) return;
+    if (process.env.NODE_ENV === 'test' && !process.env.FORCE_TELEMETRY_IN_TEST) return;
+
+    try {
+      const activeTraceId = traceId || traceContextService.getTraceId();
+      const activeSpanId = spanId || traceContextService.getSpanId();
+      const now = Date.now();
+      const severityNumberMap: Record<string, number> = {
+        DEBUG: 5,
+        INFO: 9,
+        WARN: 13,
+        ERROR: 17,
+      };
+
+      const logRecord: any = {
+        timeUnixNano: String(BigInt(now) * BigInt(1_000_000)),
+        observedTimeUnixNano: String(BigInt(now) * BigInt(1_000_000)),
+        severityNumber: severityNumberMap[level] || 9,
+        severityText: level,
+        body: { stringValue: message },
+        attributes: Object.entries(attributes).map(([k, v]) => ({
+          key: k,
+          value:
+            typeof v === 'number'
+              ? { intValue: v }
+              : typeof v === 'boolean'
+                ? { boolValue: v }
+                : { stringValue: String(v ?? '') },
+        })),
+      };
+
+      if (activeTraceId) logRecord.traceId = activeTraceId;
+      if (activeSpanId) logRecord.spanId = activeSpanId;
+
+      const payload = {
+        resourceLogs: [
+          {
+            resource: {
+              attributes: [
+                { key: 'service.name', value: { stringValue: 'codeless-backend' } },
+                { key: 'service.environment', value: { stringValue: process.env.NODE_ENV || 'development' } },
+              ],
+            },
+            scopeLogs: [
+              {
+                scope: { name: 'codeless-logger', version: '1.0.0' },
+                logRecords: [logRecord],
+              },
+            ],
+          },
+        ],
+      };
+
+      if (typeof fetch === 'function') {
+        fetch(this.otlpLogsUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }).catch(() => {});
+      }
+    } catch {
+      // Non-blocking log dispatch
+    }
+  }
 }
 
 export const telemetry = new TelemetryService();
@@ -7609,6 +8200,7 @@ import type { Request, Response, NextFunction } from 'express';
 export interface TraceContext {
   traceId: string;
   spanId: string;
+  parentSpanId?: string;
   userId?: string;
   ip?: string;
   userAgent?: string;
@@ -7654,6 +8246,13 @@ export class TraceContextService {
   }
 
   /**
+   * Get active parent span ID or return undefined
+   */
+  getParentSpanId(): string | undefined {
+    return traceStorage.getStore()?.parentSpanId;
+  }
+
+  /**
    * Run a function within a specified trace context
    */
   runWithContext<T>(context: TraceContext, fn: () => T): T {
@@ -7667,6 +8266,7 @@ export const traceContextService = new TraceContextService();
 export class TraceContextMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
     let traceId: string | undefined;
+    let parentSpanId: string | undefined;
 
     // 1. Check for W3C traceparent header: 00-<trace_id>-<span_id>-<flags>
     const traceparent = req.headers['traceparent'];
@@ -7674,6 +8274,9 @@ export class TraceContextMiddleware implements NestMiddleware {
       const parts = traceparent.trim().split('-');
       if (parts.length >= 4 && parts[1]?.length === 32) {
         traceId = parts[1];
+        if (parts[2]?.length === 16) {
+          parentSpanId = parts[2];
+        }
       }
     }
 
@@ -7690,15 +8293,17 @@ export class TraceContextMiddleware implements NestMiddleware {
       traceId = TraceContextService.generateTraceId();
     }
 
+    // Generate root server span ID for this request
     const spanId = TraceContextService.generateSpanId();
 
-    // Set response header so client / admin knows the trace ID
+    // Set response header so client / admin knows the trace ID and server span
     res.setHeader('x-trace-id', traceId);
     res.setHeader('traceparent', `00-${traceId}-${spanId}-01`);
 
     const context: TraceContext = {
       traceId,
       spanId,
+      parentSpanId,
       ip: (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || undefined,
       userAgent: req.headers['user-agent'] || undefined,
     };
@@ -7774,6 +8379,7 @@ export async function tracedFetch(
   const activeTraceId =
     traceContextService.getTraceId() || TraceContextService.generateTraceId();
   const parentSpanId = traceContextService.getSpanId();
+  const childSpanId = TraceContextService.generateSpanId();
 
   const spanName = options?.name || 'http.fetch';
   const urlStr = typeof input === 'string' ? input : input.toString();
@@ -7787,7 +8393,12 @@ export async function tracedFetch(
       'http.method': method,
       ...(options?.metadata || {}),
     },
-    { traceId: activeTraceId, parentSpanId },
+    {
+      traceId: activeTraceId,
+      spanId: childSpanId,
+      parentSpanId,
+      kind: 3, // SPAN_KIND_CLIENT
+    },
   );
 
   // Prepare headers preserving plain object structure for maximum compatibility
@@ -7885,6 +8496,167 @@ export async function tracedFetch(
     throw err;
   }
 }
+
+
+
+================================================
+FILE: src/shared/logger/app-logger.service.ts
+================================================
+import { Injectable, LoggerService } from '@nestjs/common';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { telemetry } from '../telemetry';
+import { traceContextService } from '../trace-context.service';
+
+@Injectable()
+export class AppLoggerService implements LoggerService {
+  private logDir = path.resolve(process.cwd(), 'logs');
+
+  constructor() {
+    try {
+      if (!fs.existsSync(this.logDir)) {
+        fs.mkdirSync(this.logDir, { recursive: true });
+      }
+    } catch {
+      // Non-blocking initialization
+    }
+  }
+
+  private writeToFile(level: string, message: any, context?: string, extra?: Record<string, any>) {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const appLogFile = path.join(this.logDir, `app-${today}.log`);
+      const errorLogFile = path.join(this.logDir, `error-${today}.log`);
+
+      const traceId = traceContextService.getTraceId() || null;
+      const spanId = traceContextService.getSpanId() || null;
+
+      const logRecord = {
+        timestamp: new Date().toISOString(),
+        level,
+        context: context || 'Application',
+        traceId,
+        spanId,
+        message: this.sanitize(message),
+        ...(extra ? { extra: this.sanitize(extra) } : {}),
+      };
+
+      const line = JSON.stringify(logRecord) + '\n';
+
+      // Always write to daily app log
+      fs.appendFile(appLogFile, line, () => {});
+
+      // If ERROR, also write to dedicated error log file
+      if (level === 'ERROR') {
+        fs.appendFile(errorLogFile, line, () => {});
+      }
+    } catch {
+      // Logging should never throw or disrupt application flow
+    }
+  }
+
+  log(message: any, context?: string) {
+    this.writeToFile('INFO', message, context);
+    telemetry.sendLog(
+      'INFO',
+      typeof message === 'string' ? message : JSON.stringify(this.sanitize(message)),
+      { context: context || 'App' },
+    );
+    console.log(`[INFO] [${context || 'App'}]`, message);
+  }
+
+  error(message: any, trace?: string, context?: string) {
+    this.writeToFile('ERROR', message, context, trace ? { stack: trace } : undefined);
+    telemetry.sendLog(
+      'ERROR',
+      typeof message === 'string' ? message : JSON.stringify(this.sanitize(message)),
+      { context: context || 'App', stack: trace },
+    );
+    console.error(`[ERROR] [${context || 'App'}]`, message, trace || '');
+  }
+
+  warn(message: any, context?: string) {
+    this.writeToFile('WARN', message, context);
+    telemetry.sendLog(
+      'WARN',
+      typeof message === 'string' ? message : JSON.stringify(this.sanitize(message)),
+      { context: context || 'App' },
+    );
+    console.warn(`[WARN] [${context || 'App'}]`, message);
+  }
+
+  debug(message: any, context?: string) {
+    this.writeToFile('DEBUG', message, context);
+    telemetry.sendLog(
+      'DEBUG',
+      typeof message === 'string' ? message : JSON.stringify(this.sanitize(message)),
+      { context: context || 'App' },
+    );
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug(`[DEBUG] [${context || 'App'}]`, message);
+    }
+  }
+
+  verbose(message: any, context?: string) {
+    this.writeToFile('VERBOSE', message, context);
+  }
+
+  /**
+   * Sanitizes sensitive fields before persisting to disk or telemetry
+   */
+  sanitize(data: any): any {
+    const SENSITIVE_KEYS = [
+      'password',
+      'passwordhash',
+      'token',
+      'refreshtoken',
+      'accesstoken',
+      'authorization',
+      'secret',
+      'cookie',
+      'apikey',
+      'cardnumber',
+      'cvv',
+    ];
+
+    if (data === null || data === undefined) return data;
+    if (typeof data !== 'object') return data;
+
+    if (data instanceof Error) {
+      return {
+        name: data.name,
+        message: data.message,
+        stack: data.stack,
+      };
+    }
+
+    const copy: any = Array.isArray(data) ? [...data] : { ...data };
+    for (const key of Object.keys(copy)) {
+      const lowerKey = key.toLowerCase();
+      if (SENSITIVE_KEYS.some((s) => lowerKey.includes(s))) {
+        copy[key] = '***REDACTED***';
+      } else if (typeof copy[key] === 'object' && copy[key] !== null) {
+        copy[key] = this.sanitize(copy[key]);
+      }
+    }
+    return copy;
+  }
+}
+
+
+
+================================================
+FILE: src/shared/logger/logger.module.ts
+================================================
+import { Module, Global } from '@nestjs/common';
+import { AppLoggerService } from './app-logger.service';
+
+@Global()
+@Module({
+  providers: [AppLoggerService],
+  exports: [AppLoggerService],
+})
+export class LoggerModule {}
 
 
 
@@ -8205,7 +8977,13 @@ describe('AdminGuard â€” database role is authoritative (not the JWT claim)
 ================================================
 FILE: test/admin-panel.spec.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 4251: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 4339: character maps to <undefined>
+
+
+================================================
+FILE: test/admin-user-edit-roundtrip.spec.ts
+================================================
+[Binary file]
 
 
 ================================================
@@ -8337,12 +9115,297 @@ describe('OpenAiCompatAdapter', () => {
   });
 });
 
+// â”€â”€â”€ detectProvider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+import { detectProvider } from '../src/modules/ai/adapters/openai-compat.adapter';
+
+describe('detectProvider', () => {
+  it('detects anthropic by baseUrl', () => {
+    expect(detectProvider('https://api.anthropic.com/v1', 'claude-3-5-sonnet')).toBe('anthropic');
+  });
+
+  it('detects anthropic by model id prefix', () => {
+    expect(detectProvider('https://proxy.example.com/v1', 'claude-opus-4')).toBe('anthropic');
+  });
+
+  it('detects gemini by googleapis baseUrl', () => {
+    expect(detectProvider('https://generativelanguage.googleapis.com/v1beta/openai', 'gemini-2.5-flash')).toBe('gemini');
+  });
+
+  it('detects gemini by model id prefix', () => {
+    expect(detectProvider('https://some-proxy.com/v1', 'gemini-2.0-flash-thinking')).toBe('gemini');
+  });
+
+  it('detects openai by baseUrl', () => {
+    expect(detectProvider('https://api.openai.com/v1', 'gpt-4o')).toBe('openai');
+  });
+
+  it('detects openai o-series by model id', () => {
+    expect(detectProvider('https://proxy.example.com/v1', 'o3-mini')).toBe('openai');
+    expect(detectProvider('https://proxy.example.com/v1', 'o4-mini')).toBe('openai');
+  });
+
+  it('detects deepseek by baseUrl', () => {
+    expect(detectProvider('https://api.deepseek.com/v1', 'deepseek-reasoner')).toBe('deepseek');
+  });
+
+  it('falls back to generic for unknown providers', () => {
+    expect(detectProvider('https://ollama.local/v1', 'llama3')).toBe('generic');
+    expect(detectProvider('https://custom.proxy.com/v1', 'qwen2.5-72b')).toBe('generic');
+  });
+});
+
+// â”€â”€â”€ buildRequest per-provider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+describe('OpenAiCompatAdapter.buildRequest â€” per-provider thinking params', () => {
+  const adapter = new OpenAiCompatAdapter();
+
+  it('sends reasoning_effort=medium for OpenAI o-series when thinking enabled', () => {
+    const target: any = { apiIdentifier: 'o3-mini', apiKey: 'k', baseUrl: 'https://api.openai.com/v1' };
+    const body = JSON.parse(adapter.buildRequest({ target, messages: [], options: { useThinking: true } }).init.body as string);
+    expect(body.reasoning_effort).toBe('medium');
+    expect(body.thinking).toBeUndefined();
+    expect(body.extra_body).toBeUndefined();
+  });
+
+  it('caps tokens with max_completion_tokens for OpenAI o-series when budget set', () => {
+    const target: any = { apiIdentifier: 'o4-mini', apiKey: 'k', baseUrl: 'https://api.openai.com/v1', thinkingBudgetTokens: 2048 };
+    const body = JSON.parse(adapter.buildRequest({ target, messages: [], options: { useThinking: true } }).init.body as string);
+    expect(body.max_completion_tokens).toBe(2048);
+  });
+
+  it('sends thinking object for Anthropic when thinking enabled', () => {
+    const target: any = { apiIdentifier: 'claude-opus-4', apiKey: 'k', baseUrl: 'https://api.anthropic.com/v1' };
+    const body = JSON.parse(adapter.buildRequest({ target, messages: [], options: { useThinking: true } }).init.body as string);
+    expect(body.thinking).toEqual({ type: 'enabled', budget_tokens: 8000 });
+    expect(body.reasoning_effort).toBeUndefined();
+  });
+
+  it('uses thinkingBudgetTokens for Anthropic when set', () => {
+    const target: any = { apiIdentifier: 'claude-sonnet-4', apiKey: 'k', baseUrl: 'https://api.anthropic.com/v1', thinkingBudgetTokens: 5000 };
+    const body = JSON.parse(adapter.buildRequest({ target, messages: [], options: { useThinking: true } }).init.body as string);
+    expect(body.thinking.budget_tokens).toBe(5000);
+  });
+
+  it('sends extra_body.google.thinking_config for Gemini when thinking enabled', () => {
+    const target: any = { apiIdentifier: 'gemini-2.5-flash', apiKey: 'k', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' };
+    const body = JSON.parse(adapter.buildRequest({ target, messages: [], options: { useThinking: true } }).init.body as string);
+    expect(body.extra_body?.google?.thinking_config?.include_thoughts).toBe(true);
+    expect(body.extra_body?.google?.thinking_config?.thinking_budget).toBe(8000);
+    expect(body.thinking).toBeUndefined();
+  });
+
+  it('uses thinkingBudgetTokens for Gemini when set', () => {
+    const target: any = { apiIdentifier: 'gemini-2.5-pro', apiKey: 'k', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', thinkingBudgetTokens: 3000 };
+    const body = JSON.parse(adapter.buildRequest({ target, messages: [], options: { useThinking: true } }).init.body as string);
+    expect(body.extra_body.google.thinking_config.thinking_budget).toBe(3000);
+  });
+
+  it('sends no special thinking params for DeepSeek (model natively returns reasoning_content)', () => {
+    const target: any = { apiIdentifier: 'deepseek-r1', apiKey: 'k', baseUrl: 'https://api.deepseek.com/v1' };
+    const body = JSON.parse(adapter.buildRequest({ target, messages: [], options: { useThinking: true } }).init.body as string);
+    expect(body.thinking).toBeUndefined();
+    expect(body.reasoning_effort).toBeUndefined();
+    expect(body.extra_body).toBeUndefined();
+  });
+
+  it('does NOT add thinking params when useThinking is false', () => {
+    const target: any = { apiIdentifier: 'gemini-2.5-flash', apiKey: 'k', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' };
+    const body = JSON.parse(adapter.buildRequest({ target, messages: [], options: { useThinking: false } }).init.body as string);
+    expect(body.extra_body).toBeUndefined();
+  });
+});
+
+// â”€â”€â”€ ThinkTagStreamParser â€” <thought> tag (Gemini) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+describe('ThinkTagStreamParser â€” <thought> tag support (Gemini)', () => {
+  it('extracts <thought>...</thought> as reasoning chunks', () => {
+    const { ThinkTagStreamParser } = require('../src/modules/ai/adapters/openai-compat.adapter');
+    const parser = new ThinkTagStreamParser();
+
+    const c1 = parser.feedContent('<thought>Gemini is thinking');
+    expect(c1).toEqual([{ type: 'reasoning', text: 'Gemini is thinking' }]);
+
+    const c2 = parser.feedContent(' carefully</thought>Here is the answer.');
+    expect(c2).toEqual([
+      { type: 'reasoning', text: ' carefully' },
+      { type: 'content', text: 'Here is the answer.' },
+    ]);
+  });
+
+  it('handles <thought> tag split across chunk boundaries', () => {
+    const { ThinkTagStreamParser } = require('../src/modules/ai/adapters/openai-compat.adapter');
+    const parser = new ThinkTagStreamParser();
+
+    const c1 = parser.feedContent('<thou');
+    expect(c1).toEqual([]);  // pending buffer
+
+    const c2 = parser.feedContent('ght>reasoning here</thought>final');
+    expect(c2).toEqual([
+      { type: 'reasoning', text: 'reasoning here' },
+      { type: 'content', text: 'final' },
+    ]);
+  });
+
+  it('handles </thought> closing tag split across boundaries', () => {
+    const { ThinkTagStreamParser } = require('../src/modules/ai/adapters/openai-compat.adapter');
+    const parser = new ThinkTagStreamParser();
+
+    parser.feedContent('<thought>thinking');
+    const c1 = parser.feedContent('</thou');
+    expect(c1).toEqual([]);  // partial close tag buffered
+
+    const c2 = parser.feedContent('ght>answer');
+    expect(c2).toEqual([{ type: 'content', text: 'answer' }]);
+  });
+
+  it('handles both <think> and <thought> in the same stream independently', () => {
+    const { ThinkTagStreamParser } = require('../src/modules/ai/adapters/openai-compat.adapter');
+    const p1 = new ThinkTagStreamParser();
+    const p2 = new ThinkTagStreamParser();
+
+    const think = p1.feedContent('<think>step1</think>answer1');
+    expect(think).toEqual([
+      { type: 'reasoning', text: 'step1' },
+      { type: 'content', text: 'answer1' },
+    ]);
+
+    const thought = p2.feedContent('<thought>step2</thought>answer2');
+    expect(thought).toEqual([
+      { type: 'reasoning', text: 'step2' },
+      { type: 'content', text: 'answer2' },
+    ]);
+  });
+
+  it('parseStreamChunk extracts <thought> via parser for Gemini-style delta', () => {
+    const { ThinkTagStreamParser } = require('../src/modules/ai/adapters/openai-compat.adapter');
+    const parser = new ThinkTagStreamParser();
+    const adapter = new OpenAiCompatAdapter();
+
+    const c1 = adapter.parseStreamChunk(
+      { choices: [{ delta: { content: '<thought>Gemini reasoning' } }] },
+      parser,
+    );
+    expect(c1).toEqual([{ type: 'reasoning', text: 'Gemini reasoning' }]);
+
+    const c2 = adapter.parseStreamChunk(
+      { choices: [{ delta: { content: '</thought>Final answer.' } }] },
+      parser,
+    );
+    expect(c2).toEqual([{ type: 'content', text: 'Final answer.' }]);
+  });
+});
+
 
 
 ================================================
 FILE: test/ai-forwarder.spec.ts
 ================================================
 Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 5702: character maps to <undefined>
+
+
+================================================
+FILE: test/api-features-search-field.spec.ts
+================================================
+import { ApiFeatures } from '../src/shared/api-features';
+
+describe('ApiFeatures search field selection', () => {
+  it('restricts search to a validated selected field', () => {
+    const result = ApiFeatures.applyToArray(
+      [
+        { name: 'Alpha', provider: 'OpenAI' },
+        { name: 'OpenAI', provider: 'Anthropic' },
+      ],
+      { search: 'openai', searchField: 'provider' },
+      { searchableFields: ['name', 'provider'] },
+    );
+
+    expect(result.items).toEqual([{ name: 'Alpha', provider: 'OpenAI' }]);
+  });
+
+  it('falls back to all searchable fields for an invalid selected field', () => {
+    const result = ApiFeatures.applyToArray(
+      [
+        { name: 'Alpha', provider: 'OpenAI' },
+        { name: 'OpenAI', provider: 'Anthropic' },
+      ],
+      { search: 'openai', searchField: 'password' },
+      { searchableFields: ['name', 'provider'] },
+    );
+
+    expect(result.items).toHaveLength(2);
+  });
+});
+
+
+================================================
+FILE: test/app-logger.spec.ts
+================================================
+import { AppLoggerService } from '../src/shared/logger/app-logger.service';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+describe('AppLoggerService', () => {
+  let logger: AppLoggerService;
+  const logDir = path.resolve(process.cwd(), 'logs');
+
+  beforeEach(() => {
+    logger = new AppLoggerService();
+  });
+
+  it('creates logs directory if missing', () => {
+    expect(fs.existsSync(logDir)).toBe(true);
+  });
+
+  it('sanitizes sensitive fields (password, token, authorization)', () => {
+    const rawData = {
+      email: 'user@example.com',
+      password: 'SecretPassword123!',
+      nested: {
+        token: 'jwt-access-token-string',
+        authorization: 'Bearer 12345',
+        safeField: 'hello world',
+      },
+    };
+
+    const sanitized = logger.sanitize(rawData);
+
+    expect(sanitized.email).toBe('user@example.com');
+    expect(sanitized.password).toBe('***REDACTED***');
+    expect(sanitized.nested.token).toBe('***REDACTED***');
+    expect(sanitized.nested.authorization).toBe('***REDACTED***');
+    expect(sanitized.nested.safeField).toBe('hello world');
+  });
+
+  it('writes INFO logs to daily app log file', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const appLogPath = path.join(logDir, `app-${today}.log`);
+
+    const uniqueMsg = `Test info log ${Date.now()}`;
+    logger.log(uniqueMsg, 'UnitTest');
+
+    // Allow small I/O tick
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(fs.existsSync(appLogPath)).toBe(true);
+    const content = fs.readFileSync(appLogPath, 'utf-8');
+    expect(content).toContain(uniqueMsg);
+    expect(content).toContain('UnitTest');
+  });
+
+  it('writes ERROR logs to both app log and error log files', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const errorLogPath = path.join(logDir, `error-${today}.log`);
+
+    const uniqueError = `Test error log ${Date.now()}`;
+    logger.error(uniqueError, 'Fake stack trace', 'UnitTest');
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(fs.existsSync(errorLogPath)).toBe(true);
+    const content = fs.readFileSync(errorLogPath, 'utf-8');
+    expect(content).toContain(uniqueError);
+    expect(content).toContain('Fake stack trace');
+  });
+});
+
 
 
 ================================================
@@ -8406,6 +9469,27 @@ describe('Audit Logging and SigNoz Tracing Integration', () => {
           if (qb.parameters.traceId) {
             const t = qb.parameters.traceId.replace(/%/g, '').toLowerCase();
             filtered = filtered.filter((l) => l.traceId?.toLowerCase().includes(t));
+          }
+          if (qb.parameters.directId) {
+            const d = qb.parameters.directId.replace(/%/g, '').toLowerCase();
+            filtered = filtered.filter(
+              (l) =>
+                l.id?.toLowerCase().includes(d) ||
+                l.traceId?.toLowerCase().includes(d) ||
+                l.actorId?.toLowerCase().includes(d),
+            );
+          }
+          if (qb.parameters.actorEmail) {
+            const ae = qb.parameters.actorEmail.replace(/%/g, '').toLowerCase();
+            filtered = filtered.filter((l) => l.actorEmail?.toLowerCase().includes(ae));
+          }
+          if (qb.parameters.startDate) {
+            const sd = new Date(qb.parameters.startDate).getTime();
+            filtered = filtered.filter((l) => l.createdAt && new Date(l.createdAt).getTime() >= sd);
+          }
+          if (qb.parameters.endDate) {
+            const ed = new Date(qb.parameters.endDate).getTime();
+            filtered = filtered.filter((l) => l.createdAt && new Date(l.createdAt).getTime() <= ed);
           }
           if (qb.whereClauses.some((c: string) => c.includes('statusCode < 400'))) {
             filtered = filtered.filter((l) => (l.statusCode ?? 200) < 400 && !l.errorMessage);
@@ -8530,7 +9614,9 @@ describe('Audit Logging and SigNoz Tracing Integration', () => {
 
       let capturedHeaders: any = null;
       (global as any).fetch = jest.fn().mockImplementation((url, init) => {
-        capturedHeaders = init.headers;
+        if (typeof url === 'string' && url.includes('api.openai.com')) {
+          capturedHeaders = init.headers;
+        }
         return Promise.resolve(mockFetchResponse);
       });
 
@@ -8575,7 +9661,19 @@ describe('Audit Logging and SigNoz Tracing Integration', () => {
 
     it('handles outbound fetch errors gracefully and records error message in audit log', async () => {
       const originalFetch = global.fetch;
-      (global as any).fetch = jest.fn().mockRejectedValue(new Error('Connection refused by peer'));
+      const mockFetchResponse = {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({ success: true }),
+        text: async () => '{"success": true}',
+      };
+      (global as any).fetch = jest.fn().mockImplementation((url) => {
+        if (typeof url === 'string' && url.includes('zarinpal.com')) {
+          return Promise.reject(new Error('Connection refused by peer'));
+        }
+        return Promise.resolve(mockFetchResponse);
+      });
 
       try {
         await expect(
@@ -8655,6 +9753,64 @@ describe('Audit Logging and SigNoz Tracing Integration', () => {
       const result = await adminAuditController.getAuditLogs(undefined, undefined, 'zarinpal');
       expect(result.items.length).toBe(1);
       expect(result.items[0].action).toBe('payment.zarinpal.request');
+    });
+
+    it('filters logs by id (Log ID / User ID / Trace ID)', async () => {
+      const result = await adminAuditController.getAuditLogs(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'aaaaaaaa',
+      );
+      expect(result.items.length).toBe(1);
+      expect(result.items[0].traceId).toBe('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+    });
+
+    it('filters logs by date range (startDate & endDate)', async () => {
+      const now = new Date();
+      const past = new Date(now.getTime() - 60000).toISOString();
+      const future = new Date(now.getTime() + 60000).toISOString();
+      const wayPast = new Date(now.getTime() - 1000000).toISOString();
+
+      const resultWithinRange = await adminAuditController.getAuditLogs(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        past,
+        future,
+      );
+      expect(resultWithinRange.items.length).toBe(3);
+
+      const resultOutOfRange = await adminAuditController.getAuditLogs(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        wayPast,
+        past,
+      );
+      expect(resultOutOfRange.items.length).toBe(0);
     });
   });
 });
@@ -8749,7 +9905,7 @@ describe('POST /auth/signup + /auth/login â€” contract invariants & edge ca
   it('signup with valid payload returns 201 with user + both tokens', async () => {
     const res = await request(app.getHttpServer())
       .post('/auth/signup')
-      .send({ email: 'new@example.com', password: 'password123', displayName: 'New' });
+      .send({ email: 'new@example.com', password: 'Pass1234!', displayName: 'New' });
     expect(res.status).toBe(201);
     expect(res.body).toHaveProperty('success', true);
     expect(res.body.data).toHaveProperty('user');
@@ -8773,7 +9929,7 @@ describe('POST /auth/signup + /auth/login â€” contract invariants & edge ca
   it('signup response never contains passwordHash', async () => {
     const res = await request(app.getHttpServer())
       .post('/auth/signup')
-      .send({ email: 'bob@example.com', password: 'password123' });
+      .send({ email: 'bob@example.com', password: 'Pass1234!' });
     expect(res.status).toBe(201);
     expect(JSON.stringify(res.body)).not.toMatch(/passwordHash|password/i);
   });
@@ -8783,7 +9939,7 @@ describe('POST /auth/signup + /auth/login â€” contract invariants & edge ca
   it('access token carries sub/email/role; refresh token carries type=refresh', async () => {
     const res = await request(app.getHttpServer())
       .post('/auth/signup')
-      .send({ email: 'carol@example.com', password: 'password123' });
+      .send({ email: 'carol@example.com', password: 'Pass1234!' });
     expect(res.status).toBe(201);
     const access = JSON.parse(res.body.data.accessToken);
     const refresh = JSON.parse(res.body.data.refreshToken);
@@ -8804,7 +9960,7 @@ describe('POST /auth/signup + /auth/login â€” contract invariants & edge ca
   it('signup with malformed email returns 400 with contract envelope', async () => {
     const res = await request(app.getHttpServer())
       .post('/auth/signup')
-      .send({ email: 'not-an-email', password: 'password123' });
+      .send({ email: 'not-an-email', password: 'Pass1234!' });
     expect(res.status).toBe(400);
     expect(res.body).toHaveProperty('statusCode', 400);
     expect(res.body).toHaveProperty('message');
@@ -8818,6 +9974,13 @@ describe('POST /auth/signup + /auth/login â€” contract invariants & edge ca
     expect(res.status).toBe(400);
   });
 
+  it('signup with weak password (missing symbols/uppercase) returns 400', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/auth/signup')
+      .send({ email: 'weak@example.com', password: 'password123' });
+    expect(res.status).toBe(400);
+  });
+
   it('signup with empty body returns 400', async () => {
     const res = await request(app.getHttpServer()).post('/auth/signup').send({});
     expect(res.status).toBe(400);
@@ -8828,10 +9991,10 @@ describe('POST /auth/signup + /auth/login â€” contract invariants & edge ca
   it('signup with already-registered email returns 409', async () => {
     await request(app.getHttpServer())
       .post('/auth/signup')
-      .send({ email: 'eve@example.com', password: 'password123' });
+      .send({ email: 'eve@example.com', password: 'Pass1234!' });
     const res = await request(app.getHttpServer())
       .post('/auth/signup')
-      .send({ email: 'eve@example.com', password: 'password123' });
+      .send({ email: 'eve@example.com', password: 'Pass1234!' });
     expect(res.status).toBe(409);
     expect(res.body).toEqual(expect.objectContaining({ statusCode: 409 }));
   });
@@ -8969,6 +10132,217 @@ describe('POST /auth/logout (contract)', () => {
       .set('Authorization', 'Bearer faketok')
       .send({});
     expect(res.status).toBe(204);
+  });
+});
+
+
+
+================================================
+FILE: test/auth-refresh.spec.ts
+================================================
+import { Test } from '@nestjs/testing';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import request from 'supertest';
+import { AuthController } from '../src/modules/auth/auth.controller';
+import { AuthService } from '../src/modules/auth/auth.service';
+import { UsersService } from '../src/modules/users/users.service';
+import { JwtService } from '@nestjs/jwt';
+import { HttpExceptionFilter } from '../src/shared/http-exception.filter';
+import { ResponseEnvelopeInterceptor } from '../src/shared/response-envelope.interceptor';
+import { RefreshToken } from '../src/modules/auth/refresh-token.entity';
+import { getRepositoryToken } from '@nestjs/typeorm';
+
+describe('POST /auth/refresh & Strong Password Validation', () => {
+  let app: INestApplication;
+  const refreshTokensDb: RefreshToken[] = [];
+
+  const mockRefreshTokenRepo = {
+    create: (dto: any) => ({
+      id: 'rt-' + Math.random().toString(36).substring(2, 9),
+      createdAt: new Date(),
+      ...dto,
+    }),
+    save: async (token: RefreshToken) => {
+      const idx = refreshTokensDb.findIndex((t) => t.id === token.id);
+      if (idx >= 0) {
+        refreshTokensDb[idx] = token;
+      } else {
+        refreshTokensDb.push(token);
+      }
+      return token;
+    },
+    findOne: async ({ where }: any) => {
+      return refreshTokensDb.find((t) => {
+        let match = true;
+        if (where.tokenHash !== undefined) match = match && t.tokenHash === where.tokenHash;
+        if (where.userId !== undefined) match = match && t.userId === where.userId;
+        if (where.isRevoked !== undefined) match = match && t.isRevoked === where.isRevoked;
+        return match;
+      }) ?? null;
+    },
+    update: async (criteria: any, partial: any) => {
+      for (const t of refreshTokensDb) {
+        if (criteria.userId && t.userId === criteria.userId) {
+          Object.assign(t, partial);
+        }
+      }
+    },
+  };
+
+  const mockUsersService = {
+    findByEmail: async (email: string) => {
+      if (email === 'existing@example.com') {
+        return {
+          id: 'u1',
+          email: 'existing@example.com',
+          role: 'user',
+          isActive: true,
+          passwordHash: '$2a$10$sample',
+        };
+      }
+      return null;
+    },
+    findById: async (id: string) => {
+      if (id === 'u1') {
+        return {
+          id: 'u1',
+          email: 'existing@example.com',
+          role: 'user',
+          isActive: true,
+        };
+      }
+      return null;
+    },
+    create: async (d: any) => ({
+      id: 'u1',
+      email: d.email,
+      role: 'user',
+      isActive: true,
+      createdAt: new Date(),
+    }),
+  };
+
+  beforeAll(async () => {
+    const jwtSecret = 'test-secret';
+    const realJwt = new JwtService({ secret: jwtSecret });
+
+    const mod = await Test.createTestingModule({
+      controllers: [AuthController],
+      providers: [
+        AuthService,
+        { provide: UsersService, useValue: mockUsersService },
+        { provide: JwtService, useValue: realJwt },
+        { provide: getRepositoryToken(RefreshToken), useValue: mockRefreshTokenRepo },
+      ],
+    }).compile();
+
+    app = mod.createNestApplication();
+    app.useGlobalFilters(new HttpExceptionFilter());
+    app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  describe('Password Complexity Validation on Signup', () => {
+    it('rejects password without uppercase letters', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send({ email: 'pass1@example.com', password: 'password123!' });
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(res.body)).toMatch(/Ø±Ù…Ø² Ø¹Ø¨ÙˆØ±/);
+    });
+
+    it('rejects password without numbers', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send({ email: 'pass2@example.com', password: 'Password!@#' });
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects password without special symbols', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send({ email: 'pass3@example.com', password: 'Password123' });
+      expect(res.status).toBe(400);
+    });
+
+    it('accepts compliant strong password', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send({ email: 'strong@example.com', password: 'StrongPassword123!' });
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.accessToken).toBeDefined();
+      expect(res.body.data.refreshToken).toBeDefined();
+    });
+  });
+
+  describe('Refresh Token Rotation & Invalidation', () => {
+    let initialRefreshToken: string;
+    let rotatedRefreshToken: string;
+
+    it('generates initial tokens upon signup', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send({ email: 'user-refresh@example.com', password: 'SecurePass987@!' });
+      expect(res.status).toBe(201);
+      initialRefreshToken = res.body.data.refreshToken;
+      expect(initialRefreshToken).toBeDefined();
+    });
+
+    it('successfully refreshes token with valid refresh token', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refreshToken: initialRefreshToken });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.accessToken).toBeDefined();
+      expect(res.body.data.refreshToken).toBeDefined();
+      expect(res.body.data.refreshToken).not.toBe(initialRefreshToken);
+
+      rotatedRefreshToken = res.body.data.refreshToken;
+    });
+
+    it('can refresh sequentially again with the newly rotated token', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refreshToken: rotatedRefreshToken });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.accessToken).toBeDefined();
+      expect(res.body.data.refreshToken).toBeDefined();
+    });
+
+    it('rejects reused / old refresh token (detects token reuse and revokes token family)', async () => {
+      // Re-using the initialRefreshToken which was already rotated
+      const res = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refreshToken: initialRefreshToken });
+
+      expect(res.status).toBe(401);
+      expect(res.body.message).toMatch(/Ù†Ø§Ù…Ø¹ØªØ¨Ø±|Ù…Ù†Ù‚Ø¶ÛŒ/);
+    });
+
+    it('rejects completely bogus refresh token', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refreshToken: 'totally-bogus-token-value' });
+
+      expect(res.status).toBe(401);
+    });
+
+    it('rejects empty refresh token payload with 400', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({});
+
+      expect(res.status).toBe(400);
+    });
   });
 });
 
@@ -10471,12 +11845,23 @@ describe('calculateAttachmentTokens (Multimodal Image Token Calculation)', () =>
     expect(calculateAttachmentTokens(mediumImage)).toBe(215);
   });
 
-  it('ignores non-image attachments in vision tile calculation', () => {
+  it('ignores unsupported non-document attachments', () => {
+    const unsupported = [
+      { fileType: 'audio', fileSize: 500 * 1024 },
+      { fileType: 'archive', fileSize: 300 * 1024 },
+    ];
+    expect(calculateAttachmentTokens(unsupported)).toBe(0);
+  });
+
+  it('calculates document tokens for pdf and excel', () => {
     const pdfAndExcel = [
       { fileType: 'pdf', fileSize: 500 * 1024 },
       { fileType: 'excel', fileSize: 300 * 1024 },
     ];
-    expect(calculateAttachmentTokens(pdfAndExcel)).toBe(0);
+    // (500 * 1024 / 500) * 100 = 102400
+    // (300 * 1024 / 500) * 100 = 61440
+    // Total = 163840
+    expect(calculateAttachmentTokens(pdfAndExcel)).toBe(163840);
   });
 });
 
@@ -10754,7 +12139,7 @@ describe('ModelsController user role resolution', () => {
 ================================================
 FILE: test/models-admin-default.spec.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 3253: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 4795: character maps to <undefined>
 
 
 ================================================
@@ -11243,6 +12628,16 @@ it('changePassword: verifies current, stores new bcrypt hash', async () => {
   await svc.changePassword('u1', { currentPassword: 'current123', newPassword: 'brand-new-1' } as any);
   expect(await bcrypt.compare('brand-new-1', stored.user.passwordHash)).toBe(true);
   expect(await bcrypt.compare('current123', stored.user.passwordHash)).toBe(false);
+});
+
+it('theme preference: GET returns the { preference } envelope; PATCH persists it', async () => {
+  const { svc, stored } = await makeProfile();
+  expect(await svc.getThemePreference('u1')).toEqual({ preference: null });
+  await svc.updateThemePreference('u1', 'dark');
+  expect(stored.user.themePreference).toBe('dark');
+  expect(await svc.getThemePreference('u1')).toEqual({ preference: 'dark' });
+  await svc.updateThemePreference('u1', null);
+  expect(await svc.getThemePreference('u1')).toEqual({ preference: null });
 });
 
 it('setAvatar: png ok -> stored, url built, OLD object removed; webp/exe/oversize/missing rejected; 503 propagates', async () => {
@@ -11862,7 +13257,7 @@ describe('maskSecret', () => {
 ================================================
 FILE: test/role-token-limits.spec.ts
 ================================================
-Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 11074: character maps to <undefined>
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 12078: character maps to <undefined>
 
 
 ================================================
@@ -12061,6 +13456,107 @@ describe('SettingsService Token Tariffs', () => {
   });
 });
 
+// â”€â”€â”€ calculateAttachmentTokens + resolveAttachmentMultiplier â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+import {
+  calculateAttachmentTokens,
+  resolveAttachmentMultiplier,
+} from '../src/modules/chat/chat.service';
+
+describe('resolveAttachmentMultiplier', () => {
+  it('returns 1.0 for normal task type regardless of map', () => {
+    expect(resolveAttachmentMultiplier('normal', { normal: 5 })).toBe(1.0);
+  });
+
+  it('returns configured multiplier for image', () => {
+    expect(resolveAttachmentMultiplier('image', { image: 2.5 })).toBe(2.5);
+  });
+
+  it('returns configured multiplier for document', () => {
+    expect(resolveAttachmentMultiplier('document', { document: 1.8 })).toBe(1.8);
+  });
+
+  it('falls back to 1.0 when type not in map', () => {
+    expect(resolveAttachmentMultiplier('image', {})).toBe(1.0);
+    expect(resolveAttachmentMultiplier('document', {})).toBe(1.0);
+  });
+
+  it('falls back to 1.0 when multiplier is zero or negative', () => {
+    expect(resolveAttachmentMultiplier('image', { image: 0 })).toBe(1.0);
+    expect(resolveAttachmentMultiplier('image', { image: -1 })).toBe(1.0);
+  });
+});
+
+describe('calculateAttachmentTokens with admin taskMultipliers', () => {
+  it('returns 0 for empty attachments', () => {
+    expect(calculateAttachmentTokens([], { image: 3 })).toBe(0);
+  });
+
+  it('applies no multiplier (1.0) when taskMultipliers is empty', () => {
+    const att = [{ fileType: 'image', metadata: { width: 512, height: 512 } }];
+    // 1 tile: 85 + 1*170 = 255, mult=1.0 â†’ 255
+    expect(calculateAttachmentTokens(att, {})).toBe(255);
+  });
+
+  it('applies image multiplier from admin settings', () => {
+    const att = [{ fileType: 'image', metadata: { width: 512, height: 512 } }];
+    // base=255, mult=2.0 â†’ 510
+    expect(calculateAttachmentTokens(att, { image: 2.0 })).toBe(510);
+  });
+
+  it('applies image multiplier for multi-tile image', () => {
+    // 1024Ã—512 â†’ 2Ã—1 tiles = 2 tiles â†’ 85 + 2*170 = 425, mult=1.5 â†’ ceil(637.5)=638
+    const att = [{ fileType: 'image', metadata: { width: 1024, height: 512 } }];
+    expect(calculateAttachmentTokens(att, { image: 1.5 })).toBe(638);
+  });
+
+  it('estimates image tokens by fileSize when dimensions are missing', () => {
+    // size=128KB â†’ chunks=1 â†’ 85 + 1*65 = 150, mult=2.0 â†’ 300
+    const att = [{ fileType: 'image', fileSize: 128 * 1024 }];
+    expect(calculateAttachmentTokens(att, { image: 2.0 })).toBe(300);
+  });
+
+  it('applies document multiplier for pdf', () => {
+    // size=5000 bytes â†’ ceil(5000/500*100)=1000 tokens, mult=1.5 â†’ 1500
+    const att = [{ fileType: 'pdf', fileSize: 5000 }];
+    expect(calculateAttachmentTokens(att, { document: 1.5 })).toBe(1500);
+  });
+
+  it('applies document multiplier for text file', () => {
+    // size=1000 bytes â†’ ceil(1000/500*100)=200, mult=2.0 â†’ 400
+    const att = [{ fileType: 'text', fileSize: 1000 }];
+    expect(calculateAttachmentTokens(att, { document: 2.0 })).toBe(400);
+  });
+
+  it('applies document multiplier for excel', () => {
+    // size=0 â†’ fallback 100, mult=1.3 â†’ ceil(130)=130
+    const att = [{ fileType: 'excel', fileSize: 0 }];
+    expect(calculateAttachmentTokens(att, { document: 1.3 })).toBe(130);
+  });
+
+  it('applies different multipliers for image and document in same request', () => {
+    const atts = [
+      { fileType: 'image', metadata: { width: 512, height: 512 } }, // base=255, mult=2.0 â†’ 510
+      { fileType: 'pdf', fileSize: 5000 },                           // base=1000, mult=1.5 â†’ 1500
+    ];
+    expect(calculateAttachmentTokens(atts, { image: 2.0, document: 1.5 })).toBe(2010);
+  });
+
+  it('image multiplier does not affect document tokens and vice versa', () => {
+    const imgOnly = [{ fileType: 'image', metadata: { width: 512, height: 512 } }];
+    const docOnly = [{ fileType: 'pdf', fileSize: 5000 }];
+    // image with document multiplier set â†’ should use imageMult=1.0 fallback
+    expect(calculateAttachmentTokens(imgOnly, { document: 5.0 })).toBe(255);
+    // document with image multiplier set â†’ should use documentMult=1.0 fallback
+    expect(calculateAttachmentTokens(docOnly, { image: 5.0 })).toBe(1000);
+  });
+});
+
+
+
+================================================
+FILE: test/tts.spec.ts
+================================================
+Error reading file with 'cp1252': 'charmap' codec can't decode byte 0x81 in position 3039: character maps to <undefined>
 
 
 ================================================

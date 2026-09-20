@@ -64,6 +64,11 @@ import { TraceContextMiddleware } from './shared/trace-context.service';
       ],
       migrations: [__dirname + '/migrations/*{.ts,.js}'],
       synchronize: (process.env.DB_SYNC ?? 'true') === 'true',
+      extra: {
+        max: 50,
+        connectionTimeoutMillis: 5000,
+        idleTimeoutMillis: 30000,
+      },
     }),
     LoggerModule,
     UsersModule,

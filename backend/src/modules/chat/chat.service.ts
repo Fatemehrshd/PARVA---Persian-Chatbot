@@ -6,6 +6,7 @@ import { Message } from './message.entity';
 import { FileAttachment } from '../files/file-attachment.entity';
 import { ModelsAdminService } from '../models-admin/models-admin.service';
 import { OpenAiCompatForwarder, ChatMessage } from '../ai/openai-compat.forwarder';
+import { detectProvider } from '../ai/adapters/openai-compat.adapter';
 import { DEFAULT_RESET_HOURS, SettingsService } from '../admin/settings.service';
 import { UsersService } from '../users/users.service';
 import { ActiveStreamService, ActiveStreamStatus } from './active-stream.service';
@@ -587,8 +588,9 @@ export class ChatService {
     id: string,
     content: string,
     fileIds?: string[],
-    options?: { useWebSearch?: boolean; useThinking?: boolean },
+    options?: { useWebSearch?: boolean; useThinking?: boolean; pace?: boolean },
   ): AsyncGenerator<ChatChunk> {
+    const shouldPace = options?.pace !== false;
     const conversation = await this.assertOwned(userId, id);
 
     // Periodic quota enforcement: user limits override role limits, then global.
@@ -756,7 +758,7 @@ export class ChatService {
         const mockReasoning = 'در حال تحلیل دقیق و پردازش ابعاد مختلف درخواست...';
         for (const w of mockReasoning.split(/(\s+)/)) {
           if (w) {
-            if (!/^\s+$/.test(w)) await paceToken();
+            if (!/^\s+$/.test(w) && shouldPace) await paceToken();
             this.activeStream?.appendReasoning(id, w);
             yield { thinking: w };
           }
@@ -770,7 +772,7 @@ export class ChatService {
       const full = `Echo: ${effectiveContent}`;
       for (const w of full.split(/(\s+)/)) {
         if (w) {
-          await paceToken();
+          if (shouldPace) await paceToken();
           this.activeStream?.appendToken(id, w);
           yield { token: w };
         }
@@ -808,7 +810,10 @@ export class ChatService {
       await this.recordUsage(userId, consumedTokens, this.detectTaskType(attachments));
 
       if (titlePromise) {
-        const genTitle = await titlePromise;
+        const genTitle = await Promise.race([
+          titlePromise,
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+        ]);
         if (genTitle) {
           await this.conv.update(id, { title: genTitle });
           this.activeStream?.setTitle(id, genTitle);
@@ -832,13 +837,21 @@ export class ChatService {
       : SYSTEM_PROMPT;
 
     const historyWithoutLast = history.length > 0 ? history.slice(0, -1) : [];
+    const providerFamily = detectProvider(target?.baseUrl || '', target?.apiIdentifier || '');
     const isNativeReasoningModel =
-      target?.apiIdentifier &&
-      (target.apiIdentifier.startsWith('o1') ||
-        target.apiIdentifier.startsWith('o3') ||
-        target.apiIdentifier.startsWith('o4') ||
-        target.apiIdentifier.toLowerCase().includes('deepseek-r1') ||
-        target.apiIdentifier.toLowerCase().includes('deepseek-reasoner'));
+      providerFamily === 'gemini' ||
+      providerFamily === 'openai' ||
+      providerFamily === 'deepseek' ||
+      providerFamily === 'anthropic' ||
+      Boolean(
+        target?.apiIdentifier &&
+          (target.apiIdentifier.startsWith('o1') ||
+            target.apiIdentifier.startsWith('o3') ||
+            target.apiIdentifier.startsWith('o4') ||
+            target.apiIdentifier.toLowerCase().includes('deepseek-r1') ||
+            target.apiIdentifier.toLowerCase().includes('deepseek-reasoner') ||
+            target.apiIdentifier.toLowerCase().includes('gemini')),
+      );
 
     const thinkingInstruction =
       wantThinking && !isNativeReasoningModel
@@ -906,7 +919,7 @@ export class ChatService {
 
             for (const piece of reasoningDelta.split(/(\s+)/)) {
               if (!piece) continue;
-              if (!/^\s+$/.test(piece)) await paceToken();
+              if (!/^\s+$/.test(piece) && shouldPace) await paceToken();
               this.activeStream?.appendReasoning(id, piece);
               yield { thinking: piece };
             }
@@ -927,7 +940,7 @@ export class ChatService {
           // smooth, word-by-word flow instead of sudden bulk text.
           for (const piece of tokenStr.split(/(\s+)/)) {
             if (!piece) continue;
-            if (!/^\s+$/.test(piece)) await paceToken();
+            if (!/^\s+$/.test(piece) && shouldPace) await paceToken();
             full += piece;
             this.activeStream?.appendToken(id, piece);
             yield { token: piece };
@@ -940,8 +953,21 @@ export class ChatService {
           this.activeStream?.completeThinking(id, thinkingDurationMs);
           yield { thinkingStatus: 'done', thinkingDurationMs };
         }
+
+        // If the model produced reasoning but no content tokens were emitted,
+        // use the reasoning as the response text so the user receives a visible answer
+        if (!full && session?.reasoningText) {
+          const fallbackText = session.reasoningText;
+          full = fallbackText;
+          for (const piece of fallbackText.split(/(\s+)/)) {
+            if (!piece) continue;
+            if (!/^\s+$/.test(piece) && shouldPace) await paceToken();
+            this.activeStream?.appendToken(id, piece);
+            yield { token: piece };
+          }
+        }
       } catch (err) {
-        if (!full) {
+        if (!full && !session?.reasoningText) {
           const errMessage = err instanceof Error ? err.message : String(err);
           this.activeStream?.failSession(id, errMessage);
           throw err;
@@ -966,12 +992,17 @@ export class ChatService {
       // completed message should show the sources list below it.
       const stoppedByUserAbort =
         session?.abortController?.signal.aborted === true && !failedMidStream;
-      if (full && !savedAssistant) {
+      if ((full || session?.reasoningText) && !savedAssistant) {
+        const contentToSave =
+          full ||
+          (failedMidStream || stoppedByUserAbort
+            ? 'به دلیل بروز خطا در مدل هوش مصنوعی، ادامه پاسخ قطع شد.'
+            : '');
         savedAssistant = await this.msg.save(
           this.msg.create({
             conversationId: id,
             role: 'assistant',
-            content: full,
+            content: contentToSave,
             isInterrupted: failedMidStream || stoppedByUserAbort,
             stoppedByUser: stoppedByUserAbort,
             sources: stoppedByUserAbort ? null : webSources,
@@ -1005,7 +1036,10 @@ export class ChatService {
 
     if (titlePromise) {
       try {
-        const genTitle = await titlePromise;
+        const genTitle = await Promise.race([
+          titlePromise,
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+        ]);
         if (genTitle) {
           await this.conv.update(id, { title: genTitle });
           this.activeStream?.setTitle(id, genTitle);

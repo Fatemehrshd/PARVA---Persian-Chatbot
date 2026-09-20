@@ -172,12 +172,14 @@ export class ChatController {
     @Param('id') id: string,
     @Body(new ValidationPipe({ whitelist: true })) d: SendMsgDto,
   ) {
+    const accept = (req.headers['accept'] as string) ?? '';
+    const isJson = accept.includes('application/json');
     const gen = this.chat.generate(req.user.sub, id, d.content, d.fileIds, {
       useWebSearch: d.useWebSearch === true,
       useThinking: d.useThinking === true,
+      pace: !isJson,
     });
-    const accept = (req.headers['accept'] as string) ?? '';
-    if (accept.includes('application/json')) {
+    if (isJson) {
       // Buffer the whole stream: nothing has been written yet, so provider
       // failures land in the exception filter as a clean 502 envelope.
       let saved;

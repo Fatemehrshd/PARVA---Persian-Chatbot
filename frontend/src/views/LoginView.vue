@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 
 import { useFormSubmit } from '../composables/useFormSubmit'
 import { useThemeLogo } from '../composables/useThemeLogo'
+import { isValidEmail } from '../utils/validators'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -66,7 +67,7 @@ async function handleSubmit() {
     return
   }
 
-  if (!email.value.includes('@')) {
+  if (!isValidEmail(email.value)) {
     formError.value = 'لطفاً یک ایمیل معتبر وارد کنید.'
     return
   }
@@ -159,7 +160,11 @@ async function handleSubmit() {
         </div>
 
         <!-- Form Elements -->
-        <form @submit.prevent="handleSubmit" class="space-y-4 text-start">
+        <!-- `novalidate`: the browser's native type="email" bubble (English,
+             e.g. "Please include an '@'...") must never appear — invalid input
+             is surfaced as the same inline Persian message as every other
+             client-side validation error. -->
+        <form @submit.prevent="handleSubmit" novalidate class="space-y-4 text-start">
           
           <!-- Display Name (Signup Only) -->
           <div v-if="isSignup" class="space-y-1.5">

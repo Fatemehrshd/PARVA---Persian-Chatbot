@@ -76,7 +76,9 @@ export function useFormSubmit<TArgs extends any[] = any[], TResult = any>(
       return result
     } catch (err: any) {
       let errorMessage = 'عملیات با خطا مواجه شد.'
-      const rawMsg = err?.message
+      // rawMessage preserves the validator array (ApiError.message is a
+      // joined display string after localization).
+      const rawMsg = err?.rawMessage ?? err?.message
 
       if (Array.isArray(rawMsg)) {
         errorMessage = rawMsg.join(', ')

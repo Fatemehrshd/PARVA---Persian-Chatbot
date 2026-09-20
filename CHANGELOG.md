@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Inline Persian validation for a missing `@` in the email field (نمایش inline خطای نبودِ @ در ایمیل)**: the browser's native English bubble ("Please include an '@' in the email address…") no longer appears — the login/signup form and the profile email-change form use `novalidate`, and a shared client-side validator (`frontend/src/utils/validators.ts`, mirroring the backend `@IsEmail` rule) shows the same inline Persian message for a missing `@`, a missing domain dot, or any other invalid email **before** any request is sent. Covered by new tests in `frontend/tests/LoginView.spec.ts`.
+- **Global Persian error handling (هندل سراسری و فارسی خطاها)**: a centralized localization layer (`frontend/src/utils/errorMessages.ts`) now runs in `services/api.ts` — the single funnel for every HTTP error:
+  - Known English backend messages (`Resource not found`, `Admin only`, `Email is already registered`, model/provider errors, MinIO storage errors, …) are translated to Persian.
+  - **No raw server/framework error can leak to the user anymore**: any unrecognized non-Persian message (DB errors, stack fragments, future endpoints) is replaced with a generic Persian fallback before any caller renders `err.message`.
+  - Network-level failures (`Failed to fetch`, offline, DNS, server down) now surface as a Persian offline message (`statusCode 0`) instead of the raw browser text.
+  - Array (class-validator) messages are translated per-element and preserved on `ApiError.rawMessage` so `useFormSubmit` field-level error mapping keeps working.
+  - English frontend fallbacks (`Failed to fetch models`, `An error occurred during submission`) localized.
 - **Dark theme no longer reset to light on page refresh (رفع بازگشت تم تیره به روشن بعد از رفرش)**: `GET /users/me/theme` returned the raw value (e.g. `"dark"`) while the client read `.preference` from it, so every refresh silently resolved the preference to `null` (→ light default). The backend now returns the documented `{ preference }` envelope, and the frontend parser tolerates both the envelope and the legacy bare-string shape. Covered by new tests in `backend/test/profile.spec.ts` and `frontend/tests/ThemePerUser.spec.ts`.
 - Theme behavior hardened (رفع مشکلات تم):
   - The login page (`/login`) now **always renders in the light theme** via a view-local `authPageLightMode` override in the `ui` store — never persisted to `localStorage` or the backend, and a signed-in user's theme is restored as soon as they leave the page.

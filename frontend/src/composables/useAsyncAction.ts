@@ -33,7 +33,7 @@ export function useAsyncAction<TArgs extends any[] = any[], TResult = any>(
       options?.onSuccess?.(result)
       return result
     } catch (err: any) {
-      const message = err?.message || 'An error occurred during submission'
+      const message = err?.message || 'عملیات با خطا مواجه شد.'
       error.value = message
       options?.onError?.(err)
       return undefined

@@ -4,11 +4,15 @@
  * Formats errors according to OpenAPI Error envelope: { statusCode, message, error }.
  */
 
+import { NETWORK_ERROR, translateServerMessage } from '../utils/errorMessages'
+
 export class ApiError extends Error {
   constructor(
     public statusCode: number,
     message: string,
-    public error?: string
+    public error?: string,
+    /** Original (untranslated) message; may be an array of validator messages. */
+    public rawMessage?: string | string[]
   ) {
     super(message)
     this.name = 'ApiError'
@@ -46,10 +50,17 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
 
   const url = buildUrl(endpoint)
 
-  const response = await fetch(url, {
-    ...options,
-    headers
-  })
+  let response: Response
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers
+    })
+  } catch {
+    // Network-level failure (offline, DNS, CORS, server down). The raw
+    // browser message ("Failed to fetch") must never reach the user.
+    throw new ApiError(0, NETWORK_ERROR, 'Network Error')
+  }
 
   const quotaHeader = response.headers?.get?.('x-user-quota')
   if (quotaHeader && !endpoint.includes('/auth/')) {
@@ -75,9 +86,13 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   const json = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    const message = Array.isArray(json.message)
-      ? json.message.join(', ')
+    // Localize first: the user must never see a raw English or
+    // framework-internal message, no matter which caller renders err.message.
+    const rawMessage = Array.isArray(json.message)
+      ? json.message
       : (typeof json.message === 'string' && json.message ? json.message : 'An unexpected error occurred')
+    const translated = translateServerMessage(rawMessage)
+    const message = Array.isArray(translated) ? translated.join('، ') : translated
 
     // Global 401 Unauthorized handling (session expired or invalid token)
     if (response.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/signup')) {
@@ -109,7 +124,9 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
       }
     }
 
-    throw new ApiError(response.status, message, json.error)
+    // Localize before throwing: the user must never see a raw English or
+    // framework-internal message, no matter which caller renders err.message.
+    throw new ApiError(response.status, message, json.error, json.message)
   }
 
   // Handle standard { success, message, data } API response envelope

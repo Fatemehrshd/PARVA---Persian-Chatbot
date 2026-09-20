@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Database Transactions & ACID Guarantees (پیاده‌سازی تراکنش‌های دیتابیس و تضمین‌های اتمیک)**:
+  - Wrapped plan supersede and active subscription creation in atomic `dataSource.transaction` in [subscriptions.service.ts](file:///d:/codeless_final/backend/src/modules/subscriptions/subscriptions.service.ts), eliminating partial failure states and concurrent subscription conflicts.
+  - Wrapped refresh token rotation (revoking previous token and persisting new hashed token) in atomic `dataSource.transaction` in [auth.service.ts](file:///d:/codeless_final/backend/src/modules/auth/auth.service.ts), preventing token replay vulnerabilities and token loss during network latency.
+  - Documented complete transaction locations, ACID guarantees, and race conditions in dedicated wiki guide [docs/wiki/transactions.md](file:///d:/codeless_final/docs/wiki/transactions.md).
+- **System Logging to Daily Rotating Files & SigNoz Live Stream (لاگ‌گذاری در فایل‌های چرخشی و استریم به سیگنوز)**:
+  - Implemented custom NestJS logger [AppLoggerService](file:///d:/codeless_final/backend/src/shared/logger/app-logger.service.ts) writing structured daily logs to `backend/logs/app-YYYY-MM-DD.log` and critical errors with stack traces to `backend/logs/error-YYYY-MM-DD.log`.
+  - Added recursive data sanitization (`[REDACTED]`) for sensitive keys (`password`, `token`, `authorization`, `cookie`, `secret`, `apiKey`).
+  - Streamed 100% of application logs via OpenTelemetry OTLP (`/v1/logs`) into SigNoz (ClickHouse) for high-speed retention and analytics without bloating PostgreSQL.
+  - Added dedicated **«لاگ‌های زنده در SigNoz»** button with pulsing live indicator in [AdminAuditLogsSection.vue](file:///d:/codeless_final/frontend/src/views/admin/AdminAuditLogsSection.vue) linking directly to `${signozBaseUrl}/logs?liveTail=true`.
+- **Audit Log Decoupling & PostgreSQL Bloat Prevention (تفکیک لاگ‌های ممیزی از ترافیک عمومی)**:
+  - Filtered ordinary read-only `GET` requests (< 400) out of the PostgreSQL `audit_logs` table in [http-logging.interceptor.ts](file:///d:/codeless_final/backend/src/shared/http-logging.interceptor.ts), reserving PostgreSQL strictly for state-changing operations (`POST`, `PUT`, `PATCH`, `DELETE`), auth, payments, and errors (`statusCode >= 400`).
+  - Guaranteed autonomous, async, non-blocking execution for audit logging, ensuring business transactions are never rolled back or delayed if an audit log write encounters issues.
 - **Login & Register Image Alignment, Centering & Confirm Password (هم‌ترازی با تصویر، مرکزیت فرم لاگین/ثبت‌نام و فیلد تکرار رمز عبور)**:
   - Ensured both the artwork image and the authentication form are vertically and horizontally centered and perfectly aligned along the same horizontal midline (`50vh`) in [LoginView.vue](file:///d:/codeless_final/frontend/src/views/LoginView.vue).
   - Removed artificial fixed container heights and aligned `.form-wrapper` with `justify-content: center` and smooth bezier transition (`transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1)`).

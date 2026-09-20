@@ -5,9 +5,12 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './shared/http-exception.filter';
 import { ResponseEnvelopeInterceptor } from './shared/response-envelope.interceptor';
+import { AppLoggerService } from './shared/logger/app-logger.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const appLogger = app.get(AppLoggerService);
+  app.useLogger(appLogger);
   // Match OpenAPI contract prefix: http://localhost:3000/api/v1, exclude root, direct /v1, static, and health routes
   app.setGlobalPrefix('api/v1', { exclude: ['/', 'v1/(.*)', 'v1', 'static/(.*)', 'health', 'api/v1/health'] });
   // Contract-shaped error envelope: {statusCode, message, error}.

@@ -1,6 +1,6 @@
 import { Injectable, ConflictException, UnauthorizedException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource, EntityManager } from 'typeorm';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { JwtService } from '@nestjs/jwt';
@@ -18,22 +18,25 @@ export class AuthService {
     @Optional()
     @InjectRepository(RefreshToken)
     private refreshTokenRepo?: Repository<RefreshToken>,
+    @Optional()
+    private dataSource?: DataSource,
   ) {}
 
   private hashToken(token: string): string {
     return crypto.createHash('sha256').update(token).digest('hex');
   }
 
-  private async tokens(u: any, clientInfo?: { ip?: string; userAgent?: string }) {
+  private async tokens(u: any, clientInfo?: { ip?: string; userAgent?: string }, manager?: EntityManager) {
     const payload = { sub: u.id, email: u.email, role: u.role };
     const accessToken = this.jwt.sign(payload, { expiresIn: '1h' });
     const refreshToken = this.jwt.sign({ ...payload, type: 'refresh' }, { expiresIn: '7d' });
 
-    if (this.refreshTokenRepo) {
+    const repo = manager ? manager.getRepository(RefreshToken) : this.refreshTokenRepo;
+    if (repo) {
       try {
         const tokenHash = this.hashToken(refreshToken);
-        await this.refreshTokenRepo.save(
-          this.refreshTokenRepo.create({
+        await repo.save(
+          repo.create({
             userId: u.id,
             tokenHash,
             expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -99,9 +102,10 @@ export class AuthService {
       throw new UnauthorizedException(FA.refreshTokenInvalid);
     }
 
+    let existing: RefreshToken | null = null;
     if (this.refreshTokenRepo) {
       const tokenHash = this.hashToken(rawRefreshToken);
-      const existing = await this.refreshTokenRepo.findOne({
+      existing = await this.refreshTokenRepo.findOne({
         where: { tokenHash },
       });
 
@@ -114,10 +118,6 @@ export class AuthService {
         await this.refreshTokenRepo.update({ userId: decoded.sub }, { isRevoked: true });
         throw new UnauthorizedException(FA.refreshTokenInvalid);
       }
-
-      // Rotate: revoke the used refresh token
-      existing.isRevoked = true;
-      await this.refreshTokenRepo.save(existing);
     }
 
     const user = await this.users.findById(decoded.sub);
@@ -125,7 +125,28 @@ export class AuthService {
       throw new UnauthorizedException('حساب کاربری غیرفعال یا حذف شده است');
     }
 
-    const newTokens = await this.tokens(user, clientInfo);
+    // Atomic refresh token rotation in database transaction
+    let newTokens: any;
+    if (this.refreshTokenRepo && this.dataSource) {
+      newTokens = await this.dataSource.transaction(async (manager) => {
+        const repo = manager.getRepository(RefreshToken);
+        // 1. Revoke the used refresh token
+        if (existing) {
+          existing.isRevoked = true;
+          await repo.save(existing);
+        }
+
+        // 2. Issue new tokens and save new refresh token within the same transaction
+        return await this.tokens(user, clientInfo, manager);
+      });
+    } else {
+      if (this.refreshTokenRepo && existing) {
+        existing.isRevoked = true;
+        await this.refreshTokenRepo.save(existing);
+      }
+      newTokens = await this.tokens(user, clientInfo);
+    }
+
     return {
       user: this.toUserJson(user),
       ...newTokens,

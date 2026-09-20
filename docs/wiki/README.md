@@ -10,6 +10,7 @@ Welcome to the project documentation wiki.
 - [Chat Resilience: Offline, Refresh & Interrupted Streaming](chat-resilience.md)
 - [Streaming Comprehensive Guide (README)](../STREAMING_README.md)
 - [Features History](features.md)
+- [Database Transactions & Log Architecture Guide (راهنمای تراکنش‌ها و سیستم لاگ)](transactions.md)
 - [Admin Panel Guide (راهنمای پنل مدیریت)](admin.md)
 - [SigNoz APM & Telemetry Guide (راهنمای سیگنوز)](signoz.md)
 - [Architectural Decisions (ADRs)](decisions.md)

@@ -54,4 +54,13 @@ export const auditService = {
     const qs = sp.toString();
     return request<any>(`/admin/audit-logs${qs ? `?${qs}` : ''}`);
   },
+
+  async getSystemLogs(type: 'app' | 'error' = 'app', lines = 100): Promise<{
+    lines: string[];
+    filename: string;
+    totalLines: number;
+    exists: boolean;
+  }> {
+    return request<any>(`/admin/audit-logs/system-logs?type=${type}&lines=${lines}`);
+  },
 };

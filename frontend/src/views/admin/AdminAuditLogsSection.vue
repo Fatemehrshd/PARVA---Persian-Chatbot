@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import {
   Eye,
   ExternalLink,
@@ -22,12 +22,14 @@ import {
   Hash,
   FilterX,
   Calendar,
+  Terminal,
 } from '@lucide/vue'
 import AdminTable, { type TableColumn } from '../../components/admin/AdminTable.vue'
 import AdminTableSkeleton from '../../components/admin/AdminTableSkeleton.vue'
 import AdminModal from '../../components/admin/AdminModal.vue'
 import BaseButton from '../../components/ui/BaseButton.vue'
 import PersianDatePicker from '../../components/ui/PersianDatePicker.vue'
+import LiveTerminalLogs from '../../components/admin/LiveTerminalLogs.vue'
 import { auditService, type AuditStats } from '../../services/audit.service'
 import { useUiStore } from '../../stores/ui'
 import type { AuditLogItem } from '../../types'
@@ -56,7 +58,7 @@ const isDetailModalOpen = ref(false)
 const selectedLog = ref<AuditLogItem | null>(null)
 
 // Filters
-const typeFilter = ref<'all' | 'http_request' | 'external_fetch' | 'security'>('all')
+const typeFilter = ref<'all' | 'http_request' | 'external_fetch' | 'security' | 'system_logs'>('all')
 const statusFilter = ref<'all' | 'success' | 'error'>('all')
 const idFilter = ref('')
 const actorFilter = ref('')
@@ -171,12 +173,18 @@ function filterByActorId(actorId?: string | null) {
 watch(
   () => [props.searchQuery, typeFilter.value, statusFilter.value, startDate.value, endDate.value],
   () => {
-    page.value = 1
-    loadAuditLogs()
+    if (typeFilter.value !== 'system_logs') {
+      page.value = 1
+      loadAuditLogs()
+    }
   },
 )
 
-onMounted(loadAuditLogs)
+onMounted(() => {
+  if (typeFilter.value !== 'system_logs') {
+    loadAuditLogs()
+  }
+})
 
 function openDetails(log: AuditLogItem) {
   selectedLog.value = log
@@ -289,7 +297,21 @@ function formatDate(iso?: string): string {
         </p>
       </div>
 
-      <div class="flex items-center gap-2 shrink-0">
+      <div class="flex items-center gap-2 shrink-0 flex-wrap">
+        <!-- Dedicated Live Logs in SigNoz Button -->
+        <a
+          :href="`${signozBaseUrl}/logs?liveTail=true`"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-xs font-bold hover:bg-emerald-500/25 transition-all shadow-xs"
+          title="مشاهده زنده تمام لاگ‌های سیستم، خطاها و ریکوئست‌ها در SigNoz (بدون اشغال دیتابیس PostgreSQL)"
+        >
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <Activity :size="13" />
+          <span>لاگ‌های زنده در SigNoz</span>
+          <ArrowUpRight :size="12" />
+        </a>
+
         <a
           :href="signozBaseUrl"
           target="_blank"
@@ -395,6 +417,16 @@ function formatDate(iso?: string): string {
             @click="typeFilter = 'security'"
           >
             رویدادهای امنیتی
+          </button>
+          <button
+            type="button"
+            class="px-2.5 py-1 rounded-md transition-colors text-xs flex items-center gap-1.5"
+            :class="typeFilter === 'system_logs' ? 'bg-primary text-primary-foreground font-semibold shadow-xs' : 'text-muted-foreground hover:text-foreground'"
+            @click="typeFilter = 'system_logs'"
+          >
+            <Terminal :size="12" />
+            <span>لاگ‌های زنده فایل سرور</span>
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
           </button>
         </div>
 
@@ -545,7 +577,7 @@ function formatDate(iso?: string): string {
     </div>
 
     <!-- Table with Server-Side Pagination -->
-    <div class="border border-border rounded-xl bg-card overflow-hidden shadow-xs">
+    <div v-if="typeFilter !== 'system_logs'" class="border border-border rounded-xl bg-card overflow-hidden shadow-xs">
       <AdminTableSkeleton v-if="isLoading" :columns="columns.length" :rows="pageSize || 10" />
       <AdminTable
         v-else
@@ -707,6 +739,9 @@ function formatDate(iso?: string): string {
         </template>
       </AdminTable>
     </div>
+
+    <!-- Live System Logs Terminal Viewer (When typeFilter === 'system_logs') -->
+    <LiveTerminalLogs v-else :signozUrl="signozBaseUrl" />
 
     <!-- Detail Modal -->
     <AdminModal

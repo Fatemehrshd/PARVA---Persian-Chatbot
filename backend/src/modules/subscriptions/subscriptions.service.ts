@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan } from 'typeorm';
+import { Repository, LessThan, DataSource } from 'typeorm';
 import { Subscription, SubscriptionStatus } from './subscription.entity';
 import { SubscriptionPlan } from './subscription-plan.entity';
 import { PlansService } from './plans.service';
@@ -19,6 +19,7 @@ export class SubscriptionsService {
     private planRepo: Repository<SubscriptionPlan>,
     private plansService: PlansService,
     private auditService: AuditService,
+    private dataSource?: DataSource,
   ) {}
 
   /**
@@ -70,6 +71,7 @@ export class SubscriptionsService {
   /**
    * Assigns a plan to a user.
    * Marks any currently active subscription as EXPIRED or superseded.
+   * Wrapped in an atomic database transaction to prevent inconsistent states.
    */
   async assignPlanToUser(options: {
     userId: string;
@@ -81,35 +83,65 @@ export class SubscriptionsService {
     actorType?: 'admin' | 'user' | 'system';
   }): Promise<Subscription> {
     const plan = await this.plansService.findById(options.planId);
-
-    // Deactivate previous active subscriptions
-    const currentActive = await this.subscriptionRepo.find({
-      where: { userId: options.userId, status: SubscriptionStatus.ACTIVE },
-    });
-
-    for (const sub of currentActive) {
-      sub.status = SubscriptionStatus.CANCELLED;
-      sub.cancelledAt = new Date();
-      sub.cancellationReason = 'superseded_by_new_plan';
-      await this.subscriptionRepo.save(sub);
-    }
-
     const duration = options.durationDays !== undefined ? options.durationDays : plan.durationDays;
     const startDate = new Date();
     const endDate = duration > 0 ? new Date(startDate.getTime() + duration * 86400000) : null;
 
-    const newSub = this.subscriptionRepo.create({
-      userId: options.userId,
-      planId: plan.id,
-      plan: plan,
-      status: SubscriptionStatus.ACTIVE,
-      startDate,
-      endDate,
-      paymentId: options.paymentId || null,
-      source: options.source || 'purchase',
-    });
+    let saved: Subscription;
+    if (this.dataSource) {
+      saved = await this.dataSource.transaction(async (manager) => {
+        const subRepo = manager.getRepository(Subscription);
 
-    const saved = await this.subscriptionRepo.save(newSub);
+        // Deactivate previous active subscriptions atomically
+        const currentActive = await subRepo.find({
+          where: { userId: options.userId, status: SubscriptionStatus.ACTIVE },
+        });
+
+        for (const sub of currentActive) {
+          sub.status = SubscriptionStatus.CANCELLED;
+          sub.cancelledAt = new Date();
+          sub.cancellationReason = 'superseded_by_new_plan';
+          await subRepo.save(sub);
+        }
+
+        const newSub = subRepo.create({
+          userId: options.userId,
+          planId: plan.id,
+          plan: plan,
+          status: SubscriptionStatus.ACTIVE,
+          startDate,
+          endDate,
+          paymentId: options.paymentId || null,
+          source: options.source || 'purchase',
+        });
+
+        return await subRepo.save(newSub);
+      });
+    } else {
+      const currentActive = await this.subscriptionRepo.find({
+        where: { userId: options.userId, status: SubscriptionStatus.ACTIVE },
+      });
+
+      for (const sub of currentActive) {
+        sub.status = SubscriptionStatus.CANCELLED;
+        sub.cancelledAt = new Date();
+        sub.cancellationReason = 'superseded_by_new_plan';
+        await this.subscriptionRepo.save(sub);
+      }
+
+      const newSub = this.subscriptionRepo.create({
+        userId: options.userId,
+        planId: plan.id,
+        plan: plan,
+        status: SubscriptionStatus.ACTIVE,
+        startDate,
+        endDate,
+        paymentId: options.paymentId || null,
+        source: options.source || 'purchase',
+      });
+
+      saved = await this.subscriptionRepo.save(newSub);
+    }
 
     await this.auditService.log({
       actorId: options.actorId ?? options.userId,

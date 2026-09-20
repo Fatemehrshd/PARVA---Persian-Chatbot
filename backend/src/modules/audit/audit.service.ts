@@ -1,6 +1,8 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { AuditLog } from './audit-log.entity';
 import { traceContextService } from '../../shared/trace-context.service';
 import { registerTracedFetchAuditLogger } from '../../shared/traced-fetch';
@@ -136,7 +138,30 @@ export class AuditService implements OnModuleInit {
 
       return await this.auditRepo.save(entry);
     } catch (err: any) {
-      this.logger.error(`Failed to record audit log: ${err.message}`, err.stack);
+      const fallbackPayload = {
+        action: params.action,
+        entityType: params.entityType,
+        entityId: params.entityId,
+        actorId: params.actorId,
+        actorEmail: params.actorEmail,
+        actorType: params.actorType,
+        method: params.method,
+        path: params.path,
+        statusCode: params.statusCode,
+        metadata: params.metadata ? sanitizeAuditData(params.metadata) : undefined,
+        changes: params.changes
+          ? {
+              before: sanitizeAuditData(params.changes.before),
+              after: sanitizeAuditData(params.changes.after),
+            }
+          : undefined,
+        error: err.message,
+      };
+
+      this.logger.error(
+        `Failed to record audit log in PostgreSQL: ${err.message} | Payload: ${JSON.stringify(fallbackPayload)}`,
+        err.stack,
+      );
       // Audit log failures should not break the main business transaction, return a stub
       return {} as AuditLog;
     }
@@ -281,5 +306,31 @@ export class AuditService implements OnModuleInit {
       totalPages: Math.ceil(total / limit),
       stats,
     };
+  }
+
+  async getSystemLogs(type: 'app' | 'error' = 'app', lines = 100) {
+    const today = new Date().toISOString().split('T')[0];
+    const filename = `${type}-${today}.log`;
+    const filePath = path.join(process.cwd(), 'logs', filename);
+
+    try {
+      if (!fs.existsSync(filePath)) {
+        return { lines: [], filename, totalLines: 0, exists: false };
+      }
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+      const allLines = content
+        .split('\n')
+        .filter((l) => l.trim().length > 0);
+      const limit = Math.min(500, Math.max(10, lines));
+      const sliced = allLines.slice(-limit);
+      return {
+        lines: sliced,
+        filename,
+        totalLines: allLines.length,
+        exists: true,
+      };
+    } catch (err: any) {
+      return { lines: [], filename, totalLines: 0, exists: false, error: err.message };
+    }
   }
 }

@@ -111,7 +111,12 @@ export class HttpLoggingInterceptor implements NestInterceptor {
           );
 
           // 2. Persist business audit log in PostgreSQL
-          if (this.auditService) {
+          // Only state-changing operations (POST, PUT, PATCH, DELETE) or error statuses are persisted to PostgreSQL.
+          // Mundane read queries (successful GET) are streamed to SigNoz and file logs only to prevent database bloat.
+          const isStateChanging = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase());
+          const isAuditWorthy = isStateChanging || statusCode >= 400;
+
+          if (this.auditService && isAuditWorthy) {
             this.auditService
               .log({
                 traceId: span.traceId || traceContextService.getTraceId(),

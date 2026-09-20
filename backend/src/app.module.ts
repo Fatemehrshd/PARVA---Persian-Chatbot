@@ -30,6 +30,7 @@ import { AuditModule } from './modules/audit/audit.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { TtsModule } from './modules/tts/tts.module';
+import { LoggerModule } from './shared/logger/logger.module';
 import { ResponseEnvelopeInterceptor } from './shared/response-envelope.interceptor';
 import { HttpLoggingInterceptor } from './shared/http-logging.interceptor';
 import { TraceContextMiddleware } from './shared/trace-context.service';
@@ -64,6 +65,7 @@ import { TraceContextMiddleware } from './shared/trace-context.service';
       migrations: [__dirname + '/migrations/*{.ts,.js}'],
       synchronize: (process.env.DB_SYNC ?? 'true') === 'true',
     }),
+    LoggerModule,
     UsersModule,
     AuthModule,
     ChatModule,

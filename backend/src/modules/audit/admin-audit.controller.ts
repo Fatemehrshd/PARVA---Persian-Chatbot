@@ -13,6 +13,14 @@ import { AdminGuard } from '../../shared/admin.guard';
 export class AdminAuditController {
   constructor(private readonly auditService: AuditService) {}
 
+  @Get('system-logs')
+  async getSystemLogs(
+    @Query('type') type?: 'app' | 'error',
+    @Query('lines') lines?: number,
+  ) {
+    return this.auditService.getSystemLogs(type, lines ? Number(lines) : 100);
+  }
+
   @Get()
   async getAuditLogs(
     @Query('page') page?: number,

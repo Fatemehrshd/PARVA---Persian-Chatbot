@@ -278,6 +278,11 @@ function formatCellValue(value: unknown): unknown {
   }
   return value
 }
+
+defineExpose({
+  clearAllFilters,
+  activeFiltersCount,
+})
 </script>
 
 <template>

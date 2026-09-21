@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import {
   Eye,
   ExternalLink,
@@ -674,8 +674,8 @@ function formatDate(iso?: string): string {
               <!-- Name & Email / Role -->
               <div class="flex flex-col overflow-hidden text-right">
                 <div class="flex items-center gap-1.5">
-                  <span class="text-xs font-semibold text-foreground truncate max-w-[120px]" :title="log.actorName || log.actorEmail || 'ناشناس'">
-                    {{ log.actorName || (log.actorType === 'admin' ? 'مدیر سیستم' : log.actorType === 'system' ? 'سیستم خودکار' : 'کاربر') }}
+                  <span class="text-xs font-semibold text-foreground truncate max-w-[120px]" :title="log.actorName || log.actorEmail || (log.actorType === 'admin' ? 'مدیر سیستم' : log.actorType === 'system' ? 'سیستم خودکار' : 'کاربر سامانه')">
+                    {{ log.actorName || log.actorEmail || (log.actorType === 'admin' ? 'مدیر سیستم' : log.actorType === 'system' ? 'سیستم خودکار' : 'کاربر سامانه') }}
                   </span>
                   <span
                     class="text-[9.5px] px-1 py-0.2 rounded font-medium shrink-0"
@@ -696,7 +696,7 @@ function formatDate(iso?: string): string {
                   <span v-else-if="log.actorId" class="font-mono text-[10px]" dir="ltr" :title="log.actorId">
                     {{ log.actorId.slice(0, 8) }}...
                   </span>
-                  <span v-else>ناشناس</span>
+                  <span v-else>{{ log.actorType === 'system' ? 'سرویس سیستم' : 'کاربر سامانه' }}</span>
 
                   <!-- Quick Filter Button by Actor -->
                   <button
@@ -825,7 +825,7 @@ function formatDate(iso?: string): string {
             <div>
               <span class="text-muted-foreground block text-[11px]">نام کاربر:</span>
               <span class="font-semibold text-foreground">
-                {{ selectedLog.actorName || (selectedLog.actorType === 'admin' ? 'مدیر ارشد سامانه' : selectedLog.actorType === 'system' ? 'سرویس داخلی سامانه' : 'ناشناس') }}
+                {{ selectedLog.actorName || selectedLog.actorEmail || (selectedLog.actorType === 'admin' ? 'مدیر ارشد سامانه' : selectedLog.actorType === 'system' ? 'سرویس داخلی سامانه' : selectedLog.actorId ? `کاربر (${selectedLog.actorId.slice(0, 8)})` : 'کاربر سامانه') }}
               </span>
             </div>
 

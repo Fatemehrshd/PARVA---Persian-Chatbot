@@ -6,18 +6,9 @@ import { profileService } from '../services/profile.service'
 import { isTokenExpired } from '../lib/jwt'
 
 export const useAuthStore = defineStore('auth', () => {
-  const rawToken = localStorage.getItem('token')
-  const rawRefreshToken = localStorage.getItem('refreshToken')
-  if (rawToken && isTokenExpired(rawToken) && !rawRefreshToken) {
-    localStorage.removeItem('user')
-    localStorage.removeItem('token')
-    localStorage.removeItem('refreshToken')
-  }
-
   const savedUser = localStorage.getItem('user')
   const user = ref<User | null>(savedUser ? JSON.parse(savedUser) : null)
   const token = ref<string | null>(localStorage.getItem('token'))
-  const refreshToken = ref<string | null>(localStorage.getItem('refreshToken'))
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -85,13 +76,11 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  function setSession(newUser: User, newAccessToken: string, newRefreshToken: string) {
+  function setSession(newUser: User, newAccessToken: string) {
     user.value = newUser
     token.value = newAccessToken
-    refreshToken.value = newRefreshToken
     localStorage.setItem('user', JSON.stringify(newUser))
     localStorage.setItem('token', newAccessToken)
-    localStorage.setItem('refreshToken', newRefreshToken)
   }
 
   function updateUser(updatedUser: User) {
@@ -156,7 +145,7 @@ export const useAuthStore = defineStore('auth', () => {
       // Start this user's theme session fresh: never inherit the previous
       // account's backend preference.
       await resetThemeSession()
-      setSession(response.user, response.accessToken, response.refreshToken)
+      setSession(response.user, response.accessToken)
       await refreshProfile()
       await refreshIdentity()
       return true
@@ -183,7 +172,7 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const response = await authService.signup(email, password, displayName)
       await resetThemeSession()
-      setSession(response.user, response.accessToken, response.refreshToken)
+      setSession(response.user, response.accessToken)
       await refreshProfile()
       await refreshIdentity()
       return true
@@ -205,15 +194,13 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout() {
     try {
       if (token.value) {
-        await authService.logout(refreshToken.value || undefined).catch(() => {})
+        await authService.logout().catch(() => {})
       }
     } finally {
       user.value = null
       token.value = null
-      refreshToken.value = null
       localStorage.removeItem('user')
       localStorage.removeItem('token')
-      localStorage.removeItem('refreshToken')
       // Return to the global default theme for the next (possibly different) user.
       await resetThemeSession()
     }
@@ -223,17 +210,13 @@ export const useAuthStore = defineStore('auth', () => {
   if (typeof window !== 'undefined') {
     const checkExpiry = async () => {
       if (token.value && isTokenExpired(token.value)) {
-        if (refreshToken.value) {
-          try {
-            const res = await authService.refreshToken(refreshToken.value)
-            token.value = res.accessToken
-            refreshToken.value = res.refreshToken
-            localStorage.setItem('token', res.accessToken)
-            localStorage.setItem('refreshToken', res.refreshToken)
-            return
-          } catch {
-            // Refresh failed, fall through to logout
-          }
+        try {
+          const res = await authService.refreshToken()
+          token.value = res.accessToken
+          localStorage.setItem('token', res.accessToken)
+          return
+        } catch {
+          // Refresh failed, fall through to logout
         }
         void logout()
         if (window.location.pathname !== '/login' && (!import.meta.env || import.meta.env.MODE !== 'test')) {
@@ -254,7 +237,6 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     user,
     token,
-    refreshToken,
     loading,
     error,
     isAuthenticated,

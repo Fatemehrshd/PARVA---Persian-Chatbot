@@ -92,11 +92,11 @@
         "isAdmin": false,
         "createdAt": "2026-09-14T12:00:00.000Z"
       },
-      "accessToken": "eyJhbGciOi...",
-      "refreshToken": "eyJhbGciOi..."
+      "accessToken": "eyJhbGciOi..."
     }
   }
   ```
+  رفرش‌توکن در پاسخ JSON برگردانده نمی‌شود و به‌صورت cookie با نام `refreshToken`، پرچم `HttpOnly` و عمر ۷ روزه تنظیم می‌شود.
 
 #### ۲.۱.۲ ورود به سیستم (`POST /auth/login`)
 - **دسترسی:** عمومی
@@ -107,11 +107,11 @@
     "password": "StrongPassword123"
   }
   ```
-- **پاسخ (200 OK):** مشابه خروجی ثبت‌نام حاوی `user`، `accessToken` و `refreshToken`.
+- **پاسخ (200 OK):** مشابه خروجی ثبت‌نام حاوی `user` و `accessToken`؛ cookie رفرش در header `Set-Cookie` چرخانده می‌شود.
 
 #### ۲.۱.۳ خروج از سیستم (`POST /auth/logout`)
 - **دسترسی:** نیازمند توکن کاربر (`Bearer`)
-- **توضیح:** سشن و توکن رفرش کاربر را در سرور نامعتبر می‌کند.
+- **توضیح:** سشن و توکن رفرش cookie کاربر را در سرور نامعتبر می‌کند و cookie را پاک می‌کند.
 - **پاسخ (200 OK):**
   ```json
   {

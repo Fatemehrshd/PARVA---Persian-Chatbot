@@ -124,7 +124,6 @@ describe('theme: defaults, per-user independence, login page', () => {
     // Simulate a previous session of user A (dark preference) in localStorage.
     localStorage.setItem('theme', 'dark')
     localStorage.setItem('token', 'tok-ua')
-    localStorage.setItem('refreshToken', 'ref-ua')
     localStorage.setItem('user', JSON.stringify(userA))
 
     vi.spyOn(profileService, 'getProfile').mockResolvedValue(profileFor(userA) as any)
@@ -148,7 +147,6 @@ describe('theme: defaults, per-user independence, login page', () => {
   it('a signed-in user without a preference falls back to light even if storage says dark', async () => {
     localStorage.setItem('theme', 'dark')
     localStorage.setItem('token', 'tok-ub')
-    localStorage.setItem('refreshToken', 'ref-ub')
     localStorage.setItem('user', JSON.stringify(userB))
 
     vi.spyOn(profileService, 'getProfile').mockResolvedValue(profileFor(userB) as any)

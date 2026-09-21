@@ -11,9 +11,6 @@ export interface JwtPayload {
   [key: string]: any
 }
 
-/**
- * Decode JWT payload safely in browser or node environments without external libraries.
- */
 export function decodeJwtPayload(token?: string | null): JwtPayload | null {
   if (!token || typeof token !== 'string') return null
   const parts = token.split('.')

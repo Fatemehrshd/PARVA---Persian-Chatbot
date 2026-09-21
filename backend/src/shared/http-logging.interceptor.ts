@@ -73,12 +73,36 @@ export class HttpLoggingInterceptor implements NestInterceptor {
     const userAgent = req.headers['user-agent'] || null;
 
     const resolveActorInfo = () => {
-      const user = (req as any).user;
-      const actorId = user?.id ?? null;
+      let user = (req as any).user;
+      if (!user) {
+        const authHeader = req.headers['authorization'] as string;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+          try {
+            const token = authHeader.slice(7).trim();
+            const parts = token.split('.');
+            if (parts.length === 3) {
+              const payloadStr = Buffer.from(parts[1], 'base64').toString('utf-8');
+              const decoded = JSON.parse(payloadStr);
+              if (decoded && typeof decoded === 'object') {
+                user = {
+                  id: decoded.id || decoded.sub,
+                  email: decoded.email,
+                  displayName: decoded.displayName || decoded.name,
+                  role: decoded.role,
+                };
+              }
+            }
+          } catch {
+            // Ignore malformed token decode
+          }
+        }
+      }
+
+      const actorId = user?.id || user?.sub || null;
       const actorEmail =
         user?.email ??
         (req.body && typeof req.body.email === 'string' ? req.body.email : null);
-      const actorName = user?.displayName || user?.username || null;
+      const actorName = user?.displayName || user?.name || user?.username || null;
       const actorType = user?.role === 'admin' ? 'admin' : user ? 'user' : 'system';
       return { actorId, actorEmail, actorName, actorType };
     };
@@ -125,7 +149,12 @@ export class HttpLoggingInterceptor implements NestInterceptor {
             path.startsWith('/api/chat') ||
             path.startsWith('/api/v1/chat');
 
-          if (this.auditService && isAuditWorthy && !isChatMessaging) {
+          // Exclude successful payment checkout/verify from generic HTTP audit logs (PaymentsService creates dedicated domain logs)
+          const isPaymentDomainRoute =
+            statusCode < 400 &&
+            (path.includes('/payments/checkout') || path.includes('/payments/verify'));
+
+          if (this.auditService && isAuditWorthy && !isChatMessaging && !isPaymentDomainRoute) {
             this.auditService
               .log({
                 traceId: span.traceId || traceContextService.getTraceId(),

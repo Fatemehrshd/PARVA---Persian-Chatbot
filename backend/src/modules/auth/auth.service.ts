@@ -27,7 +27,12 @@ export class AuthService {
   }
 
   private async tokens(u: any, clientInfo?: { ip?: string; userAgent?: string }, manager?: EntityManager) {
-    const payload = { sub: u.id, email: u.email, role: u.role };
+    const payload = {
+      sub: u.id,
+      email: u.email,
+      role: u.role,
+      displayName: u.displayName || null,
+    };
     const accessToken = this.jwt.sign(payload, { expiresIn: '1h' });
     const refreshToken = this.jwt.sign({ ...payload, type: 'refresh' }, { expiresIn: '7d' });
 

@@ -318,7 +318,6 @@ async function confirmDelete() {
         <!-- 13. Audit & System Logs -->
         <AdminAuditLogsSection
           v-else-if="activeSection === 'audit-logs'"
-          :search-query="debouncedSearchQuery"
         />
       </section>
     </main>

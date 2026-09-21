@@ -26,8 +26,9 @@ export class LoginDto {
 }
 
 export class RefreshTokenDto {
+  @IsOptional()
   @IsString({ message: FA.refreshTokenRequired })
-  refreshToken: string;
+  refreshToken?: string;
 }
 
 export class LogoutDto {

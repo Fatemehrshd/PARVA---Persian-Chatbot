@@ -50,7 +50,7 @@ frontend/src/
 
 **Router guards** (`router/index.ts`) — a single `beforeEach`:
 
-1. **Proactive JWT expiry** — `lib/jwt.isTokenExpired()` decodes the stored access token on every navigation; expired tokens are purged from `localStorage` immediately (token, user, refreshToken).
+1. **Access-token expiry** — `lib/jwt.isTokenExpired()` is used by the auth store's focus monitor; an expired access token is refreshed through the HttpOnly `refreshToken` cookie instead of being purged before refresh can run.
 2. `meta.requiresAuth` → redirect to `/login?redirect=<fullPath>` when no token.
 3. `meta.requiresAdmin` → calls `authStore.refreshIdentity()` (server re-sync of the user record, mirroring the backend's AdminGuard "never trust the token role" rule), then verifies `identity.role === 'admin'`; failure keeps access conservative.
 4. `meta.guestOnly` → authenticated users bounce from `/login` and `/signup` to `/`.

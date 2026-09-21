@@ -54,31 +54,27 @@ describe('Auth Service (auth.service.ts)', () => {
     })
   })
 
-  it('calls POST /auth/logout with refreshToken', async () => {
+  it('calls POST /auth/logout without exposing the refresh token', async () => {
     const requestSpy = vi.spyOn(apiModule, 'request').mockResolvedValue({} as any)
 
-    await authService.logout('ref-123')
+    await authService.logout()
 
     expect(requestSpy).toHaveBeenCalledWith('/auth/logout', {
-      method: 'POST',
-      body: JSON.stringify({ refreshToken: 'ref-123' })
+      method: 'POST'
     })
   })
 
-  it('calls POST /auth/refresh with refreshToken', async () => {
+  it('calls POST /auth/refresh without exposing the refresh token', async () => {
     const requestSpy = vi.spyOn(apiModule, 'request').mockResolvedValue({
-      accessToken: 'new-access-token',
-      refreshToken: 'new-refresh-token'
+      accessToken: 'new-access-token'
     } as any)
 
-    const res = await authService.refreshToken('old-refresh-token')
+    const res = await authService.refreshToken()
 
     expect(requestSpy).toHaveBeenCalledWith('/auth/refresh', {
-      method: 'POST',
-      body: JSON.stringify({ refreshToken: 'old-refresh-token' })
+      method: 'POST'
     })
     expect(res.accessToken).toBe('new-access-token')
-    expect(res.refreshToken).toBe('new-refresh-token')
   })
 })
 

@@ -30,6 +30,7 @@ const isValidatingCoupon = ref(false)
 const appliedCoupon = ref<ValidateCouponResponse | null>(null)
 const couponError = ref('')
 const selectedGateway = ref<'zarinpal' | 'sandbox'>('zarinpal')
+const isSubmitting = ref(false)
 
 watch(
   () => props.open,
@@ -39,6 +40,7 @@ watch(
       appliedCoupon.value = null
       couponError.value = ''
       selectedGateway.value = 'zarinpal'
+      isSubmitting.value = false
     }
   },
 )
@@ -80,7 +82,12 @@ function handleRemoveCoupon() {
 }
 
 function handleConfirm() {
-  if (!props.plan) return
+  if (!props.plan || props.isCheckingOut || isSubmitting.value) return
+  isSubmitting.value = true
+  setTimeout(() => {
+    isSubmitting.value = false
+  }, 3000)
+
   emit('checkout', {
     planId: props.plan.id,
     gateway: selectedGateway.value,
@@ -299,7 +306,7 @@ function handleConfirm() {
         <BaseButton
           variant="secondary"
           size="sm"
-          :disabled="isCheckingOut"
+          :disabled="isCheckingOut || isSubmitting"
           @click="emit('close')"
         >
           انصراف
@@ -309,7 +316,8 @@ function handleConfirm() {
           variant="primary"
           size="sm"
           class="min-w-[150px] justify-center"
-          :is-loading="isCheckingOut"
+          :is-loading="isCheckingOut || isSubmitting"
+          :disabled="isCheckingOut || isSubmitting"
           @click="handleConfirm"
         >
           <template v-if="isFree">

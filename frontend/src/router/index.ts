@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import ChatView from '../views/ChatView.vue'
 
-import { isTokenExpired } from '../lib/jwt'
 import { useAuthStore } from '../stores/auth'
 
 const router = createRouter({
@@ -140,15 +139,6 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to, _from, next) => {
-  const rawToken = localStorage.getItem('token')
-
-  // Check proactive token expiry
-  if (rawToken && isTokenExpired(rawToken)) {
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
-    localStorage.removeItem('refreshToken')
-  }
-
   const token = localStorage.getItem('token')
   const isAuthenticated = !!token
 

@@ -135,7 +135,6 @@ describe('POST /auth/refresh & Strong Password Validation', () => {
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.data.accessToken).toBeDefined();
-      expect(res.body.data.refreshToken).toBeDefined();
     });
   });
 
@@ -148,39 +147,56 @@ describe('POST /auth/refresh & Strong Password Validation', () => {
         .post('/auth/signup')
         .send({ email: 'user-refresh@example.com', password: 'SecurePass987@!' });
       expect(res.status).toBe(201);
-      initialRefreshToken = res.body.data.refreshToken;
+      initialRefreshToken = res.headers['set-cookie']?.find((value: string) => value.startsWith('refreshToken=')) as string;
       expect(initialRefreshToken).toBeDefined();
+    });
+
+    it('sets an HttpOnly refresh cookie and accepts refresh without a request body', async () => {
+      const signup = await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send({ email: 'cookie-refresh@example.com', password: 'SecurePass987@!' });
+      const cookie = signup.headers['set-cookie']?.find((value: string) => value.startsWith('refreshToken='));
+
+      expect(cookie).toBeDefined();
+      expect(cookie).toMatch(/HttpOnly/);
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', cookie!);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.accessToken).toBeDefined();
+      expect(res.headers['set-cookie']?.some((value: string) => value.startsWith('refreshToken='))).toBe(true);
     });
 
     it('successfully refreshes token with valid refresh token', async () => {
       const res = await request(app.getHttpServer())
         .post('/auth/refresh')
-        .send({ refreshToken: initialRefreshToken });
+        .set('Cookie', initialRefreshToken);
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data.accessToken).toBeDefined();
-      expect(res.body.data.refreshToken).toBeDefined();
-      expect(res.body.data.refreshToken).not.toBe(initialRefreshToken);
-
-      rotatedRefreshToken = res.body.data.refreshToken;
+      rotatedRefreshToken = res.headers['set-cookie']?.find((value: string) => value.startsWith('refreshToken=')) as string;
+      expect(rotatedRefreshToken).toBeDefined();
+      expect(rotatedRefreshToken).not.toBe(initialRefreshToken);
     });
 
     it('can refresh sequentially again with the newly rotated token', async () => {
       const res = await request(app.getHttpServer())
         .post('/auth/refresh')
-        .send({ refreshToken: rotatedRefreshToken });
+        .set('Cookie', rotatedRefreshToken);
 
       expect(res.status).toBe(200);
       expect(res.body.data.accessToken).toBeDefined();
-      expect(res.body.data.refreshToken).toBeDefined();
+      expect(res.headers['set-cookie']?.some((value: string) => value.startsWith('refreshToken='))).toBe(true);
     });
 
     it('rejects reused / old refresh token (detects token reuse and revokes token family)', async () => {
       // Re-using the initialRefreshToken which was already rotated
       const res = await request(app.getHttpServer())
         .post('/auth/refresh')
-        .send({ refreshToken: initialRefreshToken });
+        .set('Cookie', initialRefreshToken);
 
       expect(res.status).toBe(401);
       expect(res.body.message).toMatch(/نامعتبر|منقضی/);
@@ -194,12 +210,12 @@ describe('POST /auth/refresh & Strong Password Validation', () => {
       expect(res.status).toBe(401);
     });
 
-    it('rejects empty refresh token payload with 400', async () => {
+    it('rejects a refresh request without a cookie with 401', async () => {
       const res = await request(app.getHttpServer())
         .post('/auth/refresh')
         .send({});
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(401);
     });
   });
 });

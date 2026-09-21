@@ -35,7 +35,7 @@ export class PaymentsService {
   async initiateCheckout(
     userId: string,
     dto: CheckoutDto,
-    clientInfo?: { ip?: string; userAgent?: string },
+    clientInfo?: { ip?: string; userAgent?: string; user?: any },
   ) {
     // Prevent purchasing or changing plan if user already has an active purchased plan
     const activeSub = await this.subscriptionsService.getActiveSubscription(userId);
@@ -78,6 +78,35 @@ export class PaymentsService {
           };
         }
       }
+    }
+
+    // Reuse existing PENDING payment for this user & plan if created in last 15 minutes to prevent multiple clicking spam
+    const recentPending = await this.paymentRepo.findOne({
+      where: {
+        userId,
+        planId: plan.id,
+        status: PaymentStatus.PENDING,
+      },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (
+      recentPending &&
+      recentPending.authority &&
+      (!recentPending.createdAt ||
+        Date.now() - new Date(recentPending.createdAt).getTime() < 15 * 60 * 1000)
+    ) {
+      const paymentUrl =
+        recentPending.gateway === 'sandbox'
+          ? `/sandbox-gateway?authority=${recentPending.authority}&amount=${recentPending.amount}`
+          : `https://payment.zarinpal.com/pg/StartPay/${recentPending.authority}`;
+
+      return {
+        paymentId: recentPending.id,
+        authority: recentPending.authority,
+        paymentUrl,
+        isExisting: true,
+      };
     }
 
     const originalAmount = Number(plan.price);
@@ -182,6 +211,8 @@ export class PaymentsService {
 
     await this.auditService.log({
       actorId: userId,
+      actorEmail: clientInfo?.user?.email || null,
+      actorName: clientInfo?.user?.displayName || null,
       actorType: 'user',
       action: 'payment.initiated',
       entityType: 'payment',
@@ -206,7 +237,11 @@ export class PaymentsService {
     };
   }
 
-  async verifyPayment(dto: VerifyPaymentDto, actorId?: string) {
+  async verifyPayment(
+    dto: VerifyPaymentDto,
+    actorId?: string,
+    actorInfo?: { email?: string; name?: string },
+  ) {
     // 1. Atomically lock, verify and persist payment status in transaction
     const txResult = await this.dataSource.transaction(async (manager) => {
       const paymentRepo = manager.getRepository(Payment);
@@ -331,6 +366,8 @@ export class PaymentsService {
       const actionName = txResult.isCancellation ? 'payment.cancelled' : 'payment.failed';
       await this.auditService.log({
         actorId: actorId || txResult.payment.userId,
+        actorEmail: actorInfo?.email || null,
+        actorName: actorInfo?.name || null,
         actorType: 'user',
         action: actionName,
         entityType: 'payment',
@@ -364,6 +401,8 @@ export class PaymentsService {
 
     await this.auditService.log({
       actorId: actorId || txResult.payment.userId,
+      actorEmail: actorInfo?.email || null,
+      actorName: actorInfo?.name || null,
       actorType: 'user',
       action: 'payment.verified',
       entityType: 'payment',

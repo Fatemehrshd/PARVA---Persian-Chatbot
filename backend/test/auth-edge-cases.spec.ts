@@ -80,7 +80,7 @@ describe('POST /auth/signup + /auth/login — contract invariants & edge cases',
 
   // ---- happy path ----
 
-  it('signup with valid payload returns 201 with user + both tokens', async () => {
+  it('signup with valid payload returns 201 with user + access token and sets refresh cookie', async () => {
     const res = await request(app.getHttpServer())
       .post('/auth/signup')
       .send({ email: 'new@example.com', password: 'Pass1234!', displayName: 'New' });
@@ -88,10 +88,10 @@ describe('POST /auth/signup + /auth/login — contract invariants & edge cases',
     expect(res.body).toHaveProperty('success', true);
     expect(res.body.data).toHaveProperty('user');
     expect(res.body.data).toHaveProperty('accessToken');
-    expect(res.body.data).toHaveProperty('refreshToken');
+    expect(res.headers['set-cookie']?.some((value: string) => value.startsWith('refreshToken=') && value.includes('HttpOnly'))).toBe(true);
   });
 
-  it('login with valid credentials returns 200 with user + both tokens', async () => {
+  it('login with valid credentials returns 200 with user + access token and sets refresh cookie', async () => {
     const res = await request(app.getHttpServer())
       .post('/auth/login')
       .send({ email: 'alice@example.com', password: 'password123' });
@@ -99,7 +99,7 @@ describe('POST /auth/signup + /auth/login — contract invariants & edge cases',
     expect(res.body).toHaveProperty('success', true);
     expect(res.body.data).toHaveProperty('user');
     expect(res.body.data).toHaveProperty('accessToken');
-    expect(res.body.data).toHaveProperty('refreshToken');
+    expect(res.headers['set-cookie']?.some((value: string) => value.startsWith('refreshToken=') && value.includes('HttpOnly'))).toBe(true);
   });
 
   // ---- invariant: response never leaks passwordHash ----
@@ -114,13 +114,14 @@ describe('POST /auth/signup + /auth/login — contract invariants & edge cases',
 
   // ---- invariant: JWT payloads contain the right claims ----
 
-  it('access token carries sub/email/role; refresh token carries type=refresh', async () => {
+  it('access token carries sub/email/role and refresh cookie carries the refresh JWT', async () => {
     const res = await request(app.getHttpServer())
       .post('/auth/signup')
       .send({ email: 'carol@example.com', password: 'Pass1234!' });
     expect(res.status).toBe(201);
     const access = JSON.parse(res.body.data.accessToken);
-    const refresh = JSON.parse(res.body.data.refreshToken);
+    const refreshCookie = res.headers['set-cookie']?.find((value: string) => value.startsWith('refreshToken='));
+    const refresh = JSON.parse(decodeURIComponent(refreshCookie!.split(';', 1)[0].slice('refreshToken='.length)));
     expect(access).toEqual(
       expect.objectContaining({
         sub: expect.any(String),

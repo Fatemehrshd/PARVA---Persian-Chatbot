@@ -37,7 +37,7 @@ function makeMockRepo(initialRows: any[] = []) {
       if (!filtered[0]) throw new Error('Not found');
       return filtered[0];
     }),
-    create: jest.fn((d: any) => ({ id: d.id || 'id_' + Math.random().toString(36).slice(2), ...d })),
+    create: jest.fn((d: any) => ({ id: d.id || 'id_' + Math.random().toString(36).slice(2), createdAt: new Date(), ...d })),
     save: jest.fn(async (item: any) => {
       const idx = rows.findIndex((r) => r.id === item.id);
       if (idx >= 0) {
@@ -332,6 +332,7 @@ describe('Payments & Sandbox Gateway Flow', () => {
   let plansService: PlansService;
   let subscriptionsService: SubscriptionsService;
   let sandboxGateway: SandboxPaymentGateway;
+  let auditRepo: any;
   let auditService: AuditService;
   let paymentsService: PaymentsService;
   let mockDataSource: any;
@@ -344,7 +345,7 @@ describe('Payments & Sandbox Gateway Flow', () => {
       { id: 'plan_pro', slug: 'pro', name: 'پرو', price: '250000', currency: 'IRR', durationDays: 30, isActive: true, isDeleted: false },
     ]);
 
-    const auditRepo = makeMockRepo([]);
+    auditRepo = makeMockRepo([]);
     auditService = new AuditService(auditRepo as any);
     plansService = new PlansService(plansRepo as any, makeMockRepo([]) as any, makeMockRepo([]) as any, auditService);
     subscriptionsService = new SubscriptionsService(subscriptionRepo as any, plansRepo as any, plansService, auditService);
@@ -457,6 +458,39 @@ describe('Payments & Sandbox Gateway Flow', () => {
     await expect(
       paymentsService.initiateCheckout('u_paid', { planId: 'plan_pro' }),
     ).rejects.toThrow('شما در حال حاضر دارای اشتراک فعال هستید و امکان تغییر اشتراک وجود ندارد');
+  });
+
+  it('checkout debouncing and session reuse: repeated clicks for same plan return existing pending payment without duplicating records', async () => {
+    const firstCheckout = await paymentsService.initiateCheckout('u_debounce', { planId: 'plan_pro' });
+    expect(firstCheckout.paymentId).toBeDefined();
+    expect(firstCheckout.authority).toBeDefined();
+    const paymentsCountBefore = paymentRepo.rows.length;
+
+    // Second immediate click for the same user and plan
+    const secondCheckout = await paymentsService.initiateCheckout('u_debounce', { planId: 'plan_pro' });
+    expect(secondCheckout.paymentId).toBe(firstCheckout.paymentId);
+    expect(secondCheckout.authority).toBe(firstCheckout.authority);
+    expect(secondCheckout.isExisting).toBe(true);
+
+    // Ensure no new row was added to payments table
+    expect(paymentRepo.rows.length).toBe(paymentsCountBefore);
+  });
+
+  it('audit log single-state per payment: updates existing payment audit log to latest status instead of creating duplicate records', async () => {
+    const checkout = await paymentsService.initiateCheckout('u_audit_track', { planId: 'plan_pro' });
+    const paymentId = checkout.paymentId;
+
+    // After initiate checkout, exactly one payment log exists
+    let paymentLogs = auditRepo.rows.filter((r: any) => r.entityType === 'payment' && r.entityId === paymentId);
+    expect(paymentLogs.length).toBe(1);
+    expect(paymentLogs[0].action).toBe('payment.initiated');
+
+    // When payment is verified, the same log entry is updated to the latest status
+    await paymentsService.verifyPayment({ authority: checkout.authority });
+
+    paymentLogs = auditRepo.rows.filter((r: any) => r.entityType === 'payment' && r.entityId === paymentId);
+    expect(paymentLogs.length).toBe(1);
+    expect(paymentLogs[0].action).toBe('payment.verified');
   });
 
   it('findUserPayments returns user payments filtered by userId', async () => {

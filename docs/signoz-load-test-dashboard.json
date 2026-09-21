@@ -395,5 +395,7 @@
             "query": "SELECT arrayElement(string_tag_values, indexOf(string_tag_keys, 'http.route')) AS endpoint, arrayElement(string_tag_values, indexOf(string_tag_keys, 'http.method')) AS method, count() AS total_requests, round(quantile(0.50)(duration_nano) / 1000000, 1) AS p50_ms, round(quantile(0.95)(duration_nano) / 1000000, 1) AS p95_ms, round(max(duration_nano) / 1000000, 1) AS max_ms, countIf(status_code = 2) AS errors, concat(toString(round((countIf(status_code = 2) / count()) * 100, 2)), '%') AS error_rate FROM signoz_traces.signoz_index_v3 WHERE service_name = 'codeless-backend' AND has(string_tag_keys, 'http.route') GROUP BY endpoint, method ORDER BY total_requests DESC"
           }
         ]
+      }
+    }
   ]
 }

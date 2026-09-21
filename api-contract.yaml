@@ -1055,6 +1055,7 @@ components:
       properties:
         refreshToken:
           type: string
+          description: Deprecated fallback. The browser refresh cookie is preferred.
 
     AuthResponse:
       type: object
@@ -1063,8 +1064,10 @@ components:
           $ref: '#/components/schemas/User'
         accessToken:
           type: string
-        refreshToken:
-          type: string
+
+    RefreshCookie:
+      type: string
+      description: HttpOnly refreshToken cookie set by signup, login, and refresh.
 
     User:
       type: object

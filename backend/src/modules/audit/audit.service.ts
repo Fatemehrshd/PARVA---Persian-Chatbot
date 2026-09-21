@@ -1,6 +1,6 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource, EntityManager } from 'typeorm';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { AuditLog } from './audit-log.entity';
@@ -92,6 +92,8 @@ export class AuditService implements OnModuleInit {
   constructor(
     @InjectRepository(AuditLog)
     private auditRepo: Repository<AuditLog>,
+    @Optional()
+    private dataSource?: DataSource,
   ) {}
 
   onModuleInit() {
@@ -101,10 +103,42 @@ export class AuditService implements OnModuleInit {
     });
   }
 
-  async log(params: CreateAuditLogParams): Promise<AuditLog> {
+  /**
+   * Records an audit log entry.
+   *
+   * Pass `opts.manager` (the EntityManager of an open TypeORM transaction) to
+   * persist the audit entry ATOMICALLY with the caller's business change:
+   * if the transaction rolls back, the audit entry is rolled back too.
+   * Without a manager the entry is written on the default connection.
+   */
+  async log(params: CreateAuditLogParams, opts?: { manager?: EntityManager }): Promise<AuditLog> {
     try {
+      const repo: Repository<AuditLog> = opts?.manager
+        ? opts.manager.getRepository(AuditLog)
+        : this.auditRepo;
+
       const activeTraceId = params.traceId ?? traceContextService.getTraceId() ?? null;
       const activeSpanId = params.spanId ?? traceContextService.getSpanId() ?? null;
+
+      // Auto-enrich actor email and name if only actorId is provided
+      if (params.actorId && (!params.actorEmail || !params.actorName) && this.dataSource) {
+        try {
+          const userRecords = await this.dataSource.query(
+            'SELECT id, email, "displayName", role FROM users WHERE id = $1 LIMIT 1',
+            [params.actorId],
+          );
+          if (userRecords && userRecords.length > 0) {
+            const u = userRecords[0];
+            if (!params.actorEmail) params.actorEmail = u.email;
+            if (!params.actorName) params.actorName = u.displayName || u.email;
+            if (!params.actorType || params.actorType === 'user') {
+              params.actorType = u.role === 'admin' ? 'admin' : 'user';
+            }
+          }
+        } catch {
+          // Ignore lookup failure
+        }
+      }
 
       const sanitizedChanges = params.changes
         ? {
@@ -115,7 +149,34 @@ export class AuditService implements OnModuleInit {
 
       const sanitizedMetadata = sanitizeAuditData(params.metadata || {});
 
-      const entry = this.auditRepo.create({
+      // For payment entities, maintain a single canonical audit log representing its latest state
+      // (e.g. payment.initiated updates to payment.verified, payment.cancelled, or payment.failed)
+      if (params.entityType === 'payment' && params.entityId) {
+        try {
+          const existingPaymentLog = await repo.findOne({
+            where: { entityType: 'payment', entityId: String(params.entityId) },
+            order: { createdAt: 'DESC' },
+          });
+
+          if (existingPaymentLog) {
+            existingPaymentLog.action = params.action;
+            existingPaymentLog.statusCode =
+              typeof params.statusCode === 'number' ? params.statusCode : existingPaymentLog.statusCode;
+            existingPaymentLog.errorMessage = params.errorMessage ?? null;
+            if (params.actorEmail) existingPaymentLog.actorEmail = params.actorEmail;
+            if (params.actorName) existingPaymentLog.actorName = params.actorName;
+            if (params.actorId) existingPaymentLog.actorId = params.actorId;
+            if (params.actorType) existingPaymentLog.actorType = params.actorType;
+            existingPaymentLog.metadata = { ...existingPaymentLog.metadata, ...sanitizedMetadata };
+            if (sanitizedChanges) existingPaymentLog.changes = sanitizedChanges;
+            return await repo.save(existingPaymentLog);
+          }
+        } catch {
+          // Fall back to creating a new entry if findOne fails
+        }
+      }
+
+      const entry = repo.create({
         traceId: activeTraceId,
         spanId: activeSpanId,
         actorId: params.actorId ?? null,
@@ -136,7 +197,7 @@ export class AuditService implements OnModuleInit {
         userAgent: params.userAgent ?? null,
       });
 
-      return await this.auditRepo.save(entry);
+      return await repo.save(entry);
     } catch (err: any) {
       const fallbackPayload = {
         action: params.action,

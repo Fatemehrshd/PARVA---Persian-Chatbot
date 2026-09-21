@@ -46,14 +46,36 @@ export class PaymentsController {
     return this.paymentsService.initiateCheckout(userId, dto, {
       ip: String(ip || ''),
       userAgent: String(userAgent || ''),
+      user: req.user || user,
     });
   }
 
   @Post('verify')
   @UsePipes(new ValidationPipe({ whitelist: true }))
   async verify(@Body() dto: VerifyPaymentDto, @Req() req: any) {
-    const actorId = req.user?.id || req.user?.sub;
-    return this.paymentsService.verifyPayment(dto, actorId);
+    let actorId = req.user?.id || req.user?.sub;
+    let actorEmail = req.user?.email;
+    let actorName = req.user?.displayName || req.user?.name;
+
+    if (!actorId) {
+      const authHeader = req.headers['authorization'] as string;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        try {
+          const parts = authHeader.slice(7).trim().split('.');
+          if (parts.length === 3) {
+            const decoded = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'));
+            actorId = decoded.id || decoded.sub;
+            actorEmail = decoded.email;
+            actorName = decoded.displayName || decoded.name;
+          }
+        } catch {}
+      }
+    }
+
+    return this.paymentsService.verifyPayment(dto, actorId, {
+      email: actorEmail,
+      name: actorName,
+    });
   }
 
   @UseGuards(JwtAuthGuard)

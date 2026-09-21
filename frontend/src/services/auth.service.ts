@@ -1,5 +1,5 @@
 import { request } from './api'
-import type { AuthResponse, LoginRequest, SignupRequest, LogoutRequest } from '../types'
+import type { AuthResponse, LoginRequest, SignupRequest } from '../types'
 
 /**
  * Authentication Service (Maps 1:1 with OpenAPI tag: Auth)
@@ -38,13 +38,9 @@ export const authService = {
    * Invalidate the current session and revoke refresh token.
    * POST /auth/logout
    */
-  async logout(refreshToken?: string): Promise<void> {
-    const payload: LogoutRequest = {
-      ...(refreshToken ? { refreshToken } : {})
-    }
+  async logout(): Promise<void> {
     return request<void>('/auth/logout', {
       method: 'POST',
-      body: JSON.stringify(payload)
     })
   },
 
@@ -52,10 +48,9 @@ export const authService = {
    * Refresh access token using stored refresh token.
    * POST /auth/refresh
    */
-  async refreshToken(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
-    return request<{ accessToken: string; refreshToken: string }>('/auth/refresh', {
-      method: 'POST',
-      body: JSON.stringify({ refreshToken })
+  async refreshToken(): Promise<{ accessToken: string }> {
+    return request<{ accessToken: string }>('/auth/refresh', {
+      method: 'POST'
     })
   }
 }

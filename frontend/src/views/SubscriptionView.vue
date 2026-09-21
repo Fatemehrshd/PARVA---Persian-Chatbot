@@ -107,6 +107,8 @@ function handleSelectPlan(plan: SubscriptionPlan) {
     return
   }
 
+  if (isCheckingOut.value) return
+
   if (Number(plan.price) === 0) {
     executeCheckout({ planId: plan.id, gateway: 'free' })
   } else {
@@ -116,6 +118,7 @@ function handleSelectPlan(plan: SubscriptionPlan) {
 }
 
 async function executeCheckout(payload: { planId: string; gateway: string; couponCode?: string }) {
+  if (isCheckingOut.value) return
   isCheckingOut.value = payload.planId
   try {
     const res = await paymentService.checkout({

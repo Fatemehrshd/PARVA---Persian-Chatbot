@@ -1,0 +1,498 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import {
+  DialogClose,
+  DialogContent,
+  DialogOverlay,
+  DialogPortal,
+  DialogRoot,
+  DialogTitle,
+} from 'reka-ui'
+import {
+  X,
+  UserRound,
+  Mail,
+  LockKeyhole,
+  Receipt,
+  ExternalLink,
+  RefreshCw,
+  CheckCircle2,
+  Clock,
+  XCircle,
+} from '@lucide/vue'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useFormSubmit } from '../../composables/useFormSubmit'
+import { isValidEmail } from '../../utils/validators'
+import { profileService } from '../../services/profile.service'
+import { paymentService } from '../../services/payment.service'
+import { useAuthStore } from '../../stores/auth'
+import { useUiStore } from '../../stores/ui'
+import type { UserProfile, Payment } from '../../types'
+import { formatIranDateTime } from '../../lib/date'
+
+const props = withDefaults(
+  defineProps<{
+    isOpen: boolean
+    defaultTab?: 'profile' | 'email' | 'password' | 'payments'
+  }>(),
+  { defaultTab: 'profile' }
+)
+const emit = defineEmits<{ close: [] }>()
+
+const authStore = useAuthStore()
+const uiStore = useUiStore()
+const profile = ref<UserProfile | null>(null)
+const isLoadingProfile = ref(false)
+const activeTab = ref<'profile' | 'email' | 'password' | 'payments'>(props.defaultTab || 'profile')
+
+const payments = ref<Payment[]>([])
+const isLoadingPayments = ref(false)
+
+async function loadPayments() {
+  isLoadingPayments.value = true
+  try {
+    payments.value = await paymentService.getMyPayments()
+  } catch {
+    payments.value = []
+  } finally {
+    isLoadingPayments.value = false
+  }
+}
+
+const displayName = ref('')
+const username = ref('')
+const email = ref('')
+const emailPassword = ref('')
+const currentPassword = ref('')
+const newPassword = ref('')
+const confirmPassword = ref('')
+const avatarFile = ref<File | null>(null)
+const avatarPreviewUrl = ref<string | null>(null)
+const avatarInput = ref<HTMLInputElement | null>(null)
+
+const open = computed({
+  get: () => props.isOpen,
+  set: (value: boolean) => {
+    if (!value) emit('close')
+  },
+})
+
+function syncProfile(nextProfile: UserProfile) {
+  profile.value = nextProfile
+  displayName.value = nextProfile.displayName ?? ''
+  username.value = nextProfile.username ?? ''
+  email.value = nextProfile.email
+  authStore.updateUser(nextProfile)
+}
+
+async function loadProfile() {
+  isLoadingProfile.value = true
+  try {
+    syncProfile(await profileService.getProfile())
+  } catch (error: any) {
+    uiStore.showToast(error?.message || 'دریافت پروفایل ناموفق بود.', 'error')
+  } finally {
+    isLoadingProfile.value = false
+  }
+}
+
+const profileSubmit = useFormSubmit(
+  async () => {
+    const normalizedUsername = username.value.trim()
+    let updatedProfile = await profileService.updateProfile({
+      displayName: displayName.value.trim(),
+      ...(normalizedUsername ? { username: normalizedUsername } : {}),
+    })
+
+    if (avatarFile.value) {
+      updatedProfile = await profileService.uploadAvatar(avatarFile.value)
+    }
+
+    return updatedProfile
+  },
+  {
+    successMessage: 'اطلاعات نمایه با موفقیت ذخیره شد.',
+    showErrorToast: true,
+    onSuccess: (result) => {
+      syncProfile(result)
+      avatarFile.value = null
+      revokeAvatarPreview()
+    },
+  },
+)
+
+const emailSubmit = useFormSubmit(
+  async () => {
+    // Client-side check (mirrors the backend @IsEmail rule) so the Persian
+    // inline/toast message appears instead of the browser's native bubble.
+    if (!isValidEmail(email.value)) {
+      throw new Error('لطفاً یک ایمیل معتبر وارد کنید.')
+    }
+    return profileService.changeEmail({ email: email.value.trim().toLowerCase(), password: emailPassword.value })
+  },
+  {
+    successMessage: 'ایمیل با موفقیت تغییر کرد.',
+    showErrorToast: true,
+    onSuccess: (result) => {
+      syncProfile(result)
+      emailPassword.value = ''
+    },
+  },
+)
+
+const passwordSubmit = useFormSubmit(
+  async () => {
+    if (newPassword.value !== confirmPassword.value) {
+      throw new Error('تکرار رمز عبور با رمز جدید یکسان نیست.')
+    }
+    return profileService.changePassword({
+      currentPassword: currentPassword.value,
+      newPassword: newPassword.value,
+    })
+  },
+  {
+    successMessage: 'رمز عبور با موفقیت تغییر کرد.',
+    showErrorToast: true,
+    onSuccess: () => {
+      currentPassword.value = ''
+      newPassword.value = ''
+      confirmPassword.value = ''
+    },
+  },
+)
+
+function selectAvatar(event: Event) {
+  revokeAvatarPreview()
+  avatarFile.value = (event.target as HTMLInputElement).files?.[0] ?? null
+  if (avatarFile.value) avatarPreviewUrl.value = URL.createObjectURL(avatarFile.value)
+}
+
+function openAvatarPicker() {
+  avatarInput.value?.click()
+}
+
+function revokeAvatarPreview() {
+  if (avatarPreviewUrl.value) URL.revokeObjectURL(avatarPreviewUrl.value)
+  avatarPreviewUrl.value = null
+}
+
+function resetPendingAvatar() {
+  avatarFile.value = null
+  revokeAvatarPreview()
+}
+
+onBeforeUnmount(revokeAvatarPreview)
+
+watch(
+  () => props.isOpen,
+  (isOpen) => {
+    if (isOpen) {
+      activeTab.value = props.defaultTab || 'profile'
+      loadProfile()
+      if (activeTab.value === 'payments') {
+        loadPayments()
+      }
+    } else {
+      resetPendingAvatar()
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  () => activeTab.value,
+  (tab) => {
+    if (tab === 'payments') {
+      loadPayments()
+    }
+  },
+)
+</script>
+
+<template>
+  <DialogRoot v-model:open="open">
+    <DialogPortal>
+      <DialogOverlay class="profile-modal-overlay" />
+      <DialogContent class="profile-modal-content" dir="rtl">
+        <div class="profile-modal-header">
+          <div>
+            <DialogTitle class="profile-modal-title">
+              نمایه کاربری
+            </DialogTitle>
+          </div>
+          <DialogClose as-child>
+            <Button variant="ghost" size="icon-sm" aria-label="بستن">
+              <X :size="18" />
+            </Button>
+          </DialogClose>
+        </div>
+
+        <div class="profile-tabs" role="tablist">
+          <button
+            v-for="tab in [
+              { id: 'profile', label: 'اطلاعات حساب', icon: UserRound },
+              { id: 'email', label: 'ایمیل', icon: Mail },
+              { id: 'password', label: 'رمز عبور', icon: LockKeyhole },
+              { id: 'payments', label: 'سوابق پرداخت', icon: Receipt },
+            ]"
+            :key="tab.id"
+            class="profile-tab"
+            :class="{ 'profile-tab--active': activeTab === tab.id }"
+            role="tab"
+            :aria-selected="activeTab === tab.id"
+            @click="activeTab = tab.id as typeof activeTab"
+          >
+            <component :is="tab.icon" :size="15" />
+            {{ tab.label }}
+          </button>
+        </div>
+
+        <div class="profile-modal-body">
+          <div v-if="isLoadingProfile" class="profile-skeleton" aria-label="در حال بارگذاری نمایه">
+            <Skeleton class="h-16 w-16 rounded-full" />
+            <Skeleton class="h-10 w-full" />
+            <Skeleton class="h-10 w-full" />
+            <Skeleton class="h-10 w-2/3" />
+          </div>
+
+          <form v-else-if="activeTab === 'profile'" id="form-profile" class="profile-form" @submit.prevent="profileSubmit.submit()">
+            <div class="profile-avatar-row">
+              <div class="profile-avatar-picker">
+                <img v-if="avatarPreviewUrl || profile?.avatarUrl" :src="avatarPreviewUrl || profile?.avatarUrl || undefined" alt="" class="profile-avatar profile-avatar-image" />
+                <div v-else class="profile-avatar">{{ displayName?.charAt(0) || email.charAt(0) || 'U' }}</div>
+                <button
+                  type="button"
+                  class="profile-avatar-add"
+                  aria-label="انتخاب تصویر نمایه"
+                  title="انتخاب تصویر نمایه"
+                  :disabled="profileSubmit.isSubmitting.value"
+                  @click="openAvatarPicker"
+                >
+                  <Plus :size="14" />
+                </button>
+                <input
+                  id="profile-avatar"
+                  ref="avatarInput"
+                  class="profile-avatar-input"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  :disabled="profileSubmit.isSubmitting.value"
+                  @change="selectAvatar"
+                />
+              </div>
+              <div>
+                <p class="profile-account-name">{{ displayName || email }}</p>
+                <p class="profile-account-email">{{ email }}</p>
+              </div>
+            </div>
+            <div class="profile-field">
+              <Label for="profile-display-name">نام نمایشی</Label>
+              <Input id="profile-display-name" v-model="displayName" :loading="profileSubmit.isSubmitting.value" maxlength="60" />
+            </div>
+            <div class="profile-field">
+              <Label for="profile-username">نام کاربری</Label>
+              <Input id="profile-username" v-model="username" :loading="profileSubmit.isSubmitting.value" placeholder="username" />
+            </div>
+          </form>
+
+          <form v-else-if="activeTab === 'email'" id="form-email" class="profile-form" @submit.prevent="emailSubmit.submit()" novalidate>
+            <div class="profile-tab-intro"><Mail :size="20" /><span>برای تغییر ایمیل، رمز عبور فعلی لازم است.</span></div>
+            <div class="profile-field">
+              <Label for="profile-email">ایمیل جدید</Label>
+              <Input id="profile-email" v-model="email" type="email" :loading="emailSubmit.isSubmitting.value" required />
+            </div>
+            <div class="profile-field">
+              <Label for="profile-email-password">رمز عبور فعلی</Label>
+              <Input id="profile-email-password" v-model="emailPassword" type="password" :loading="emailSubmit.isSubmitting.value" required />
+            </div>
+          </form>
+
+          <form v-else-if="activeTab === 'password'" id="form-password" class="profile-form" @submit.prevent="passwordSubmit.submit()">
+            <div class="profile-tab-intro"><LockKeyhole :size="20" /><span>رمز عبور جدید باید حداقل ۸ کاراکتر باشد.</span></div>
+            <div class="profile-field">
+              <Label for="profile-current-password">رمز عبور فعلی</Label>
+              <Input id="profile-current-password" v-model="currentPassword" type="password" :loading="passwordSubmit.isSubmitting.value" required />
+            </div>
+            <div class="profile-field">
+              <Label for="profile-new-password">رمز عبور جدید</Label>
+              <Input id="profile-new-password" v-model="newPassword" type="password" minlength="8" :loading="passwordSubmit.isSubmitting.value" required />
+            </div>
+            <div class="profile-field">
+              <Label for="profile-confirm-password">تکرار رمز عبور جدید</Label>
+              <Input id="profile-confirm-password" v-model="confirmPassword" type="password" :loading="passwordSubmit.isSubmitting.value" required />
+            </div>
+          </form>
+
+          <!-- تب سوابق پرداخت -->
+          <div v-else-if="activeTab === 'payments'" class="payments-history-wrap space-y-3">
+            <div class="flex items-center justify-between pb-2 border-b border-border">
+              <span class="text-xs font-bold text-foreground">سوابق تراکنش‌ها و خریدهای شما</span>
+              <button
+                type="button"
+                class="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
+                :disabled="isLoadingPayments"
+                @click="loadPayments"
+              >
+                <RefreshCw :size="13" :class="{ 'animate-spin': isLoadingPayments }" />
+                <span>بروزرسانی</span>
+              </button>
+            </div>
+
+            <div v-if="isLoadingPayments" class="space-y-2 py-4">
+              <Skeleton class="h-16 w-full rounded-xl" />
+              <Skeleton class="h-16 w-full rounded-xl" />
+            </div>
+
+            <div v-else-if="!payments.length" class="empty-payments text-center py-12 space-y-2 text-muted-foreground">
+              <Receipt :size="36" class="mx-auto opacity-30 text-primary" />
+              <p class="text-sm font-semibold">هیچ تراکنشی یافت نشد.</p>
+              <p class="text-xs opacity-75">سوابق پرداخت‌ها و فاکتورهای شما پس از انجام خرید در این بخش نمایش داده می‌شوند.</p>
+            </div>
+
+            <div v-else class="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+              <div
+                v-for="pay in payments"
+                :key="pay.id"
+                class="payment-item p-3.5 rounded-xl border border-border bg-card/60 hover:bg-secondary/30 transition-colors space-y-2"
+              >
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-sm text-foreground">{{ pay.plan?.name || 'پلن اشتراک' }}</span>
+                    <span
+                      v-if="pay.status === 'SUCCESS'"
+                      class="px-2 py-0.5 text-[11px] font-bold rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center gap-1"
+                    >
+                      <CheckCircle2 :size="12" />
+                      <span>موفق</span>
+                    </span>
+                    <span
+                      v-else-if="pay.status === 'PENDING'"
+                      class="px-2 py-0.5 text-[11px] font-medium rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center gap-1"
+                    >
+                      <Clock :size="12" />
+                      <span>در انتظار</span>
+                    </span>
+                    <span
+                      v-else
+                      class="px-2 py-0.5 text-[11px] font-medium rounded-full bg-destructive/10 text-destructive border border-destructive/20 flex items-center gap-1"
+                    >
+                      <XCircle :size="12" />
+                      <span>ناموفق</span>
+                    </span>
+                  </div>
+
+                  <span class="font-mono text-xs font-bold text-foreground">
+                    {{ Number(pay.amount).toLocaleString('fa-IR') }} ریال
+                  </span>
+                </div>
+
+                <div class="flex items-center justify-between text-[11px] text-muted-foreground flex-wrap gap-2 pt-1 border-t border-border/50">
+                  <span class="font-mono">{{ formatIranDateTime(pay.createdAt) }}</span>
+                  <div class="flex items-center gap-3">
+                    <span v-if="pay.refId" class="font-mono" dir="ltr">کد پیگیری: {{ pay.refId }}</span>
+                    <span v-else-if="pay.authority" class="font-mono text-[10px]" dir="ltr">{{ pay.authority }}</span>
+                    <span class="opacity-75">درگاه: {{ pay.gateway === 'sandbox' ? 'سندباکس' : pay.gateway === 'free' ? 'رایگان' : pay.gateway }}</span>
+                  </div>
+                </div>
+
+                <div v-if="pay.status === 'PENDING' && pay.authority" class="pt-1">
+                  <a
+                    :href="`/sandbox-gateway?authority=${pay.authority}&amount=${pay.amount}`"
+                    class="inline-flex items-center gap-1 text-xs text-primary font-semibold hover:underline"
+                  >
+                    <span>ادامه فرایند پرداخت</span>
+                    <ExternalLink :size="12" />
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer مشترک برای تب‌های فرم -->
+        <div v-if="!isLoadingProfile && activeTab !== 'payments'" class="profile-modal-footer">
+          <Button
+            v-if="activeTab === 'profile'"
+            type="submit"
+            form="form-profile"
+            :loading="profileSubmit.isSubmitting.value"
+            :disabled="isLoadingProfile"
+          >
+            ذخیره اطلاعات
+          </Button>
+          <Button
+            v-else-if="activeTab === 'email'"
+            type="submit"
+            form="form-email"
+            :loading="emailSubmit.isSubmitting.value"
+          >
+            تغییر ایمیل
+          </Button>
+          <Button
+            v-else-if="activeTab === 'password'"
+            type="submit"
+            form="form-password"
+            :loading="passwordSubmit.isSubmitting.value"
+          >
+            تغییر رمز عبور
+          </Button>
+        </div>
+      </DialogContent>
+    </DialogPortal>
+  </DialogRoot>
+</template>
+
+<style scoped>
+.profile-modal-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.62); backdrop-filter: blur(5px); }
+.profile-modal-content { position: fixed; top: 50%; left: 50%; z-index: 51; box-sizing: border-box; width: min(640px, calc(100svw - 32px)); max-width: calc(100svw - 32px); height: min(620px, calc(100svh - 32px)); max-height: calc(100svh - 32px); margin: 0; transform: translate(-50%, -50%); display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); color: var(--foreground); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.38); }
+.profile-modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 22px 24px 16px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--secondary) 38%, transparent); }
+.profile-modal-title { font-size: 18px; font-weight: 700; }
+.profile-modal-description { margin-top: 4px; color: var(--muted-foreground); font-size: 12px; }
+.profile-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 12px 20px 0; border-bottom: 1px solid var(--border); }
+.profile-tab { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-bottom: 2px solid transparent; color: var(--muted-foreground); font-size: 13px; }
+.profile-tab:hover, .profile-tab--active { color: var(--primary); }
+.profile-tab--active { border-bottom-color: var(--primary); font-weight: 600; }
+.profile-modal-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 24px; }
+.profile-skeleton, .profile-form { min-height: 390px; height: 100%; display: flex; flex-direction: column; gap: 18px; }
+.profile-skeleton { align-items: flex-start; }
+.profile-field { display: flex; flex-direction: column; gap: 8px; }
+.profile-helper { color: var(--muted-foreground); font-size: 11px; }
+.profile-avatar-row { display: flex; align-items: center; gap: 14px; min-width: 0; padding-bottom: 8px; }
+.profile-avatar { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--primary-hover)); color: white; font-size: 22px; font-weight: 700; }
+.profile-avatar-image { object-fit: cover; }
+.profile-avatar-picker { position: relative; width: 64px; height: 64px; flex-shrink: 0; }
+.profile-avatar-add { position: absolute; right: -4px; bottom: -4px; width: 23px; height: 23px; display: grid; place-items: center; border: 1px solid var(--card); border-radius: 50%; background: var(--primary); color: var(--primary-foreground); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); }
+.profile-avatar-add:hover { background: var(--primary-hover); }
+.profile-avatar-input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.profile-account-name, .profile-account-email { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-account-name { font-size: 15px; font-weight: 600; }
+.profile-account-email { margin-top: 2px; color: var(--muted-foreground); font-size: 12px; }
+.profile-tab-intro { display: flex; align-items: flex-start; gap: 10px; min-height: 48px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--muted-foreground); font-size: 12px; }
+.profile-tab-intro svg { flex-shrink: 0; color: var(--primary); }
+.profile-form-actions { display: flex; justify-content: flex-start; margin-top: auto; padding-top: 12px; }
+.profile-modal-footer { display: flex; justify-content: flex-end; padding: 16px 24px; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--secondary) 38%, transparent); }
+@media (max-width: 640px) {
+  .profile-modal-content { width: calc(100svw - 24px); max-width: calc(100svw - 24px); height: min(620px, calc(100svh - 24px)); max-height: calc(100svh - 24px); border-radius: var(--radius); }
+  .profile-modal-header { gap: 10px; padding: 16px; }
+  .profile-modal-title { font-size: 16px; }
+  .profile-modal-description { font-size: 11px; }
+  .profile-tabs { grid-template-columns: repeat(4, minmax(90px, 1fr)); overflow-x: auto; padding: 10px 12px 0; }
+  .profile-tab { min-height: 40px; font-size: 11px; white-space: nowrap; }
+  .profile-modal-body { padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
+  .profile-skeleton, .profile-form { min-height: 360px; height: 100%; gap: 14px; }
+  .profile-form-actions { padding-top: 8px; }
+  .profile-form-actions :deep(button) { width: 100%; }
+  .profile-modal-footer { padding: 12px 16px; }
+  .profile-modal-footer :deep(button) { width: 100%; }
+}
+@media (max-width: 380px) {
+  .profile-modal-content { width: calc(100svw - 16px); max-width: calc(100svw - 16px); height: min(620px, calc(100svh - 16px)); max-height: calc(100svh - 16px); }
+  .profile-modal-header { padding: 14px 12px; }
+  .profile-modal-body { padding-inline: 12px; }
+  .profile-tabs { padding-inline: 8px; }
+  .profile-avatar-row { gap: 10px; }
+}
+</style>

@@ -5,3 +5,4 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export { getTextDirection, getActiveTypingDirection, getLineDirection } from '../utils/textDirection'

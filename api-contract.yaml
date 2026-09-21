@@ -2,20 +2,29 @@
 openapi: 3.0.3
 info:
   title: CODELESS API
-  version: 0.1.0
+  version: 0.6.0
   description: >
     API contract for the CODELESS multi-model AI chat platform.
-    Covers the Day 1-2 scope: authentication (sign-up/login/logout),
-    chat with an AI model (with streaming), and the admin model panel
-    (add/remove models, set the default model).
+    Features: authentication (sign-up/login/logout), user profile with
+    custom avatar and preferences, multi-turn chat with AI models
+    (Server-Sent Events streaming & JSON fallback), model switching
+    mid-conversation, admin management of PROVIDERS (CRUD, active toggle,
+    per-provider default), admin management of MODELS (CRUD, active toggle,
+    platform default, provider binding), admin global token quota limit
+    per user, customizable system prompt, admin user listing & management
+    with chat/token stats, admin dashboard KPI metrics, forwarding chat to
+    real OpenAI-compatible upstreams, and standard OpenAI-compatible endpoints
+    (/v1/models, /v1/chat/completions) behind bearer auth.
+    All standard JSON responses are wrapped in a unified envelope:
+    { success: boolean, message: string, data: any }.
   contact:
     name: CODELESS Team
 
 servers:
   - url: http://localhost:3000/api/v1
-    description: Local development
+    description: Local development API base
   - url: https://api.codeless.example.com/api/v1
-    description: Production (placeholder — update once deployed)
+    description: Production API base (placeholder)
 
 tags:
   - name: Auth
@@ -23,7 +32,15 @@ tags:
   - name: Chat
     description: Conversations and messages with an AI model
   - name: Admin - Models
-    description: Manage available AI models (admin only)
+    description: Manage AI providers and models (admin only)
+  - name: Admin - Dashboard & Settings
+    description: High-level platform metrics and dynamic system configurations (global token limit, system prompt)
+  - name: Admin - Users
+    description: List all registered users with chat & token consumption stats, edit user details and delete users
+  - name: Users
+    description: Profile, credentials and avatar of the current user
+  - name: OpenAI Compatibility
+    description: Standard OpenAI-compatible endpoints for listing active models and completions
 
 security:
   - bearerAuth: []
@@ -46,7 +63,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
+                $ref: '#/components/schemas/AuthApiResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '409':
@@ -73,7 +90,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
+                $ref: '#/components/schemas/AuthApiResponse'
         '401':
           description: Invalid email or password
           content:
@@ -101,6 +118,201 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Get the current user's full profile
+      responses:
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    patch:
+      tags: [Users]
+      summary: Update profile fields (displayName / username)
+      description: >
+        Username is normalized to lowercase and must be unique (409 when
+        taken). Avatar upload has its own endpoint (multipart).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileApiResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Username already taken
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/me/email:
+    post:
+      tags: [Users]
+      summary: Change email (requires the current password; applies immediately)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeEmailRequest'
+      responses:
+        '200':
+          description: Email changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileApiResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Missing token or wrong current password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Email already in use
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/me/password:
+    post:
+      tags: [Users]
+      summary: Change password (requires the current password)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '201':
+          description: Password changed
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Wrong current password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/me/avatar:
+    post:
+      tags: [Users]
+      summary: Upload/replace avatar (multipart image file, max 2 MB)
+      description: >
+        Field name `file`. Allowed types: image/png, image/jpeg, image/webp.
+        Stored on MinIO; the previous object is deleted. Returns 503 when
+        object storage (MINIO_*) is not configured.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Avatar stored; profile returned with new avatarUrl
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileApiResponse'
+        '400':
+          description: Missing/invalid file (type or size under the limit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: File exceeds the 2 MB limit (rejected by multer before the handler; localized message)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          description: Object storage not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Users]
+      summary: Remove avatar (deletes the stored object)
+      responses:
+        '200':
+          description: Avatar removed; profile returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /static/avatars/{userId}/{filename}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: filename
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Users]
+      summary: Serve a stored avatar from MinIO
+      description: >
+        Public (opaque random-key URLs), streamed image bytes with an
+        immutable-style cache header. Unknown/invalid paths return 404.
+      security: []
+      responses:
+        '200':
+          description: Image bytes
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /chat/conversations:
     get:
       tags: [Chat]
@@ -111,9 +323,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Conversation'
+                $ref: '#/components/schemas/ConversationsListApiResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
     post:
@@ -131,9 +341,45 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Conversation'
+                $ref: '#/components/schemas/ConversationApiResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+  /chat/conversations/{conversationId}:
+    parameters:
+      - $ref: '#/components/parameters/ConversationId'
+    delete:
+      tags: [Chat]
+      summary: Delete a conversation and its messages
+      responses:
+        '204':
+          description: Conversation deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Chat]
+      summary: Update conversation details (title and/or AI model)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateConversationRequest'
+      responses:
+        '200':
+          description: Conversation updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationApiResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /chat/conversations/{conversationId}/messages:
     parameters:
@@ -147,9 +393,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Message'
+                $ref: '#/components/schemas/MessagesListApiResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -187,9 +431,206 @@ paths:
                 data: {"messageId":"5b1e2b2a-df3a-4e9a-9a11-1a2b3c4d5e6f"}
             application/json:
               schema:
-                $ref: '#/components/schemas/Message'
+                $ref: '#/components/schemas/MessageApiResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /models:
+    get:
+      tags: [Chat]
+      summary: List active AI models available for chatting
+      description: >
+        Any authenticated user (not only admins) can list the models usable
+        in chat: isActive models whose provider is also active. Credentials
+        are masked. Powers the chat model switcher.
+      responses:
+        '200':
+          description: List of active models
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Model'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/providers:
+    get:
+      tags: [Admin - Models]
+      summary: List configured AI providers (admin only)
+      responses:
+        '200':
+          description: List of providers (apiKey masked)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Provider'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin - Models]
+      summary: Register a new AI provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProviderRequest'
+      responses:
+        '201':
+          description: Provider added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Provider'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: A provider with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/providers/{providerId}:
+    parameters:
+      - name: providerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Admin - Models]
+      summary: Update provider metadata (name / baseUrl / apiKey rotation)
+      description: >
+        An absent or empty apiKey leaves the stored key untouched; a non-empty
+        apiKey rotates it. Keys are write-only over the API (masked on read).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProviderRequest'
+      responses:
+        '200':
+          description: Provider updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Provider'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Another provider already uses the new name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Admin - Models]
+      summary: Delete a provider AND CASCADE-DELETE ALL ITS MODELS
+      description: >
+        If the platform-wide default model lived among the deleted models, the
+        oldest remaining active model (of an active provider) is promoted to
+        default so the platform never ends up default-less.
+      responses:
+        '204':
+          description: Provider and its models removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/providers/{providerId}/status:
+    parameters:
+      - name: providerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Admin - Models]
+      summary: Enable or disable a provider (its models become unchat-usable when disabled)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateModelStatusRequest'
+      responses:
+        '200':
+          description: Provider status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Provider'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/providers/{providerId}/default:
+    parameters:
+      - name: providerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Admin - Models]
+      summary: Set this provider's default model
+      description: >
+        The model must belong to this provider and be active. Deleting the
+        provider's default model clears `defaultModelId` (set to null) so the
+        admin can point it at another model — the deletion itself never fails.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [modelId]
+              properties:
+                modelId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Provider default updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Provider'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -203,9 +644,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Model'
+                $ref: '#/components/schemas/ModelsListApiResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -225,7 +664,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Model'
+                $ref: '#/components/schemas/ModelApiResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -236,6 +675,30 @@ paths:
   /admin/models/{modelId}:
     parameters:
       - $ref: '#/components/parameters/ModelId'
+    patch:
+      tags: [Admin - Models]
+      summary: Update model properties (name, provider, providerId, apiIdentifier, apiKey, baseUrl, isActive)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateModelRequest'
+      responses:
+        '200':
+          description: Model updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelApiResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     delete:
       tags: [Admin - Models]
       summary: Remove an AI model
@@ -265,13 +728,252 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Model'
+                $ref: '#/components/schemas/ModelApiResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /admin/models/{modelId}/status:
+    parameters:
+      - $ref: '#/components/parameters/ModelId'
+    patch:
+      tags: [Admin - Models]
+      summary: Toggle active/inactive status of an AI model
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateModelStatusRequest'
+      responses:
+        '200':
+          description: Model status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelApiResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/dashboard/stats:
+    get:
+      tags: [Admin - Dashboard & Settings]
+      summary: High-level administrative dashboard overview metrics
+      description: >
+        Aggregates total users, active and total models, active and total providers,
+        total conversations/sessions, total messages, sum of all tokens consumed,
+        and current platform global settings. Admin only.
+      responses:
+        '200':
+          description: Aggregated system statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminDashboardStatsApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/settings:
+    get:
+      tags: [Admin - Dashboard & Settings]
+      summary: Get platform global settings (token limit and system prompt)
+      responses:
+        '200':
+          description: Current platform settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSettingsApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [Admin - Dashboard & Settings]
+      summary: Update platform global settings (global token limit, system prompt)
+      description: >
+        globalTokenLimit: 0 means unlimited. When > 0, users who reach this limit
+        are blocked from sending chat messages with an explicit Persian error message.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAdminSettingsRequest'
+      responses:
+        '200':
+          description: Updated platform settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSettingsApiResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/users:
+    get:
+      tags: [Admin - Users]
+      summary: List all users with conversation counts and token usage
+      description: Returns list of all registered users with their created conversations count and consumed tokens.
+      responses:
+        '200':
+          description: List of users with statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUsersListApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/users/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Admin - Users]
+      summary: Update user details, role, or reset/set used tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserAdminRequest'
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileApiResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/users/{userId}/status:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Admin - Users]
+      summary: Enable or disable a user account without deleting it
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserStatusRequest'
+      responses:
+        '200':
+          description: User status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileApiResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Admin - Users]
+      summary: Delete a user and cascade their conversations and messages
+      description: Admins cannot delete their own account.
+      responses:
+        '204':
+          description: User deleted successfully
+        '400':
+          description: Cannot delete self
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/models:
+    get:
+      tags: [OpenAI Compatibility]
+      summary: List active models (OpenAI-compatible)
+      description: >
+        Returns a list of all active AI models (of active providers) in
+        standard OpenAI format. Requires a bearer token: the same facade can
+        drive real, paid upstream models via /v1/chat/completions.
+      responses:
+        '200':
+          description: List of active models
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenAiModelListResponse'
+
+  /v1/chat/completions:
+    post:
+      tags: [OpenAI Compatibility]
+      summary: Create chat completion (OpenAI-compatible)
+      description: >
+        OpenAI-compatible chat completion endpoint. Supports single JSON response
+        or real-time streaming chunks using Server-Sent Events (`stream: true`).
+        Requests are forwarded to the matching ACTIVE model's provider
+        (OpenAI-compatible upstream); unknown model names return 404. Requires a
+        bearer token because it can drive real paid upstream models. If NO provider
+        credential is configured anywhere, the legacy offline echo answers (dev only).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenAiChatCompletionRequest'
+      responses:
+        '200':
+          description: Completion result (JSON object or SSE token stream)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenAiChatCompletionResponse'
+            text/event-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/ValidationError'
 
 components:
   securitySchemes:
@@ -353,6 +1055,7 @@ components:
       properties:
         refreshToken:
           type: string
+          description: Deprecated fallback. The browser refresh cookie is preferred.
 
     AuthResponse:
       type: object
@@ -361,8 +1064,10 @@ components:
           $ref: '#/components/schemas/User'
         accessToken:
           type: string
-        refreshToken:
-          type: string
+
+    RefreshCookie:
+      type: string
+      description: HttpOnly refreshToken cookie set by signup, login, and refresh.
 
     User:
       type: object
@@ -378,9 +1083,221 @@ components:
         role:
           type: string
           enum: [user, admin]
+        isActive:
+          type: boolean
         createdAt:
           type: string
           format: date-time
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+          nullable: true
+        username:
+          type: string
+          nullable: true
+          description: Unique lowercase handle ([a-z0-9_]{3,30}).
+        avatarUrl:
+          type: string
+          nullable: true
+          description: Public URL served by GET /static/avatars/{userId}/{file}.
+        role:
+          type: string
+          enum: [user, admin]
+        createdAt:
+          type: string
+          format: date-time
+
+    UserProfileApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UserProfile'
+
+    AdminDashboardStats:
+      type: object
+      properties:
+        totalUsers:
+          type: integer
+        totalModels:
+          type: integer
+        activeModels:
+          type: integer
+        totalProviders:
+          type: integer
+        activeProviders:
+          type: integer
+        totalConversations:
+          type: integer
+        totalMessages:
+          type: integer
+        totalTokensUsed:
+          type: integer
+        globalTokenLimit:
+          type: integer
+        systemPrompt:
+          type: string
+
+    AdminDashboardStatsApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AdminDashboardStats'
+
+    AdminSettings:
+      type: object
+      properties:
+        globalTokenLimit:
+          type: integer
+          description: 0 for unlimited; otherwise maximum tokens a user can consume.
+        systemPrompt:
+          type: string
+
+    AdminSettingsApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AdminSettings'
+
+    UpdateAdminSettingsRequest:
+      type: object
+      properties:
+        globalTokenLimit:
+          type: integer
+          minimum: 0
+        systemPrompt:
+          type: string
+
+    AdminUserItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+          nullable: true
+        username:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [user, admin]
+        isActive:
+          type: boolean
+        avatarUrl:
+          type: string
+          nullable: true
+        usedTokens:
+          type: integer
+        conversationsCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminUsersListApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdminUserItem'
+
+    UpdateUserAdminRequest:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [user, admin]
+        displayName:
+          type: string
+        email:
+          type: string
+          format: email
+        usedTokens:
+          type: integer
+          minimum: 0
+
+    UpdateUserStatusRequest:
+      type: object
+      required: [isActive]
+      properties:
+        isActive:
+          type: boolean
+
+    UpdateModelRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        provider:
+          type: string
+        providerId:
+          type: string
+          format: uuid
+        apiIdentifier:
+          type: string
+        apiKey:
+          type: string
+        baseUrl:
+          type: string
+        isActive:
+          type: boolean
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        displayName:
+          type: string
+          maxLength: 60
+        username:
+          type: string
+          pattern: "^[a-zA-Z0-9_]{3,30}$"
+          description: Normalized to lowercase server-side; empty string removes it.
+
+    ChangeEmailRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          description: Current password (re-authentication).
+
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
 
     CreateConversationRequest:
       type: object
@@ -391,6 +1308,22 @@ components:
           description: Optional — falls back to the platform default model if omitted.
         title:
           type: string
+
+    UpdateConversationRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: Updated title for the conversation
+          example: "Updated Conversation Name"
+        modelId:
+          type: string
+          format: uuid
+          description: >
+            Switch the model that answers this conversation from now on.
+            Must be an ACTIVE model whose provider is also ACTIVE.
+            At least one of title/modelId is required.
 
     Conversation:
       type: object
@@ -436,6 +1369,64 @@ components:
           type: string
           format: date-time
 
+    CreateProviderRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: Unique provider label (e.g. openai, ollama, lm-studio).
+        baseUrl:
+          type: string
+          description: OpenAI-compatible base URL; defaults to https://api.openai.com/v1 when unset.
+        apiKey:
+          type: string
+          writeOnly: true
+          description: Provider API key (stored; masked as sk-...last4 on read).
+        isActive:
+          type: boolean
+          default: true
+
+    UpdateProviderRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        baseUrl:
+          type: string
+        apiKey:
+          type: string
+          writeOnly: true
+          description: Non-empty rotates the stored key; absent/empty leaves it unchanged.
+        isActive:
+          type: boolean
+
+    Provider:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        baseUrl:
+          type: string
+          nullable: true
+        apiKey:
+          type: string
+          nullable: true
+          description: Masked (sk-...last4); the raw key is never returned.
+        isActive:
+          type: boolean
+        defaultModelId:
+          type: string
+          format: uuid
+          nullable: true
+          description: This provider's default model; null when unset or after its deletion.
+        createdAt:
+          type: string
+          format: date-time
+
     CreateModelRequest:
       type: object
       required: [name, provider, apiIdentifier]
@@ -445,13 +1436,33 @@ components:
           description: Display name shown in the admin panel and chat UI.
         provider:
           type: string
-          description: e.g. openai, anthropic, local
+          description: >
+            Provider name. Auto-registers the provider if the name is new
+            (backward compatible); prefer providerId when available.
+        providerId:
+          type: string
+          format: uuid
+          description: Optional — link the model to an existing provider row.
         apiIdentifier:
           type: string
           description: The model name/id sent to the provider's API.
+        apiKey:
+          type: string
+          description: Optional provider API key (masked on read).
+        baseUrl:
+          type: string
+          description: Optional custom base URL for OpenAI-compatible LLM endpoints.
         isActive:
           type: boolean
           default: true
+
+    UpdateModelStatusRequest:
+      type: object
+      required: [isActive]
+      properties:
+        isActive:
+          type: boolean
+          description: Whether the model is active and selectable for chat.
 
     Model:
       type: object
@@ -463,8 +1474,21 @@ components:
           type: string
         provider:
           type: string
+        providerId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Owning provider row (models cascade-delete with it).
         apiIdentifier:
           type: string
+        apiKey:
+          type: string
+          description: Masked provider API key.
+          nullable: true
+        baseUrl:
+          type: string
+          description: Custom base URL.
+          nullable: true
         isActive:
           type: boolean
         isDefault:
@@ -475,10 +1499,213 @@ components:
 
     Error:
       type: object
+      required: [success, message, data]
       properties:
-        statusCode:
-          type: integer
+        success:
+          type: boolean
+          example: false
         message:
           type: string
+          example: "Invalid email or password"
+        data:
+          nullable: true
+          example: null
+        statusCode:
+          type: integer
+          example: 400
         error:
           type: string
+          example: "Bad Request"
+
+    ApiResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Operation successful"
+        data:
+          nullable: true
+          description: Response payload
+
+    AuthApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthResponse'
+
+    ConversationApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Conversation'
+
+    ConversationsListApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Conversation'
+
+    MessageApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Message'
+
+    MessagesListApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Message'
+
+    ModelApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Model'
+
+    ModelsListApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Model'
+
+    OpenAiModelItem:
+      type: object
+      properties:
+        id:
+          type: string
+          example: gpt-4o
+        object:
+          type: string
+          example: model
+        created:
+          type: integer
+          example: 1726300000
+        owned_by:
+          type: string
+          example: openai
+        permission:
+          type: array
+          items:
+            type: object
+        root:
+          type: string
+          example: gpt-4o
+        parent:
+          nullable: true
+          type: string
+          example: null
+
+    OpenAiModelListResponse:
+      type: object
+      required: [object, data]
+      properties:
+        object:
+          type: string
+          example: list
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpenAiModelItem'
+
+    OpenAiChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant]
+          example: user
+        content:
+          type: string
+          example: "Hello, how are you?"
+
+    OpenAiChatCompletionRequest:
+      type: object
+      required: [messages]
+      properties:
+        model:
+          type: string
+          description: Model apiIdentifier or display name.
+          example: gpt-4o
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpenAiChatMessage'
+        stream:
+          type: boolean
+          default: false
+          description: If set, partial message deltas will be sent as Server-Sent Events.
+        temperature:
+          type: number
+          nullable: true
+          example: 0.7
+        max_tokens:
+          type: integer
+          nullable: true
+          example: 1000
+
+    OpenAiChatCompletionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: chatcmpl-1726300000
+        object:
+          type: string
+          example: chat.completion
+        created:
+          type: integer
+          example: 1726300000
+        model:
+          type: string
+          example: gpt-4o
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              index:
+                type: integer
+                example: 0
+              message:
+                $ref: '#/components/schemas/OpenAiChatMessage'
+              finish_reason:
+                type: string
+                example: stop
+        usage:
+          type: object
+          properties:
+            prompt_tokens:
+              type: integer
+              example: 10
+            completion_tokens:
+              type: integer
+              example: 25
+            total_tokens:
+              type: integer
+              example: 35

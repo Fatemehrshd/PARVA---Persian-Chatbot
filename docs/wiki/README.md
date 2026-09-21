@@ -3,10 +3,21 @@
 Welcome to the project documentation wiki.
 
 ## Navigation
+- [Onboarding Guide — Full Backend & Frontend Conventions](onboarding-guide.md)
+- [NestJS Backend Guide — Principles, Patterns & Decisions](backend-nestjs-guide.md)
+- [Frontend Guide — Vue 3, shadcn-vue & Tailwind Principles](frontend-guide.md)
 - [Getting Started](getting-started.md)
-- [Architecture](architecture.md)
-- [Features](features.md)
-- [Decisions](decisions.md)
+- [Architecture Overview](architecture.md)
+- [API Architecture & Technical Reference](api-reference.md)
+- [Chat System & Streaming Architecture](chat-system.md)
+- [Chat Resilience: Offline, Refresh & Interrupted Streaming](chat-resilience.md)
+- [Streaming Comprehensive Guide (README)](../STREAMING_README.md)
+- [Features History](features.md)
+- [Database Transactions & Log Architecture Guide (راهنمای تراکنش‌ها و سیستم لاگ)](transactions.md)
+- [Admin Panel Guide (راهنمای پنل مدیریت)](admin.md)
+- [SigNoz APM & Telemetry Guide (راهنمای سیگنوز)](signoz.md)
+- [Load Testing with k6](load-testing-with-k6.md)
+- [Architectural Decisions (ADRs)](decisions.md)
 
 ## Development Workflow & Testing
 

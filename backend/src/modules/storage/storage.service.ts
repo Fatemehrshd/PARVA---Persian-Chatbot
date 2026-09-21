@@ -1,0 +1,155 @@
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+  InternalServerErrorException,
+  OnModuleInit,
+} from '@nestjs/common';
+import * as minio from 'minio';
+
+/**
+ * Object storage backed by MinIO (S3-compatible). Configured purely via env
+ * (see .env.example). When MinIO env vars are absent the service reports
+ * itself as unavailable and every write throws 503 — there is intentionally
+ * no silent disk fallback so misconfiguration surfaces immediately.
+ */
+@Injectable()
+export class StorageService implements OnModuleInit {
+  private readonly logger = new Logger(StorageService.name);
+  private client?: minio.Client;
+  private readonly bucket = process.env.MINIO_BUCKET || 'codeless';
+
+  async onModuleInit() {
+    await this.ensureBucket();
+  }
+
+  get configured(): boolean {
+    return Boolean(
+      process.env.MINIO_ENDPOINT &&
+        process.env.MINIO_ACCESS_KEY &&
+        process.env.MINIO_SECRET_KEY,
+    );
+  }
+
+  private ensure(): minio.Client {
+    if (!this.configured)
+      throw new ServiceUnavailableException(
+        'Object storage (MinIO) is not configured; avatar upload is disabled',
+      );
+    if (this.client) return this.client;
+
+    let endPoint = (process.env.MINIO_ENDPOINT || '')
+      .replace(/^https?:\/\//i, '')
+      .replace(/\/.*$/, '');
+    let port = Number(process.env.MINIO_PORT ?? 9000);
+    if (endPoint.includes(':')) {
+      const [host, p] = endPoint.split(':');
+      endPoint = host;
+      if (p && !process.env.MINIO_PORT) {
+        port = Number(p);
+      }
+    }
+
+    this.client = new minio.Client({
+      endPoint,
+      port,
+      useSSL: (process.env.MINIO_USE_SSL ?? 'false') === 'true',
+      accessKey: process.env.MINIO_ACCESS_KEY!,
+      secretKey: process.env.MINIO_SECRET_KEY!,
+    });
+    return this.client;
+  }
+
+  /** Ensures the target bucket exists (best-effort; requires admin creds). */
+  async ensureBucket(): Promise<void> {
+    if (!this.configured) return;
+    try {
+      const c = this.ensure();
+      const exists = await c.bucketExists(this.bucket);
+      if (!exists) await c.makeBucket(this.bucket, process.env.MINIO_REGION || 'us-east-1');
+    } catch (err) {
+      this.logger.warn(`MinIO bucket bootstrap skipped: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  private sseSupported: boolean | null = null;
+
+  async put(key: string, data: Buffer, contentType: string): Promise<void> {
+    const c = this.ensure();
+
+    if (process.env.MINIO_SSE_ENABLED === 'false') {
+      this.sseSupported = false;
+    }
+
+    const baseMeta: Record<string, string> = {
+      'Content-Type': contentType,
+    };
+
+    const trySse = this.sseSupported !== false;
+    const meta: Record<string, string> = trySse
+      ? { ...baseMeta, 'X-Amz-Server-Side-Encryption': 'AES256' }
+      : baseMeta;
+
+    try {
+      await c.putObject(this.bucket, key, data, data.length, meta);
+      if (trySse && this.sseSupported === null) {
+        this.sseSupported = true;
+      }
+    } catch (err: any) {
+      if (err?.code === 'NoSuchBucket') {
+        await this.ensureBucket();
+        return this.put(key, data, contentType);
+      }
+
+      const isKmsError =
+        err?.message?.includes('KMS is not configured') ||
+        err?.message?.includes('server side encrypted') ||
+        err?.code === 'KMSNotConfigured' ||
+        err?.code === 'InvalidArgument' ||
+        err?.code === 'InvalidRequest';
+
+      if (trySse && isKmsError) {
+        this.sseSupported = false;
+        this.logger.warn(
+          `MinIO KMS is not configured on the server; storing objects without SSE-S3. (${err.message})`,
+        );
+        await c.putObject(this.bucket, key, data, data.length, baseMeta);
+        return;
+      }
+
+      throw err;
+    }
+  }
+
+  async getBuffer(key: string): Promise<Buffer> {
+    const c = this.ensure();
+    const stream = await c.getObject(this.bucket, key).catch(() => {
+      throw new InternalServerErrorException('failed to read stored object');
+    });
+    return await new Promise<Buffer>((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      stream.on('data', (d) => chunks.push(Buffer.from(d)));
+      stream.on('end', () => resolve(Buffer.concat(chunks)));
+      stream.on('error', reject);
+    });
+  }
+
+  async remove(key: string): Promise<void> {
+    const c = this.ensure();
+    try {
+      await c.removeObject(this.bucket, key);
+    } catch (err: any) {
+      this.logger.warn(`Failed to remove MinIO object ${key}: ${err?.message || err}`);
+    }
+  }
+
+  async delete(key: string): Promise<void> {
+    return this.remove(key);
+  }
+
+  /** Public GET path served by the backend (streams bytes from MinIO). */
+  publicUrl(key: string): string {
+    const base = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+    return `${base}/static/${key}`;
+  }
+}

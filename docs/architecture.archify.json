@@ -1,0 +1,460 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Codeless Multi-Model AI Chat Platform",
+    "subtitle": "Vue 3 SPA + NestJS modular backend over PostgreSQL, Redis and MinIO",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://igit.partcorp.ir/m.vaezi/codeless_final_project.git",
+      "link_mode": "local-only",
+      "revision": "790d810732dcc7eb651385191c378b01a9a196d9"
+    },
+    "views": [
+      {
+        "id": "chat-request-path",
+        "label": "Chat request path",
+        "focus": [
+          "users",
+          "spa",
+          "api",
+          "chat",
+          "ai",
+          "db"
+        ],
+        "note": "Follow a chat message from the browser through the NestJS API to AI providers and PostgreSQL."
+      },
+      {
+        "id": "auth-and-billing",
+        "label": "Auth and billing",
+        "focus": [
+          "users",
+          "spa",
+          "api",
+          "auth",
+          "payments",
+          "zarinpal"
+        ],
+        "note": "JWT authentication and the Zarinpal-backed subscription payment flow."
+      },
+      {
+        "id": "storage-and-files",
+        "label": "Storage and files",
+        "focus": [
+          "spa",
+          "api",
+          "files",
+          "minio",
+          "redis"
+        ],
+        "note": "File attachments land in MinIO via the storage module; Redis backs caching and rate limiting."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "users",
+      "type": "external",
+      "label": "Users",
+      "sublabel": "Browser / Mobile",
+      "pos": [
+        40,
+        260
+      ],
+      "size": [
+        120,
+        60
+      ]
+    },
+    {
+      "id": "spa",
+      "type": "frontend",
+      "label": "Vue 3 SPA",
+      "sublabel": "Vite :5173",
+      "pos": [
+        230,
+        260
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "tag": "Pinia + Router",
+      "sources": [
+        {
+          "path": "frontend/src/main.ts"
+        }
+      ]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "NestJS API",
+      "sublabel": "REST + SSE :3000",
+      "pos": [
+        460,
+        260
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "backend/src/main.ts"
+        }
+      ]
+    },
+    {
+      "id": "auth",
+      "type": "security",
+      "label": "Auth Module",
+      "sublabel": "backend/src/modules/auth",
+      "pos": [
+        460,
+        110
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "JWT + Guards"
+    },
+    {
+      "id": "chat",
+      "type": "backend",
+      "label": "Chat Module",
+      "sublabel": "conversations & messages",
+      "pos": [
+        690,
+        260
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "sources": [
+        {
+          "path": "backend/src/modules/chat/chat.module.ts"
+        }
+      ]
+    },
+    {
+      "id": "ai",
+      "type": "backend",
+      "label": "AI Module",
+      "sublabel": "multi-model streaming",
+      "pos": [
+        880,
+        260
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "sources": [
+        {
+          "path": "backend/src/modules/ai/ai.module.ts"
+        }
+      ]
+    },
+    {
+      "id": "files",
+      "type": "backend",
+      "label": "Files Module",
+      "sublabel": "attachments + soft delete",
+      "pos": [
+        690,
+        380
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "sources": [
+        {
+          "path": "backend/src/modules/files/files.module.ts"
+        }
+      ]
+    },
+    {
+      "id": "subscriptions",
+      "type": "backend",
+      "label": "Subscriptions",
+      "sublabel": "plans · quotas · coupons",
+      "pos": [
+        230,
+        380
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "sources": [
+        {
+          "path": "backend/src/modules/subscriptions/entitlement.service.ts"
+        }
+      ]
+    },
+    {
+      "id": "payments",
+      "type": "backend",
+      "label": "Payments",
+      "sublabel": "Zarinpal gateway",
+      "pos": [
+        230,
+        490
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "sources": [
+        {
+          "path": "backend/src/modules/payments/payments.controller.ts"
+        }
+      ]
+    },
+    {
+      "id": "admin",
+      "type": "backend",
+      "label": "Admin Modules",
+      "sublabel": "admin · models · audit",
+      "pos": [
+        460,
+        490
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "sources": [
+        {
+          "path": "backend/src/modules/admin/admin.module.ts"
+        }
+      ]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "PostgreSQL 16",
+      "sublabel": "TypeORM + migrations",
+      "pos": [
+        910,
+        380
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "sources": [
+        {
+          "path": "backend/src/data-source.ts"
+        }
+      ]
+    },
+    {
+      "id": "redis",
+      "type": "database",
+      "label": "Redis 7",
+      "sublabel": "cache · rate limit",
+      "pos": [
+        910,
+        110
+      ],
+      "size": [
+        150,
+        60
+      ]
+    },
+    {
+      "id": "minio",
+      "type": "cloud",
+      "label": "MinIO",
+      "sublabel": "object storage :9000",
+      "pos": [
+        690,
+        490
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "S3 API"
+    },
+    {
+      "id": "providers",
+      "type": "external",
+      "label": "AI Providers",
+      "sublabel": "OpenAI-compatible APIs",
+      "pos": [
+        1120,
+        260
+      ],
+      "size": [
+        150,
+        60
+      ]
+    },
+    {
+      "id": "zarinpal",
+      "type": "external",
+      "label": "Zarinpal",
+      "sublabel": "payment provider",
+      "pos": [
+        10,
+        490
+      ],
+      "size": [
+        140,
+        60
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "docker-compose stack",
+      "wraps": [
+        "api",
+        "chat",
+        "ai",
+        "files",
+        "subscriptions",
+        "payments",
+        "admin",
+        "db",
+        "redis",
+        "minio"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "users-to-spa",
+      "from": "users",
+      "to": "spa",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "id": "spa-to-api",
+      "from": "spa",
+      "to": "api",
+      "label": "REST + SSE",
+      "variant": "emphasis"
+    },
+    {
+      "id": "api-auth",
+      "from": "api",
+      "to": "auth",
+      "label": "JWT",
+      "variant": "security"
+    },
+    {
+      "id": "api-chat",
+      "from": "api",
+      "to": "chat"
+    },
+    {
+      "id": "chat-ai",
+      "from": "chat",
+      "to": "ai",
+      "label": "stream"
+    },
+    {
+      "id": "ai-providers",
+      "from": "ai",
+      "to": "providers",
+      "label": "LLM calls",
+      "variant": "dashed"
+    },
+    {
+      "id": "api-files",
+      "from": "api",
+      "to": "files",
+      "label": "upload",
+      "labelDy": 24
+    },
+    {
+      "id": "files-minio",
+      "from": "files",
+      "to": "minio",
+      "label": "S3 API",
+      "labelDy": 24
+    },
+    {
+      "id": "api-subs",
+      "from": "api",
+      "to": "subscriptions",
+      "label": "plans"
+    },
+    {
+      "id": "subs-payments",
+      "from": "subscriptions",
+      "to": "payments",
+      "label": "checkout",
+      "labelDy": 24
+    },
+    {
+      "id": "payments-zarinpal",
+      "from": "payments",
+      "to": "zarinpal",
+      "label": "redirect + verify",
+      "variant": "dashed",
+      "labelDy": 54
+    },
+    {
+      "id": "api-admin",
+      "from": "api",
+      "to": "admin",
+      "label": "admin ops",
+      "labelDy": 24
+    },
+    {
+      "id": "api-db",
+      "from": "chat",
+      "to": "db",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "label": "TypeORM",
+      "labelDy": 0,
+      "labelDx": -45
+    },
+    {
+      "id": "api-redis",
+      "from": "api",
+      "to": "redis",
+      "label": "cache",
+      "labelDy": -14
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Frontend",
+      "items": [
+        "Vue 3 + Vite SPA with Pinia stores and Vue Router",
+        "API base URL always from environment variable, never hardcoded"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Backend",
+      "items": [
+        "NestJS modular monolith: chat, ai, auth, files, admin, subscriptions, payments",
+        "Streaming chat responses over SSE",
+        "TypeORM migrations under backend/src/migrations"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Data & Integrations",
+      "items": [
+        "PostgreSQL 16 is the source of truth; Redis caches and rate-limits",
+        "MinIO stores file attachments over the S3 API",
+        "Payments settle through Zarinpal"
+      ]
+    }
+  ]
+}

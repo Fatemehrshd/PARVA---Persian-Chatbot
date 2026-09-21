@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
@@ -9,21 +9,39 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-import { useAsyncAction } from '../composables/useAsyncAction'
-import loginArtwork from '@/assets/login-artwork.jpg'
+import { useFormSubmit } from '../composables/useFormSubmit'
+import { useThemeLogo } from '../composables/useThemeLogo'
+import { isValidEmail } from '../utils/validators'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const uiStore = useUiStore()
 
+const { activeLogo } = useThemeLogo()
+
+// The login page must always render in the light theme, no matter what theme
+// any user (or a previous session) left behind. The override is view-local:
+// it is not persisted anywhere, and leaving this page restores the session's
+// own theme untouched (including a signed-in user's backend preference).
+onMounted(() => uiStore.setAuthPageLightMode(true))
+onUnmounted(() => uiStore.setAuthPageLightMode(false))
+
 const isSignup = ref(false)
 const email = ref('')
 const password = ref('')
+const confirmPassword = ref('')
 const displayName = ref('')
 const showPassword = ref(false)
+const showConfirmPassword = ref(false)
 const formError = ref<string | null>(null)
 
-const { isLoading, execute: submitAuth } = useAsyncAction(async () => {
+function switchMode(signup: boolean) {
+  isSignup.value = signup
+  formError.value = null
+  confirmPassword.value = ''
+}
+
+const { isSubmitting: isLoading, submit: submitAuth } = useFormSubmit(async () => {
   let success = false
   if (isSignup.value) {
     success = await authStore.signup(email.value, password.value, displayName.value)
@@ -32,23 +50,47 @@ const { isLoading, execute: submitAuth } = useAsyncAction(async () => {
   }
 
   if (success) {
+    uiStore.showToast(
+      isSignup.value ? 'حساب کاربری با موفقیت ایجاد شد.' : 'با موفقیت وارد شدید.',
+      'success'
+    )
     router.push('/')
-  } else if (authStore.error) {
-    formError.value = authStore.error
+  } else {
+    const fallbackMsg = isSignup.value ? 'ثبت‌نام با خطا مواجه شد.' : 'ایمیل یا رمز عبور اشتباه است.'
+    const errorMsg = authStore.error || fallbackMsg
+    formError.value = errorMsg
   }
 })
 
 async function handleSubmit() {
   formError.value = null
 
-  if (!email.value.includes('@')) {
-    formError.value = uiStore.direction === 'rtl' ? 'لطفاً یک ایمیل معتبر وارد کنید.' : 'Please enter a valid email address.'
+  if (isSignup.value && !displayName.value.trim()) {
+    formError.value = 'لطفاً نام خود را وارد کنید.'
     return
   }
 
-  if (isSignup.value && password.value.length < 8) {
-    formError.value = uiStore.direction === 'rtl' ? 'رمز عبور باید حداقل ۸ کاراکتر باشد.' : 'Password must be at least 8 characters.'
+  if (!isValidEmail(email.value)) {
+    formError.value = 'لطفاً یک ایمیل معتبر وارد کنید.'
     return
+  }
+
+  if (isSignup.value) {
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]).{8,}$/
+    if (!passwordRegex.test(password.value)) {
+      formError.value = 'رمز عبور باید حداقل ۸ کاراکتر و شامل حروف بزرگ، کوچک، عدد و نماد خاص باشد.'
+      return
+    }
+
+    if (!confirmPassword.value) {
+      formError.value = 'لطفاً تکرار رمز عبور را وارد کنید.'
+      return
+    }
+
+    if (password.value !== confirmPassword.value) {
+      formError.value = 'رمز عبور و تکرار آن یکسان نیستند.'
+      return
+    }
   }
 
   await submitAuth()
@@ -56,29 +98,35 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <!-- Full Screen Two-Column Split (50% Form on Left, 50% Image strictly on Right) -->
-  <div class="split-login-page">
+  <div class="login-split-page">
     
-    <!-- LEFT HALF: Form Pane (50%) -->
-    <div class="form-half" :dir="uiStore.direction">
+    <!-- LEFT HALF: Artwork / Logo Pane -->
+    <div class="artwork-half">
+      <div class="artwork-glow" />
+      
+      <img 
+        :src="activeLogo" 
+        alt="پروا" 
+        class="login-clean-logo"
+      />
+    </div>
+
+    <!-- RIGHT HALF: Form Pane (Authentication Form on the right side) -->
+    <div class="form-half" dir="rtl">
       <div class="form-wrapper">
         
         <!-- Brand Logo & Name Header -->
-        <div class="flex items-center gap-3 mb-8">
-          <div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/25 flex-shrink-0">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2C6.477 2 2 6.477 2 12C2 17.523 6.477 22 12 22C17.523 22 22 17.523 22 12C22 6.477 17.523 2 12 2Z" fill="currentColor" fill-opacity="0.2"/>
-              <path d="M12 6V18M6 12H18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-            </svg>
+        <div class="flex items-center gap-3 mb-8 h-11">
+          <div class="w-11 h-11 flex-shrink-0">
+            <img :src="activeLogo" alt="پروا" class="w-full h-full object-cover" />
           </div>
           <div class="text-start">
-            <span class="text-2xl font-bold tracking-tight text-foreground block leading-tight">NeuralChat</span>
-            <span class="text-[11px] font-mono text-muted-foreground">AI Multi-Model Platform</span>
+            <span class="text-2xl font-bold tracking-tight text-foreground block leading-tight">پروا<span class="sr-only">PARVA</span></span>
           </div>
         </div>
 
         <!-- Tabs Switcher (Sign In / Sign Up) -->
-        <div class="flex bg-secondary/80 p-1 rounded-xl border border-border/60 mb-6">
+        <div class="flex bg-secondary/80 p-1 rounded-xl border border-border/60 mb-6 h-11 items-center">
           <button 
             :class="[
               'flex-1 py-2 text-xs font-semibold rounded-lg transition-all duration-200 cursor-pointer',
@@ -86,11 +134,11 @@ async function handleSubmit() {
                 ? 'bg-background text-foreground shadow-md border border-border/40 font-bold' 
                 : 'text-muted-foreground hover:text-foreground'
             ]" 
-            @click="isSignup = false"
+            @click="switchMode(false)"
             :disabled="isLoading"
             type="button"
           >
-            {{ uiStore.direction === 'rtl' ? 'ورود به حساب' : 'Sign In' }}
+            ورود به حساب
           </button>
           <button 
             :class="[
@@ -99,34 +147,25 @@ async function handleSubmit() {
                 ? 'bg-background text-foreground shadow-md border border-border/40 font-bold' 
                 : 'text-muted-foreground hover:text-foreground'
             ]" 
-            @click="isSignup = true"
+            @click="switchMode(true)"
             :disabled="isLoading"
             type="button"
           >
-            {{ uiStore.direction === 'rtl' ? 'ثبت‌نام جدید' : 'Sign Up' }}
+            ثبت‌نام جدید
           </button>
         </div>
 
-        <!-- Section Title & Description -->
-        <div class="mb-6 text-start">
+        <!-- Section Title & Description (Fixed height to prevent vertical jitter) -->
+        <div class="mb-6 text-start min-h-[36px] flex items-center">
           <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-            {{ isSignup 
-              ? (uiStore.direction === 'rtl' ? 'ساخت حساب کاربری' : 'Create an Account') 
-              : (uiStore.direction === 'rtl' ? 'ورود به حساب کاربری' : 'Welcome Back') 
-            }}
+            {{ isSignup ? 'ساخت حساب کاربری' : 'ورود به حساب کاربری' }}
           </h1>
-          <p class="text-xs sm:text-sm text-muted-foreground mt-1.5 leading-relaxed">
-            {{ isSignup 
-              ? (uiStore.direction === 'rtl' ? 'مشخصات خود را برای دسترسی به پنل و مدل‌ها وارد کنید.' : 'Enter your details below to create your account.') 
-              : (uiStore.direction === 'rtl' ? 'ایمیل و رمز عبور خود را برای ورود به سامانه وارد کنید.' : 'Enter your email and password to access your chats.') 
-            }}
-          </p>
         </div>
 
-        <!-- Error Alert Banner -->
+        <!-- Error Alert Banner (Single Borderless Message) -->
         <div 
           v-if="formError" 
-          class="flex items-center gap-2.5 bg-destructive/15 border border-destructive/35 text-destructive px-4 py-3 rounded-xl text-xs mb-5 text-start leading-relaxed"
+          class="flex items-center gap-2.5 bg-destructive/15 text-destructive px-4 py-3 rounded-xl text-xs mb-5 text-start leading-relaxed border-none"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="flex-shrink-0">
             <circle cx="12" cy="12" r="10"></circle>
@@ -137,36 +176,43 @@ async function handleSubmit() {
         </div>
 
         <!-- Form Elements -->
-        <form @submit.prevent="handleSubmit" class="space-y-4 text-start">
+        <!-- `novalidate`: the browser's native type="email" bubble (English,
+             e.g. "Please include an '@'...") must never appear — invalid input
+             is surfaced as the same inline Persian message as every other
+             client-side validation error. -->
+        <form @submit.prevent="handleSubmit" novalidate class="space-y-4 text-start">
           
-          <!-- Display Name (Signup Only) -->
-          <div v-if="isSignup" class="space-y-1.5">
-            <Label for="displayName" class="text-xs font-medium text-foreground/90">
-              {{ uiStore.direction === 'rtl' ? 'نام و نام‌خانوادگی' : 'Display Name' }}
-            </Label>
-            <div class="relative">
-              <span class="absolute inset-y-0 start-3 flex items-center pointer-events-none text-muted-foreground">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="12" cy="7" r="4"></circle>
-                </svg>
-              </span>
-              <Input 
-                id="displayName"
-                v-model="displayName" 
-                type="text" 
-                :disabled="isLoading"
-                :loading="isLoading"
-                class="ps-9 h-11 text-sm bg-secondary/40 border-border/60 focus-visible:ring-primary/40 focus-visible:border-primary transition-all"
-                :placeholder="uiStore.direction === 'rtl' ? 'نام شما' : 'Your name'" 
-              />
+          <!-- Display Name (Signup Only) with smooth expansion -->
+          <Transition name="field-expand">
+            <div v-if="isSignup" class="space-y-1.5 overflow-hidden">
+              <Label for="displayName" class="text-xs font-medium text-foreground/90">
+                نام و نام‌خانوادگی
+              </Label>
+              <div class="relative">
+                <span class="absolute inset-y-0 start-3 flex items-center pointer-events-none text-muted-foreground">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                  </svg>
+                </span>
+                <Input 
+                  id="displayName"
+                  v-model="displayName" 
+                  type="text" 
+                  :disabled="isLoading"
+                  :loading="isLoading"
+                  class="ps-9 h-11 text-sm bg-secondary/40 border-border/60 focus-visible:ring-primary/40 focus-visible:border-primary transition-all"
+                  placeholder="نام شما" 
+                  @input="formError = null"
+                />
+              </div>
             </div>
-          </div>
+          </Transition>
 
           <!-- Email Input -->
           <div class="space-y-1.5">
             <Label for="email" class="text-xs font-medium text-foreground/90">
-              {{ uiStore.direction === 'rtl' ? 'نشانی ایمیل' : 'Email Address' }}
+              نشانی ایمیل
             </Label>
             <div class="relative">
               <span class="absolute inset-y-0 start-3 flex items-center pointer-events-none text-muted-foreground">
@@ -184,6 +230,7 @@ async function handleSubmit() {
                 :loading="isLoading"
                 class="ps-9 h-11 text-sm bg-secondary/40 border-border/60 focus-visible:ring-primary/40 focus-visible:border-primary transition-all font-mono text-[13px]"
                 placeholder="user@example.com" 
+                @input="formError = null"
               />
             </div>
           </div>
@@ -192,11 +239,8 @@ async function handleSubmit() {
           <div class="space-y-1.5">
             <div class="flex items-center justify-between">
               <Label for="password" class="text-xs font-medium text-foreground/90">
-                {{ uiStore.direction === 'rtl' ? 'رمز عبور' : 'Password' }}
+                رمز عبور
               </Label>
-              <span v-if="isSignup" class="text-[10px] text-muted-foreground font-mono">
-                {{ uiStore.direction === 'rtl' ? 'حداقل ۸ کاراکتر' : 'min. 8 chars' }}
-              </span>
             </div>
             <div class="relative">
               <span class="absolute inset-y-0 start-3 flex items-center pointer-events-none text-muted-foreground">
@@ -214,12 +258,13 @@ async function handleSubmit() {
                 :loading="isLoading"
                 class="ps-9 pe-10 h-11 text-sm bg-secondary/40 border-border/60 focus-visible:ring-primary/40 focus-visible:border-primary transition-all font-mono"
                 placeholder="••••••••" 
+                @input="formError = null"
               />
               <button 
                 type="button" 
                 class="absolute inset-y-0 end-2.5 flex items-center text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer"
                 @click="showPassword = !showPassword"
-                :title="showPassword ? 'Hide password' : 'Show password'"
+                title="نمایش یا پنهان‌سازی رمز عبور"
                 tabindex="-1"
               >
                 <svg v-if="!showPassword" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -232,7 +277,56 @@ async function handleSubmit() {
                 </svg>
               </button>
             </div>
+            <Transition name="field-expand">
+              <p v-if="isSignup" class="text-[11px] text-muted-foreground mt-1 leading-relaxed overflow-hidden">
+                رمز عبور باید حداقل ۸ کاراکتر و شامل حروف بزرگ (A-Z)، کوچک (a-z)، عدد (0-9) و نماد خاص باشد.
+              </p>
+            </Transition>
           </div>
+
+          <!-- Confirm Password Input with Show/Hide Toggle (Signup Only) -->
+          <Transition name="field-expand">
+            <div v-if="isSignup" class="space-y-1.5 overflow-hidden">
+              <Label for="confirmPassword" class="text-xs font-medium text-foreground/90">
+                تکرار رمز عبور
+              </Label>
+              <div class="relative">
+                <span class="absolute inset-y-0 start-3 flex items-center pointer-events-none text-muted-foreground">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                </span>
+                <Input 
+                  id="confirmPassword"
+                  v-model="confirmPassword" 
+                  :type="showConfirmPassword ? 'text' : 'password'" 
+                  :required="isSignup" 
+                  :disabled="isLoading"
+                  :loading="isLoading"
+                  class="ps-9 pe-10 h-11 text-sm bg-secondary/40 border-border/60 focus-visible:ring-primary/40 focus-visible:border-primary transition-all font-mono"
+                  placeholder="••••••••" 
+                  @input="formError = null"
+                />
+                <button 
+                  type="button" 
+                  class="absolute inset-y-0 end-2.5 flex items-center text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer"
+                  @click="showConfirmPassword = !showConfirmPassword"
+                  title="نمایش یا پنهان‌سازی تکرار رمز عبور"
+                  tabindex="-1"
+                >
+                  <svg v-if="!showConfirmPassword" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                  <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </Transition>
 
           <!-- Submit Button -->
           <Button 
@@ -242,58 +336,15 @@ async function handleSubmit() {
             :disabled="isLoading"
           >
             <span v-if="isLoading">
-              {{ uiStore.direction === 'rtl' ? 'در حال برقراری ارتباط...' : 'Authenticating...' }}
+              در حال برقراری ارتباط...
             </span>
             <span v-else>
-              {{ isSignup
-                ? (uiStore.direction === 'rtl' ? 'ایجاد حساب کاربری' : 'Create Account')
-                : (uiStore.direction === 'rtl' ? 'ورود به حساب' : 'Sign In')
-              }}
+              {{ isSignup ? 'ایجاد حساب کاربری' : 'ورود به حساب' }}
             </span>
           </Button>
         </form>
 
-        <!-- Back to Chat Link -->
-        <div class="flex justify-center border-t border-border/50 pt-5 mt-8">
-          <router-link 
-            to="/" 
-            class="text-xs font-medium text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5"
-          >
-            <span>{{ uiStore.direction === 'rtl' ? '← بازگشت به صفحه گفتگوها' : '← Back to Chat Workspace' }}</span>
-          </router-link>
-        </div>
 
-      </div>
-    </div>
-
-    <!-- RIGHT HALF: Image Pane (Strictly 50% on the right side) -->
-    <div class="image-half">
-      <img 
-        :src="loginArtwork" 
-        alt="Neural Network Intelligence" 
-        class="split-artwork-img"
-      />
-      <!-- Ambient dark gradient over the image -->
-      <div class="split-artwork-gradient"></div>
-
-      <!-- Overlay Tagline & Engine Badge on Image -->
-      <div class="split-artwork-overlay" :dir="uiStore.direction">
-        <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/60 border border-white/15 text-xs font-mono text-purple-300 backdrop-blur-md mb-3 w-fit shadow-lg">
-          <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
-          <span>NEURAL ENGINE • v2.0</span>
-        </div>
-        <h2 class="text-2xl lg:text-3xl font-extrabold text-white leading-tight drop-shadow-lg">
-          {{ uiStore.direction === 'rtl' 
-            ? 'سامانه یکپارچه پردازش هوش مصنوعی' 
-            : 'Next-Generation Multi-Model AI Workspace' 
-          }}
-        </h2>
-        <p class="text-xs sm:text-sm text-neutral-300 mt-2.5 max-w-md drop-shadow leading-relaxed">
-          {{ uiStore.direction === 'rtl'
-            ? 'ارتباط مستقیم و پرسرعت با موتورهای Claude 3.5 Sonnet، GPT-4o و Llama 3 به همراه استریم بلادرنگ و امنیت بالا.'
-            : 'Real-time low-latency streaming connection to Claude 3.5 Sonnet, GPT-4o, and Llama 3 with end-to-end security.'
-          }}
-        </p>
       </div>
     </div>
 
@@ -301,18 +352,46 @@ async function handleSubmit() {
 </template>
 
 <style scoped>
-/* Split Layout: Outer container is flex-row (direction: ltr) so Left is Form, Right is Image */
-.split-login-page {
+/* Split Layout: Outer container is flex-row (ltr) so Left=Image, Right=Form */
+.login-split-page {
   min-height: 100vh;
   width: 100vw;
   display: flex;
   flex-direction: row;
-  direction: ltr; /* Keeps Left=Form and Right=Image side-by-side consistently */
+  direction: ltr;
   background-color: var(--background);
   overflow-x: hidden;
 }
 
-/* Left Half: Form Pane (Takes 50% on md/desktop, 100% on small mobile) */
+/* Left Half: Artwork/Logo Pane — hidden on mobile, shown on md+ */
+.artwork-half {
+  display: none;
+  position: relative;
+}
+
+@media (min-width: 768px) {
+  .artwork-half {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    min-height: 100vh;
+    border-inline-end: 1px solid var(--border);
+    padding: 40px;
+    z-index: 5;
+    background: transparent;
+  }
+}
+
+/* Decorative glow behind logo */
+.artwork-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 50%, rgba(124, 106, 247, 0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* Right Half: Form Pane */
 .form-half {
   flex: 1;
   min-height: 100vh;
@@ -325,54 +404,40 @@ async function handleSubmit() {
   z-index: 10;
 }
 
+/* Form Wrapper: Centered vertically and horizontally, perfectly aligned with the artwork image */
 .form-wrapper {
   width: 100%;
   max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Right Half: Image Pane (Takes exactly 50% on md/desktop) */
-.image-half {
-  display: none;
+/* Smooth expansion transitions for signup-only fields */
+.field-expand-enter-active,
+.field-expand-leave-active {
+  transition: all 220ms ease-out;
+  max-height: 90px;
+  opacity: 1;
+  overflow: hidden;
 }
 
-@media (min-width: 768px) {
-  .image-half {
-    display: block;
-    flex: 1;
-    min-height: 100vh;
-    position: relative;
-    overflow: hidden;
-    background-color: #060708;
-    border-inline-start: 1px solid var(--border);
-  }
+.field-expand-enter-from,
+.field-expand-leave-to {
+  max-height: 0;
+  opacity: 0;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  transform: translateY(-4px);
 }
 
-.split-artwork-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-}
-
-.split-artwork-gradient {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    to top,
-    rgba(14, 15, 17, 0.95) 0%,
-    rgba(14, 15, 17, 0.4) 50%,
-    transparent 100%
-  );
-  pointer-events: none;
-}
-
-.split-artwork-overlay {
-  position: absolute;
-  bottom: 0;
-  inset-inline-start: 0;
-  inset-inline-end: 0;
-  padding: 48px 40px;
-  z-index: 10;
-  text-align: start;
+.login-clean-logo {
+  max-width: 320px;
+  max-height: 320px;
+  width: 70%;
+  height: auto;
+  object-fit: contain;
+  transition: opacity 300ms ease, transform 300ms ease;
 }
 </style>

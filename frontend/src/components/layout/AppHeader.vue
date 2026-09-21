@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
 import { useUiStore } from '../../stores/ui'
 import { useAuthStore } from '../../stores/auth'
 
+const router = useRouter()
 const uiStore = useUiStore()
 const authStore = useAuthStore()
 </script>
@@ -13,8 +15,8 @@ const authStore = useAuthStore()
       <button
         class="icon-button"
         @click="uiStore.toggleSidebar"
-        :title="uiStore.sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'"
-        aria-label="Toggle sidebar"
+        :title="uiStore.sidebarOpen ? 'بستن نوار کناری' : 'باز کردن نوار کناری'"
+        aria-label="تغییر وضعیت نوار کناری"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -22,7 +24,7 @@ const authStore = useAuthStore()
         </svg>
       </button>
 
-      <span class="header-brand-title font-mono text-xs hidden sm:inline text-muted-foreground">NeuralChat</span>
+      <span class="header-brand-title font-mono text-xs hidden sm:inline text-muted-foreground">PARVA</span>
     </div>
 
     <!-- Right Section: Admin Panel, Settings, User Profile -->
@@ -32,7 +34,7 @@ const authStore = useAuthStore()
       <button
         class="icon-button"
         @click="uiStore.openSettings"
-        :title="uiStore.direction === 'rtl' ? 'تنظیمات' : 'Settings'"
+        title="تنظیمات"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"></circle>
@@ -40,18 +42,19 @@ const authStore = useAuthStore()
         </svg>
       </button>
 
-      <!-- Admin Panel link/button -->
+      <!-- Admin Panel link/button (Admin Only) -->
       <button
+        v-if="authStore.isAdmin"
         class="icon-text-btn px-2 sm:px-3"
-        @click="uiStore.openAdminModels"
-        :title="uiStore.direction === 'rtl' ? 'پنل ادمین (مدیریت مدل‌ها)' : 'Admin Panel (Manage Models)'"
+        @click="router.push('/admin/dashboard')"
+        title="پنل ادمین (داشبورد)"
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
           <line x1="8" y1="21" x2="16" y2="21"></line>
           <line x1="12" y1="17" x2="12" y2="21"></line>
         </svg>
-        <span class="btn-label hidden sm:inline">{{ uiStore.direction === 'rtl' ? 'پنل ادمین' : 'Admin Panel' }}</span>
+        <span class="btn-label hidden sm:inline">پنل ادمین</span>
       </button>
 
       <!-- Auth State / User Button -->
@@ -60,18 +63,14 @@ const authStore = useAuthStore()
           <div class="header-avatar">
             {{ authStore.user?.displayName?.charAt(0).toUpperCase() || 'U' }}
           </div>
-          <button class="logout-btn" @click="authStore.logout" :title="uiStore.direction === 'rtl' ? 'خروج' : 'Logout'">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
-          </button>
+          <span class="user-name-header font-medium text-xs hidden sm:inline px-1">
+            {{ authStore.user?.displayName || authStore.user?.email }}
+          </span>
         </div>
       </template>
       <template v-else>
         <router-link to="/login" class="login-trigger-btn px-2 sm:px-3 text-xs sm:text-sm inline-flex items-center justify-center">
-          {{ uiStore.direction === 'rtl' ? 'ورود' : 'Sign In' }}
+          ورود
         </router-link>
       </template>
     </div>
@@ -84,7 +83,7 @@ const authStore = useAuthStore()
   height: var(--header-height);
   width: 100%;
   background-color: var(--background);
-  border-bottom: 1px solid var(--border);
+  border-bottom: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -112,6 +111,10 @@ const authStore = useAuthStore()
   justify-content: center;
   border-radius: var(--radius-sm);
   color: var(--secondary-foreground);
+  cursor: pointer;
+  border: none;
+  background-color: transparent;
+  transition: all 150ms ease;
 }
 
 .icon-button:hover {
@@ -125,15 +128,17 @@ const authStore = useAuthStore()
   gap: 6px;
   padding: 5px 10px;
   background-color: var(--secondary);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius-sm);
   font-size: 12px;
   color: var(--secondary-foreground);
+  cursor: pointer;
+  transition: all 150ms ease;
 }
 
 .icon-text-btn:hover {
+  background-color: var(--secondary);
   color: var(--foreground);
-  border-color: var(--muted-foreground);
 }
 
 .user-pill {
@@ -143,12 +148,13 @@ const authStore = useAuthStore()
   background-color: var(--secondary);
   padding: 3px 8px 3px 4px;
   border-radius: 20px;
-  border: 1px solid var(--border);
+  border: none;
 }
 
 .header-avatar {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--primary), #a78bfa);
   color: #fff;
@@ -159,14 +165,8 @@ const authStore = useAuthStore()
   justify-content: center;
 }
 
-.logout-btn {
-  color: var(--muted-foreground);
-  display: flex;
-  align-items: center;
-}
-
-.logout-btn:hover {
-  color: #ef4444;
+.user-name-header {
+  color: var(--foreground);
 }
 
 .login-trigger-btn {
@@ -176,9 +176,6 @@ const authStore = useAuthStore()
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
-}
-
-.login-trigger-btn:hover {
-  opacity: 0.9;
+  border: none;
 }
 </style>

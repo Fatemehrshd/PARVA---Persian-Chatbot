@@ -1,30 +1,92 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import AppHeader from '../components/layout/AppHeader.vue'
+import { onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import AppSidebar from '../components/layout/AppSidebar.vue'
 import MessageList from '../components/chat/MessageList.vue'
 import ChatComposer from '../components/chat/ChatComposer.vue'
 import ModelsModal from '../components/admin/ModelsModal.vue'
 import SettingsModal from '../components/layout/SettingsModal.vue'
+import GrokAurora from '../components/ui/GrokAurora.vue'
+import NetworkStatusBanner from '../components/chat/NetworkStatusBanner.vue'
 import { useChatStore } from '../stores/chat'
 import { useModelsStore } from '../stores/models'
+import { useUiStore } from '../stores/ui'
 
+const route = useRoute()
+const router = useRouter()
 const chatStore = useChatStore()
 const modelsStore = useModelsStore()
+const uiStore = useUiStore()
+const isEntering = ref(true)
+
+async function initChat() {
+  const routeId = route.params.id as string | undefined
+  chatStore.isLoadingMessages = true
+  await modelsStore.fetchModels()
+  await chatStore.loadConversations(routeId)
+
+  if (routeId) {
+    if (chatStore.currentConversationId !== routeId) {
+      await chatStore.selectConversation(routeId)
+    }
+  } else if (chatStore.currentConversationId) {
+    router.replace(`/chat/${chatStore.currentConversationId}`)
+  }
+}
 
 onMounted(async () => {
-  await modelsStore.fetchModels()
-  await chatStore.loadConversations()
+  uiStore.initNetworkListeners()
+  await initChat()
+  setTimeout(() => {
+    isEntering.value = false
+  }, 3500)
 })
+
+// Sync conversation when route param ID changes (e.g. browser back/forward or direct navigation)
+watch(
+  () => route.params.id,
+  async (newId) => {
+    if (newId && typeof newId === 'string' && newId !== chatStore.currentConversationId) {
+      await chatStore.selectConversation(newId)
+    }
+  }
+)
+
+// Sync route when store conversation ID changes (e.g. conversation created or clicked)
+watch(
+  () => chatStore.currentConversationId,
+  (newId) => {
+    if (newId && route.params.id !== newId) {
+      router.push(`/chat/${newId}`)
+    }
+  }
+)
 </script>
 
 <template>
-  <div class="chat-layout">
-    <!-- Top Bar -->
-    <AppHeader />
+  <div class="chat-layout relative overflow-hidden">
+    <!-- Grok Fluid Aurora Animated Background on Entrance -->
+    <GrokAurora :intensity="isEntering ? 'vibrant' : 'subtle'" class="transition-opacity duration-1000 z-0" />
+
+    <!-- Floating hamburger (mobile only, shown when sidebar is closed) -->
+    <button
+      v-if="!uiStore.sidebarOpen"
+      class="mobile-menu-btn md:hidden"
+      @click="uiStore.toggleSidebar"
+      title="باز کردن منو"
+    >
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+
+    <!-- Network Status Indicator -->
+    <NetworkStatusBanner class="relative z-10" />
 
     <!-- Main Workspace Container -->
-    <div class="workspace-body">
+    <div class="workspace-body relative z-10">
       <!-- Left / Right Collapsible Sidebar -->
       <AppSidebar />
 
@@ -59,7 +121,7 @@ onMounted(async () => {
   display: flex;
   flex: 1;
   width: 100%;
-  height: calc(100vh - var(--header-height));
+  height: 100vh;
   overflow: hidden;
   position: relative;
 }
@@ -71,6 +133,42 @@ onMounted(async () => {
   height: 100%;
   position: relative;
   overflow: hidden;
-  background-color: var(--background);
+  background-color: transparent;
+}
+
+/* Floating hamburger — mobile only, on top of everything, themed background */
+.mobile-menu-btn {
+  position: fixed;
+  top: 12px;
+  inset-inline-start: 12px;
+  z-index: 60;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(8px);
+  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.mobile-menu-btn:hover {
+  background-color: var(--secondary);
+  transform: scale(1.04);
+}
+
+.mobile-menu-btn:active {
+  transform: scale(0.96);
+}
+
+@media (min-width: 768px) {
+  .mobile-menu-btn {
+    display: none !important;
+  }
 }
 </style>

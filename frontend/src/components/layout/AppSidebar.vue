@@ -1,24 +1,232 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
+import {
+  PanelRightClose,
+  PanelRightOpen,
+  Search,
+  SquarePen,
+  MessageCircleDashed,
+  MessageSquare,
+  Pencil,
+  Trash2,
+  ChevronUp,
+  LogIn,
+  MoreVertical,
+  Pin,
+  PinOff,
+  Share2,
+} from '@lucide/vue'
 import { useUiStore } from '../../stores/ui'
 import { useChatStore } from '../../stores/chat'
 import { useAuthStore } from '../../stores/auth'
+import { useThemeLogo } from '../../composables/useThemeLogo'
+import ProfileMenu from './ProfileMenu.vue'
+import EditConversationModal from '../chat/EditConversationModal.vue'
+import DeleteConversationModal from '../chat/DeleteConversationModal.vue'
+import ShareConversationModal from '../chat/ShareConversationModal.vue'
+import LogoutModal from '../auth/LogoutModal.vue'
+import SearchModal from '../chat/SearchModal.vue'
+import ProfileModal from './ProfileModal.vue'
+import type { Conversation } from '../../types'
 
+const router = useRouter()
 const uiStore = useUiStore()
 const chatStore = useChatStore()
 const authStore = useAuthStore()
 
-function handleNewChat() {
-  chatStore.createNewConversation()
+const { activeLogo } = useThemeLogo()
+
+const editingConversation = ref<Conversation | null>(null)
+const isEditModalOpen = ref(false)
+
+const deletingConversation = ref<Conversation | null>(null)
+const isDeleteModalOpen = ref(false)
+
+const sharingConversation = ref<Conversation | null>(null)
+const isShareModalOpen = ref(false)
+
+const activeMenuConvId = ref<string | null>(null)
+const menuPosition = ref<'bottom' | 'top'>('bottom')
+
+const isLogoutModalOpen = ref(false)
+const isSearchModalOpen = ref(false)
+const isProfileModalOpen = ref(false)
+const profileModalTab = ref<'profile' | 'email' | 'password' | 'payments'>('profile')
+const profileMenuOpen = ref(false)
+
+// Sidebar toggle icons for RTL layout (sidebar sits on the right)
+const SidebarCollapseIcon = PanelRightClose
+const SidebarExpandIcon = PanelRightOpen
+
+// Check whether any conversation or the active chat is actively answering / streaming
+const isChatResponding = computed(() => chatStore.isAnyStreaming)
+
+// A fresh empty chat is a valid state for the user on entry, so the action
+// to create a new conversation remains enabled unless the model is actively
+// responding or the quota is blocked.
+const isNewChatDisabled = computed(() =>
+  isChatResponding.value || authStore.quota.blocked
+)
+
+// ──────────────────────────────────────────
+// Navigation actions
+// ──────────────────────────────────────────
+async function handleNewChat() {
+  if (authStore.quota.blocked) {
+    uiStore.showToast('سهمیه شما به پایان رسیده است؛ ارسال پیام تا پایان دوره ممکن نیست.', 'warning')
+    return
+  }
+  if (isChatResponding.value) {
+    uiStore.showToast('امکان شروع گفتگوی جدید در هنگام دریافت پاسخ وجود ندارد.', 'info')
+    return
+  }
+  const newId = await chatStore.createNewConversation()
+  if (newId) router.push(`/chat/${newId}`)
 }
 
 function handleSelect(id: string) {
   chatStore.selectConversation(id)
+  if (router.currentRoute.value.params.id !== id) {
+    router.push(`/chat/${id}`)
+  }
 }
 
-function handleDelete(event: Event, id: string) {
+// ──────────────────────────────────────────
+// Edit / Delete / Pin actions & 3-dots menu
+// ──────────────────────────────────────────
+function toggleMenu(event: MouseEvent, convId: string) {
   event.stopPropagation()
-  chatStore.deleteConversation(id)
+  if (activeMenuConvId.value === convId) {
+    activeMenuConvId.value = null
+  } else {
+    const clientY = event.clientY
+    if (window.innerHeight - clientY < 160) {
+      menuPosition.value = 'top'
+    } else {
+      menuPosition.value = 'bottom'
+    }
+    activeMenuConvId.value = convId
+  }
+}
+
+async function handleTogglePin(event: Event, conv: Conversation) {
+  event.stopPropagation()
+  activeMenuConvId.value = null
+  try {
+    const isPinned = await chatStore.togglePinConversation(conv.id)
+    uiStore.showToast(isPinned ? 'گفتگو پین شد.' : 'پین گفتگو برداشته شد.', 'success')
+  } catch (err: any) {
+    uiStore.showToast(err?.message || 'خطا در تغییر وضعیت پین', 'error')
+  }
+}
+
+function openEditModal(event: Event, conv: Conversation) {
+  event.stopPropagation()
+  activeMenuConvId.value = null
+  editingConversation.value = conv
+  isEditModalOpen.value = true
+}
+
+function openShareModal(event: Event, conv: Conversation) {
+  event.stopPropagation()
+  activeMenuConvId.value = null
+  sharingConversation.value = conv
+  isShareModalOpen.value = true
+}
+
+async function handleSaveTitle(id: string, newTitle: string) {
+  try {
+    await chatStore.updateConversationTitle(id, newTitle)
+    isEditModalOpen.value = false
+    editingConversation.value = null
+    uiStore.showToast('عنوان ویرایش شد.', 'success')
+  } catch (err: any) {
+    uiStore.showToast(err?.message || 'خطا در ویرایش عنوان گفتگو', 'error')
+  }
+}
+
+function openDeleteModal(event: Event, conv: Conversation) {
+  event.stopPropagation()
+  activeMenuConvId.value = null
+  deletingConversation.value = conv
+  isDeleteModalOpen.value = true
+}
+
+async function handleConfirmDelete(id: string) {
+  try {
+    await chatStore.deleteConversation(id)
+    isDeleteModalOpen.value = false
+    deletingConversation.value = null
+    if (chatStore.currentConversationId) {
+      router.push(`/chat/${chatStore.currentConversationId}`)
+    } else {
+      router.push('/')
+    }
+    uiStore.showToast('گفتگو حذف شد.', 'success')
+  } catch (err: any) {
+    uiStore.showToast(err?.message || 'خطا در حذف گفتگو', 'error')
+  }
+}
+
+// ──────────────────────────────────────────
+// Profile menu
+// ──────────────────────────────────────────
+function toggleProfileMenu() {
+  profileMenuOpen.value = !profileMenuOpen.value
+}
+
+function handleDocumentClick(e: MouseEvent) {
+  const target = e.target as HTMLElement
+
+  if (activeMenuConvId.value) {
+    if (!target.closest('.sb-conv-menu-container')) {
+      activeMenuConvId.value = null
+    }
+  }
+
+  if (!profileMenuOpen.value) return
+  if (
+    !target.closest('.profile-menu-panel') &&
+    !target.closest('.profile-trigger')
+  ) {
+    profileMenuOpen.value = false
+  }
+}
+
+onMounted(() => document.addEventListener('click', handleDocumentClick, true))
+onBeforeUnmount(() => document.removeEventListener('click', handleDocumentClick, true))
+
+function openSettings() {
+  uiStore.openSettings()
+  profileMenuOpen.value = false
+}
+
+function openProfile(tab: 'profile' | 'email' | 'password' | 'payments' = 'profile') {
+  profileModalTab.value = tab
+  isProfileModalOpen.value = true
+  profileMenuOpen.value = false
+}
+
+function openAdminPanel() {
+  profileMenuOpen.value = false
+  router.push('/admin/dashboard')
+}
+
+function openLogoutModal() {
+  isLogoutModalOpen.value = true
+  profileMenuOpen.value = false
+}
+
+async function handleConfirmLogout() {
+  try {
+    await authStore.logout()
+    isLogoutModalOpen.value = false
+    router.push('/login')
+    uiStore.showToast('با موفقیت خارج شدید.', 'info')
+  } catch (err: any) {
+    uiStore.showToast(err?.message || 'خطا در خروج از حساب', 'error')
+  }
 }
 
 const userInitial = computed(() => {
@@ -26,277 +234,589 @@ const userInitial = computed(() => {
   if (authStore.user?.email) return authStore.user.email.charAt(0).toUpperCase()
   return 'U'
 })
+
+onMounted(() => {
+  if (authStore.isAuthenticated) {
+    void authStore.refreshIdentity()
+    void authStore.refreshQuota()
+  }
+})
 </script>
 
 <template>
-  <!-- Mobile Backdrop -->
-  <div 
+  <!-- ═══════════════════════════════════════════
+       Mobile Backdrop
+  ═══════════════════════════════════════════ -->
+  <div
     v-if="uiStore.sidebarOpen"
-    class="sidebar-backdrop md:hidden"
+    class="sidebar-backdrop"
     @click="uiStore.sidebarOpen = false"
-  ></div>
+  />
 
-  <aside :class="['app-sidebar', { collapsed: !uiStore.sidebarOpen }]">
-    <div class="sidebar-inner">
-      <!-- Logo & Brand Header -->
-      <div class="brand-section">
-        <div class="brand-logo">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2C6.477 2 2 6.477 2 12C2 17.523 6.477 22 12 22C17.523 22 22 17.523 22 12C22 6.477 17.523 2 12 2Z" fill="#ffffff" fill-opacity="0.2"/>
-            <path d="M12 6V18M6 12H18" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
-          </svg>
-        </div>
-        <div class="brand-info">
-          <span class="brand-title">NeuralChat</span>
-          <span class="brand-badge font-mono">v0.1</span>
-        </div>
-      </div>
+  <aside :class="['app-sidebar', { 'is-collapsed': !uiStore.sidebarOpen }]">
 
-      <!-- New Chat Button -->
-      <div class="new-chat-wrapper">
-        <button class="new-chat-btn" @click="handleNewChat">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          <span>{{ uiStore.direction === 'rtl' ? 'گفتگوی جدید' : 'New Chat' }}</span>
+    <!-- ═══════════════════════════════════
+         EXPANDED STATE
+    ═══════════════════════════════════ -->
+    <div v-if="uiStore.sidebarOpen" class="sidebar-expanded">
+
+      <!-- Top: Collapse + Brand -->
+      <div class="sb-top-row">
+        <button
+          class="sb-icon-btn"
+          title="بستن نوار کناری"
+          @click="uiStore.toggleSidebar"
+        >
+          <component :is="SidebarCollapseIcon" :size="17" />
         </button>
+        <div class="sb-brand">
+          <span class="sb-brand-name" dir="ltr">PARVA</span>
+        </div>
       </div>
 
-      <!-- Chat History Section -->
-      <div class="chat-list-section">
-        <div class="section-label font-mono">
-          {{ uiStore.direction === 'rtl' ? 'گفتگوهای اخیر' : 'RECENT CHATS' }}
-        </div>
+      <!-- Actions: Search / New Chat / Temp Chat — stacked vertically -->
+      <nav class="sb-actions">
+        <button class="sb-action-row" @click="isSearchModalOpen = true" title="جستجو (Ctrl+K)">
+          <Search :size="16" class="sb-action-icon" />
+          <span class="sb-action-label">جستجو</span>
+        </button>
 
-        <div class="chat-items-container">
-          <div
-            v-for="conv in chatStore.conversations"
-            :key="conv.id"
-            :class="['chat-item', { active: conv.id === chatStore.currentConversationId }]"
-            @click="handleSelect(conv.id)"
-          >
-            <svg class="chat-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-            </svg>
-            <span class="chat-title">{{ conv.title }}</span>
+        <button
+          class="sb-action-row sb-action-row--primary new-chat-btn"
+          :class="{ 'sb-action-row--disabled': isNewChatDisabled }"
+          :disabled="isNewChatDisabled"
+          @click="handleNewChat"
+          :title="isChatResponding ? 'امکان شروع گفتگوی جدید در هنگام دریافت پاسخ وجود ندارد' : 'گفتگوی جدید'"
+        >
+          <SquarePen :size="16" class="sb-action-icon" />
+          <span class="sb-action-label">گفتگوی جدید</span>
+        </button>
 
-            <button
-              class="delete-chat-btn"
-              @click="handleDelete($event, conv.id)"
-              :title="uiStore.direction === 'rtl' ? 'حذف گفتگو' : 'Delete chat'"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
+        <!-- <button class="sb-action-row" title="گفتگوی موقت">
+          <MessageCircleDashed :size="16" class="sb-action-icon" />
+          <span class="sb-action-label">موقت</span>
+        </button> -->
+      </nav>
+
+      <!-- Divider -->
+      <div class="sb-divider" />
+
+      <!-- Chat History -->
+      <div class="sb-chat-list">
+        <p class="sb-section-label">گفتگوهای اخیر</p>
+
+        <div class="sb-conversations">
+          <!-- Loading skeleton state -->
+          <div v-if="chatStore.isLoadingConversations && chatStore.conversations.length === 0" class="sb-skeleton-wrap">
+            <div v-for="i in 5" :key="i" class="sb-skeleton-row">
+              <div class="sb-skeleton-icon"></div>
+              <div class="sb-skeleton-text"></div>
+            </div>
           </div>
+
+          <template v-else>
+            <div
+              v-for="conv in chatStore.conversations"
+              :key="conv.id"
+              :class="['sb-conv-item', { 'is-active': conv.id === chatStore.currentConversationId, 'is-pinned': conv.isPinned, 'has-menu-open': activeMenuConvId === conv.id }]"
+              @click="handleSelect(conv.id)"
+            >
+              <!-- Streaming indicator: pulsing dot when this conv is streaming in background -->
+              <span
+                v-if="chatStore.getConvIsStreaming(conv.id)"
+                class="sb-conv-streaming-dot"
+                title="در حال دریافت پاسخ..."
+              />
+              <Pin v-else-if="conv.isPinned" :size="13" class="sb-conv-icon sb-conv-icon--pinned" title="پین شده" />
+              <MessageSquare v-else :size="13" class="sb-conv-icon" />
+              <span class="sb-conv-title">{{ conv.title }}</span>
+
+              <div class="sb-conv-actions">
+                <div class="sb-conv-menu-container" @click.stop>
+                  <button
+                    class="sb-conv-btn sb-conv-more-btn"
+                    :class="{ 'is-open': activeMenuConvId === conv.id }"
+                    @click="toggleMenu($event, conv.id)"
+                    title="عملیات بیشتر"
+                    aria-label="عملیات بیشتر"
+                  >
+                    <MoreVertical :size="13" />
+                  </button>
+
+                  <!-- Dropdown Menu -->
+                  <div
+                    v-if="activeMenuConvId === conv.id"
+                    :class="['sb-conv-dropdown', { 'is-top': menuPosition === 'top' }]"
+                  >
+                    <button
+                      class="sb-dropdown-item"
+                      @click="handleTogglePin($event, conv)"
+                    >
+                      <component :is="conv.isPinned ? PinOff : Pin" :size="13" class="sb-dropdown-icon" />
+                      <span>{{ conv.isPinned ? 'برداشتن پین' : 'پین کردن گفتگو' }}</span>
+                    </button>
+
+                    <button
+                      class="sb-dropdown-item"
+                      @click="openEditModal($event, conv)"
+                    >
+                      <Pencil :size="13" class="sb-dropdown-icon" />
+                      <span>ویرایش عنوان</span>
+                    </button>
+
+                    <button
+                      class="sb-dropdown-item"
+                      @click="openShareModal($event, conv)"
+                    >
+                      <Share2 :size="13" class="sb-dropdown-icon" />
+                      <span>اشتراک‌گذاری گفتگو</span>
+                    </button>
+
+                    <div class="sb-dropdown-divider"></div>
+
+                    <button
+                      class="sb-dropdown-item sb-dropdown-item--danger"
+                      @click="openDeleteModal($event, conv)"
+                    >
+                      <Trash2 :size="13" class="sb-dropdown-icon" />
+                      <span>حذف گفتگو</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Load more conversations pagination button -->
+            <button
+              v-if="chatStore.hasMoreConversations"
+              class="sb-load-more-btn"
+              :disabled="chatStore.isLoadingConversations"
+              @click="chatStore.loadMoreConversations"
+            >
+              <span v-if="chatStore.isLoadingConversations" class="sb-loading-spinner"></span>
+              <span v-else>بارگذاری گفتگوهای بیشتر...</span>
+            </button>
+
+            <p v-if="chatStore.conversations.length === 0" class="sb-empty-hint">
+              هنوز گفتگویی ندارید
+            </p>
+          </template>
         </div>
       </div>
 
-      <!-- Admin Panel Section -->
-      <div class="sidebar-admin-section">
-        <router-link to="/admin/models" class="sidebar-admin-link">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-            <line x1="8" y1="21" x2="16" y2="21"></line>
-            <line x1="12" y1="17" x2="12" y2="21"></line>
-          </svg>
-          <span>{{ uiStore.direction === 'rtl' ? 'پنل ادمین (مدیریت مدل‌ها)' : 'Admin Panel (Models)' }}</span>
+      <!-- ─── Footer: Profile & Settings ─── -->
+      <div class="sb-footer">
+      
+
+        <template v-if="authStore.isAuthenticated">
+          <!-- Direct Admin Panel Link (Admin Only) -->
+          
+          <!-- Profile popup menu -->
+          <ProfileMenu
+            v-if="profileMenuOpen"
+            @close="profileMenuOpen = false"
+            @open-profile="() => openProfile('profile')"
+            @open-payments="() => openProfile('payments')"
+            @open-settings="openSettings"
+            @open-admin-panel="openAdminPanel"
+            @open-logout="openLogoutModal"
+          />
+
+          <!-- Profile trigger button -->
+          <button
+            class="sb-profile-btn profile-trigger"
+            :class="{ 'is-open': profileMenuOpen }"
+            @click="toggleProfileMenu"
+          >
+            <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="sb-avatar sb-avatar-image" />
+            <div v-else class="sb-avatar">{{ userInitial }}</div>
+            <div class="sb-user-info">
+              <span class="sb-user-name">{{ authStore.user?.displayName || authStore.user?.email }}</span>
+              <span v-if="authStore.quotaLoaded" class="sb-user-quota-hint" :class="authStore.quotaStatusColor">
+                {{ authStore.quota.remainingPercent === null ? '∞' : `${Number(authStore.quota.remainingPercent).toLocaleString('fa-IR')}٪` }}
+                <span v-if="authStore.quota.planName" class="text-muted-foreground font-normal"> · {{ authStore.quota.planName }}</span>
+              </span>
+            </div>
+                        <ChevronUp :size="13" class="sb-chevron" :class="{ 'is-flipped': profileMenuOpen }" />
+          </button>
+        </template>
+
+        <router-link v-else to="/login" class="sb-login-btn">
+          <LogIn :size="15" />
+          <span>ورود / عضویت</span>
         </router-link>
       </div>
+    </div>
 
-      <!-- Bottom User Block -->
-      <div class="sidebar-footer">
-        <template v-if="authStore.isAuthenticated">
-          <div class="user-card">
-            <div class="user-avatar">
-              {{ userInitial }}
-            </div>
-            <div class="user-details">
-              <span class="user-name">{{ authStore.user?.displayName || authStore.user?.email }}</span>
-              <span v-if="authStore.isAdmin" class="user-role font-mono">Admin</span>
-            </div>
-          </div>
-        </template>
-        <template v-else>
-          <router-link to="/login" class="footer-login-btn">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
-              <polyline points="10 17 15 12 10 7"/>
-              <line x1="15" y1="12" x2="3" y2="12"/>
-            </svg>
-            <span>{{ uiStore.direction === 'rtl' ? 'ورود / عضویت' : 'Sign In / Register' }}</span>
-          </router-link>
-        </template>
+    <!-- ═══════════════════════════════════
+         COLLAPSED STATE (icon-only)
+    ═══════════════════════════════════ -->
+    <div v-else class="sidebar-collapsed">
+
+      <!-- Logo in collapsed state -->
+      <div class="sb-collapsed-logo" title="پروا">
+        <img :src="activeLogo" alt="پروا" class="sb-brand-logo-img" />
+      </div>
+
+      <!-- Expand button -->
+      <button
+        class="sb-icon-btn sb-icon-btn--lg"
+        title="باز کردن نوار کناری"
+        @click="uiStore.toggleSidebar"
+      >
+        <component :is="SidebarExpandIcon" :size="17" />
+      </button>
+
+      <!-- Search -->
+      <button class="sb-icon-btn sb-icon-btn--lg" @click="isSearchModalOpen = true" title="جستجو (Ctrl+K)">
+        <Search :size="17" />
+      </button>
+
+      <!-- New Chat -->
+      <button
+        class="sb-icon-btn sb-icon-btn--lg sb-icon-btn--primary"
+        :class="{ 'sb-icon-btn--disabled': isNewChatDisabled }"
+        :disabled="isNewChatDisabled"
+        @click="handleNewChat"
+        :title="isChatResponding ? 'امکان شروع گفتگوی جدید در هنگام دریافت پاسخ وجود ندارد' : 'گفتگوی جدید'"
+      >
+        <SquarePen :size="17" />
+      </button>
+
+      <!-- Temporary Chat -->
+      <button class="sb-icon-btn sb-icon-btn--lg" title="گفتگوی موقت">
+        <MessageCircleDashed :size="17" />
+      </button>
+
+      <!-- Spacer -->
+      <div class="sb-spacer" />
+
+      <!-- Profile (collapsed) -->
+      <div class="sb-collapsed-profile flex flex-col gap-2 items-center" v-if="authStore.isAuthenticated">
+        <!-- Direct Admin Icon Link (collapsed) -->
+        
+        <!-- Profile popup (positioned to the left of icon in RTL) -->
+        <div v-if="profileMenuOpen" class="sb-collapsed-menu-wrapper">
+          <ProfileMenu
+            @close="profileMenuOpen = false"
+            @open-profile="() => openProfile('profile')"
+            @open-payments="() => openProfile('payments')"
+            @open-settings="openSettings"
+            @open-admin-panel="openAdminPanel"
+            @open-logout="openLogoutModal"
+          />
+        </div>
+
+        <button
+          class="sb-avatar-btn profile-trigger"
+          @click="toggleProfileMenu"
+          :title="authStore.user?.displayName || 'پروفایل'"
+        >
+          <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="sb-avatar sb-avatar-image" />
+          <div v-else class="sb-avatar">{{ userInitial }}</div>
+        </button>
       </div>
     </div>
+
   </aside>
+
+  <!-- ─── Modals ─── -->
+  <EditConversationModal
+    :is-open="isEditModalOpen"
+    :conversation="editingConversation"
+    @close="isEditModalOpen = false"
+    @save="handleSaveTitle"
+  />
+  <DeleteConversationModal
+    :is-open="isDeleteModalOpen"
+    :conversation="deletingConversation"
+    @close="isDeleteModalOpen = false"
+    @confirm="handleConfirmDelete"
+  />
+  <LogoutModal
+    :is-open="isLogoutModalOpen"
+    @close="isLogoutModalOpen = false"
+    @confirm="handleConfirmLogout"
+  />
+  <SearchModal
+    :is-open="isSearchModalOpen"
+    @close="isSearchModalOpen = false"
+  />
+  <ProfileModal
+    :is-open="isProfileModalOpen"
+    :default-tab="profileModalTab"
+    @close="isProfileModalOpen = false"
+  />
+  <ShareConversationModal
+    :is-open="isShareModalOpen"
+    :conversation="sharingConversation"
+    @close="isShareModalOpen = false"
+  />
 </template>
 
 <style scoped>
+/* ════════════════════════════════════════
+   BACKDROP (mobile)
+════════════════════════════════════════ */
 .sidebar-backdrop {
   position: fixed;
-  top: var(--header-height);
-  inset-inline: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(2px);
-  z-index: 30; /* Below sidebar (40) and header (50) */
+  z-index: 30;
+}
+@media (min-width: 768px) { .sidebar-backdrop { display: none; } }
+
+/* ════════════════════════════════════════
+   SIDEBAR SHELL
+════════════════════════════════════════ */
+.app-sidebar {
+  width: var(--sidebar-width, 260px);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--background);
+  border-inline-end: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
-@media (min-width: 768px) {
-  .sidebar-backdrop {
-    display: none;
+/* Mobile drawer behavior (< 768px) */
+@media (max-width: 767px) {
+  .app-sidebar {
+    position: fixed !important;
+    top: 0;
+    bottom: 0;
+    inset-inline-start: 0;
+    width: min(76vw, 235px) !important;
+    z-index: 50;
+    transform: translateX(-100%) !important;
+    transition: transform 280ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+    box-shadow: none;
+  }
+
+  .sidebar-expanded {
+    width: 100% !important;
+  }
+
+  html[dir="rtl"] .app-sidebar {
+    transform: translateX(100%) !important;
+  }
+
+  /* When open on mobile — slide in */
+  .app-sidebar:not(.is-collapsed),
+  html[dir="rtl"] .app-sidebar:not(.is-collapsed) {
+    transform: translateX(0) !important;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.7) !important;
   }
 }
 
-.app-sidebar {
-  width: var(--sidebar-width);
-  height: 100%;
-  background-color: var(--background);
-  border-inline-end: 1px solid var(--border);
-  transition: width 300ms ease-in-out, transform 300ms ease-in-out;
-  flex-shrink: 0;
-  overflow: hidden;
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  inset-inline-start: 0;
-  z-index: 40;
-}
-
+/* Desktop layout (>= 768px): part of normal layout flow, no transform */
 @media (min-width: 768px) {
   .app-sidebar {
     position: relative;
     z-index: 20;
+    transform: none !important;
+    transition: width 280ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Desktop collapsed: shrink width to icon-only */
+  .app-sidebar.is-collapsed {
+    width: var(--sidebar-collapsed-width, 56px);
   }
 }
 
-.app-sidebar.collapsed {
-  width: 0;
-  border-inline-end: none;
-}
-
-.sidebar-inner {
-  width: var(--sidebar-width);
+/* ════════════════════════════════════════
+   EXPANDED LAYOUT
+════════════════════════════════════════ */
+.sidebar-expanded {
+  width: var(--sidebar-width, 260px);
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 12px;
+  padding: 10px 0;
+  overflow: hidden;
 }
 
-.brand-section {
+/* Top row */
+.sb-top-row {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 8px 14px;
+  justify-content: flex-end;
+  padding: 2px 12px 10px;
+  flex-shrink: 0;
 }
 
-.brand-logo {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  background-color: var(--primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.brand-info {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.brand-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--foreground);
-  letter-spacing: -0.01em;
-}
-
-.brand-badge {
-  font-size: 10px;
-  padding: 1px 5px;
-  background-color: var(--secondary);
-  color: var(--muted-foreground);
-  border-radius: 4px;
-}
-
-.new-chat-wrapper {
-  margin-bottom: 16px;
-}
-
-.new-chat-btn {
-  width: 100%;
+.sb-brand {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  background-color: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--foreground);
+  pointer-events: none;
 }
 
-.new-chat-btn:hover {
-  background-color: var(--secondary);
-  border-color: var(--muted-foreground);
-}
-
-.chat-list-section {
-  flex: 1;
-  overflow-y: auto;
+.sb-brand-logo {
+  width: 28px;
+  height: 28px;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.section-label {
-  font-size: 10px;
-  color: var(--muted-foreground);
-  padding: 4px 8px 8px;
-  letter-spacing: 0.05em;
+.sb-brand-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.chat-items-container {
+.sb-brand-name {
+  font-family: var(--font-brand);
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--foreground);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+/* ────────────── Action Buttons ────────────── */
+.sb-actions {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  padding: 0 8px;
+  flex-shrink: 0;
 }
 
-.chat-item {
+.sb-action-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+  border-radius: var(--radius-sm, 8px);
+  background: transparent;
+  border: none;
+  color: var(--secondary-foreground, #A0A0B8);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-sans);
   cursor: pointer;
-  color: var(--secondary-foreground);
-  transition: all 150ms ease;
-  position: relative;
+  transition: background-color 150ms ease, color 150ms ease;
+  width: 100%;
+  text-align: start;
 }
 
-.chat-item:hover {
-  background-color: var(--secondary);
+.sb-action-row:hover {
+  background-color: var(--surface-alt, var(--secondary));
   color: var(--foreground);
 }
 
-.chat-item.active {
-  background-color: var(--secondary);
+.sb-action-icon {
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+  transition: color 150ms ease;
+}
+
+.sb-action-row:hover .sb-action-icon {
+  color: var(--primary);
+}
+
+/* Primary action (New Chat) — subtle tint */
+.sb-action-row--primary {
+  color: var(--foreground);
+}
+
+.sb-action-row--primary .sb-action-icon {
+  color: var(--primary);
+}
+
+.sb-action-row--primary:hover {
+  background-color: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--primary);
+}
+
+.sb-action-label {
+  flex: 1;
+}
+
+/* Disabled state */
+.sb-action-row--disabled,
+.sb-action-row--disabled:hover,
+.sb-icon-btn--disabled,
+.sb-icon-btn--disabled:hover {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ────────────── Divider ────────────── */
+.sb-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 8px 12px;
+  flex-shrink: 0;
+}
+
+/* ────────────── Chat List ────────────── */
+.sb-chat-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sb-chat-list::-webkit-scrollbar { width: 3px; }
+.sb-chat-list::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+.sb-chat-list:hover::-webkit-scrollbar-thumb { background: var(--border); }
+
+.sb-section-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted-foreground);
+  padding: 4px 4px 6px;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+}
+
+.sb-conversations {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sb-conv-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px;
+  border-radius: var(--radius-sm, 8px);
+  cursor: pointer;
+  color: var(--secondary-foreground, #A0A0B8);
+  transition: background-color 150ms ease, color 150ms ease;
+  position: relative;
+}
+
+.sb-conv-item:hover {
+  background-color: var(--surface-alt, var(--secondary));
+  color: var(--foreground);
+}
+
+.sb-conv-item.is-active {
+  background-color: var(--surface-alt, var(--secondary));
   color: var(--foreground);
   font-weight: 500;
 }
 
-.chat-icon {
+.sb-conv-icon {
   flex-shrink: 0;
   color: var(--muted-foreground);
 }
 
-.chat-title {
+.sb-conv-title {
   flex: 1;
   font-size: 13px;
   white-space: nowrap;
@@ -304,62 +824,298 @@ const userInitial = computed(() => {
   text-overflow: ellipsis;
 }
 
-.delete-chat-btn {
-  opacity: 0;
-  color: var(--muted-foreground);
-  padding: 2px 4px;
-  border-radius: 4px;
+.sb-conv-actions {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: opacity 150ms ease, color 150ms ease;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 150ms ease;
+  flex-shrink: 0;
 }
 
-.chat-item:hover .delete-chat-btn {
+.sb-conv-item:hover .sb-conv-actions,
+.sb-conv-item.is-active .sb-conv-actions,
+.sb-conv-item.has-menu-open .sb-conv-actions {
   opacity: 1;
 }
 
-.delete-chat-btn:hover {
-  color: #ef4444;
-  background-color: rgba(239, 68, 68, 0.1);
+.sb-conv-icon--pinned {
+  color: #eab308;
 }
 
-.sidebar-footer {
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-  margin-top: auto;
-}
-
-.user-card {
+.sb-conv-menu-container {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 8px;
-  border-radius: var(--radius);
-  background-color: var(--card);
-  border: 1px solid var(--border);
 }
 
-.user-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary), #a78bfa);
-  color: #ffffff;
-  font-weight: bold;
-  font-size: 12px;
+.sb-conv-btn {
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--muted-foreground);
+  transition: background-color 150ms ease, color 150ms ease;
 }
 
-.user-details {
+.sb-conv-btn:hover,
+.sb-conv-btn.is-open {
+  background-color: var(--card);
+  color: var(--foreground);
+}
+
+.sb-conv-btn--danger:hover {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+/* 3-dots action dropdown */
+.sb-conv-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 60;
+  min-width: 140px;
+  background-color: var(--card, #1c1c28);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.28);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: sb-dropdown-fade 120ms ease-out;
+}
+
+.sb-conv-dropdown.is-top {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+@keyframes sb-dropdown-fade {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.sb-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  color: var(--foreground);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  text-align: right;
+  transition: background-color 120ms ease, color 120ms ease;
+  white-space: nowrap;
+}
+
+.sb-dropdown-item:hover {
+  background-color: var(--surface-alt, var(--secondary));
+  color: var(--foreground);
+}
+
+.sb-dropdown-item--danger {
+  color: #f87171;
+}
+
+.sb-dropdown-item--danger:hover {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.sb-dropdown-icon {
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.sb-dropdown-divider {
+  height: 1px;
+  background-color: var(--border);
+  margin: 3px 0;
+}
+
+.sb-empty-hint {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  text-align: center;
+  padding: 20px 8px;
+}
+
+/* ────────────── Skeleton Loader & Pagination ────────────── */
+.sb-skeleton-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.sb-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: var(--radius-md, 8px);
+  background: color-mix(in srgb, var(--muted) 40%, transparent);
+  animation: sb-pulse 1.6s ease-in-out infinite;
+}
+
+.sb-skeleton-icon {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--muted-foreground) 25%, transparent);
+  flex-shrink: 0;
+}
+
+.sb-skeleton-text {
+  flex: 1;
+  height: 12px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--muted-foreground) 20%, transparent);
+}
+
+@keyframes sb-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
+}
+
+.sb-load-more-btn {
+  width: 100%;
+  padding: 7px 10px;
+  margin-top: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.sb-load-more-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.sb-load-more-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sb-loading-spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ────────────── Footer ────────────── */
+.sb-footer {
+  flex-shrink: 0;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--border);
+  position: relative;
+  margin-top: auto;
+}
+
+.sb-footer-settings-btn {
+  margin-bottom: 5px;
+  border-radius: var(--radius-sm, 8px);
+}
+
+.sb-footer-theme-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background-color: var(--surface-alt, var(--secondary));
+  color: var(--muted-foreground);
+  border: 1px solid var(--border);
+  transition: all 150ms ease;
+}
+
+.sb-footer-settings-btn:hover .sb-footer-theme-tag {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+/* Profile trigger */
+.sb-profile-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: var(--radius-sm, 8px);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.sb-profile-btn:hover,
+.sb-profile-btn.is-open {
+  background-color: var(--surface-alt, var(--secondary));
+}
+
+.sb-avatar {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover, #839BFF));
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sb-avatar-image {
+  object-fit: cover;
+}
+
+.sb-user-info {
+  flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  text-align: start;
 }
 
-.user-name {
+.sb-user-name {
   font-size: 12px;
   font-weight: 500;
   color: var(--foreground);
@@ -368,52 +1124,220 @@ const userInitial = computed(() => {
   text-overflow: ellipsis;
 }
 
-.user-role {
+.sb-user-role {
+  font-family: var(--font-mono);
   font-size: 10px;
   color: var(--primary);
 }
 
-.footer-login-btn {
+.sb-user-quota-hint {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sb-chevron {
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+  transition: transform 200ms ease;
+}
+
+.sb-chevron.is-flipped {
+  transform: rotate(180deg);
+}
+
+.sb-login-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm, 8px);
+  background-color: var(--surface-alt, var(--secondary));
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color 150ms ease;
+}
+
+.sb-login-btn:hover {
+  background-color: color-mix(in srgb, var(--primary) 12%, var(--surface-alt, var(--secondary)));
+}
+
+/* ════════════════════════════════════════
+   COLLAPSED LAYOUT
+════════════════════════════════════════ */
+.sidebar-collapsed {
+  width: var(--sidebar-collapsed-width, 56px);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0 12px;
+  gap: 4px;
+}
+
+.sb-collapsed-logo {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.sb-spacer { flex: 1; }
+
+/* Icon buttons */
+.sb-icon-btn {
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: var(--radius);
-  background-color: var(--secondary);
-  border: 1px solid var(--border);
-  font-size: 12px;
+  border-radius: var(--radius-sm, 8px);
+  border: none;
+  background: transparent;
+  color: var(--secondary-foreground, #A0A0B8);
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+  flex-shrink: 0;
+}
+
+.sb-icon-btn:hover {
+  background-color: var(--surface-alt, var(--secondary));
   color: var(--foreground);
 }
 
-.footer-login-btn:hover {
-  border-color: var(--primary);
+.sb-icon-btn--lg {
+  width: 40px;
+  height: 40px;
 }
 
-.sidebar-admin-section {
-  padding-top: 10px;
-  margin-top: auto;
+.sb-icon-btn--primary {
+  color: var(--primary);
+  background-color: color-mix(in srgb, var(--primary) 12%, transparent);
 }
 
-.sidebar-admin-link {
+.sb-icon-btn--primary:hover {
+  background-color: var(--primary);
+  color: #fff;
+}
+
+/* Collapsed profile */
+.sb-collapsed-profile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   width: 100%;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.sb-avatar-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: box-shadow 150ms ease;
+}
+
+.sb-avatar-btn:hover {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+/* Collapsed profile menu wrapper — appears to the right of the sidebar (outside of it) */
+.sb-collapsed-menu-wrapper {
+  position: fixed;
+  bottom: 60px;
+  /* LTR: right of sidebar at 56px + 8px gap */
+  inset-inline-start: calc(var(--sidebar-collapsed-width, 56px) + 8px);
+  width: 210px;
+  z-index: 200;
+}
+
+.sb-collapsed-menu-wrapper .profile-menu-panel {
+  position: static;
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.35),
+    0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* ════════════════════════════════════════
+   STREAMING DOT — background conv indicator
+════════════════════════════════════════ */
+.sb-conv-streaming-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  min-width: 8px;
+  border-radius: 50%;
+  background-color: var(--primary);
+  animation: stream-pulse 1.1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes stream-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.75); }
+}
+
+/* ════════════════════════════════════════
+   ADMIN DIRECT LINK
+════════════════════════════════════════ */
+.sb-admin-direct-link {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  border-radius: var(--radius);
-  background-color: var(--secondary);
-  border: 1px solid var(--border);
+  padding: 7px 10px;
+  margin-bottom: 6px;
+  border-radius: 9px;
+  background-color: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  color: var(--foreground);
   font-size: 12px;
-  color: var(--secondary-foreground);
+  font-weight: 500;
   text-decoration: none;
   transition: all 150ms ease;
+  cursor: pointer;
 }
 
-.sidebar-admin-link:hover {
-  color: var(--foreground);
-  border-color: var(--primary);
-  background-color: var(--card);
+.sb-admin-direct-link:hover {
+  background-color: rgba(245, 158, 11, 0.16);
+  border-color: rgba(245, 158, 11, 0.45);
 }
+
+.sb-admin-link-text {
+  flex: 1;
+}
+
+.sb-admin-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4.5px;
+  border-radius: 4px;
+  background-color: #f59e0b;
+  color: #111;
+}
+
+.sb-admin-icon-btn {
+  color: #f59e0b;
+  background-color: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.sb-admin-icon-btn:hover {
+  background-color: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+}
+
 </style>

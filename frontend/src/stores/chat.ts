@@ -1,21 +1,68 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Conversation, Message } from '../types'
+import type { Conversation, Message, FileAttachmentItem, WebSource, QueuedMessage } from '../types'
 import { chatService } from '../services/chat.service'
+import { filesService } from '../services/files.service'
+import { modelsService } from '../services/models.service'
+import { checkBackendHealth } from '../services/api'
+import { markDefaultModel } from '../utils/models'
 import { useModelsStore } from './models'
+import { useUiStore } from './ui'
+import { useAuthStore } from './auth'
+
+// ─── Per-conversation streaming state ─────────────────────────────────────────
+interface ConvStreamState {
+  isStreaming: boolean
+  isThinking: boolean
+  streamError: string | null
+  currentStreamingText: string
+  abortController: AbortController | null
+  watchdogTimer: ReturnType<typeof setTimeout> | null
+  lastUserPrompt: string
+  charBuffer: string[]
+  releaseTimer: ReturnType<typeof setTimeout> | null
+  pendingSources: WebSource[] | null
+  isSearching: boolean
+  searchFailed: boolean
+  currentReasoning: string
+  isActivelyThinking: boolean
+  thinkingDurationMs: number | null
+}
+
+
+function makeDefaultState(): ConvStreamState {
+  return {
+    isStreaming: false,
+    isThinking: false,
+    streamError: null,
+    currentStreamingText: '',
+    abortController: null,
+    watchdogTimer: null,
+    lastUserPrompt: '',
+    charBuffer: [],
+    releaseTimer: null,
+    pendingSources: null,
+    isSearching: false,
+    searchFailed: false,
+    currentReasoning: '',
+    isActivelyThinking: false,
+    thinkingDurationMs: null,
+  }
+}
+
+interface QueuedMessageJob {
+  id: string
+  convId: string
+  content: string
+  fileIds?: string[]
+  attachments?: FileAttachmentItem[]
+  userMessage: Message
+}
 
 export const useChatStore = defineStore('chat', () => {
   const modelsStore = useModelsStore()
-
-  const sampleConversations: Conversation[] = [
-    {
-      id: 'c-1',
-      title: 'خوش‌آمدگویی به پلتفرم هوش مصنوعی',
-      modelId: 'm-1',
-      createdAt: new Date(Date.now() - 3600000).toISOString(),
-      updatedAt: new Date(Date.now() - 3600000).toISOString()
-    }
-  ]
+  const uiStore = useUiStore()
+  const authStore = useAuthStore()
 
   const sampleMessages: Record<string, Message[]> = {
     'c-1': [
@@ -23,181 +70,1509 @@ export const useChatStore = defineStore('chat', () => {
         id: 'msg-1',
         conversationId: 'c-1',
         role: 'assistant',
-        content: 'سلام! من دستیار هوشمند شما در پلتفرم NeuralChat هستم. چگونه می‌توانم به شما کمک کنم؟',
+        content: 'سلام! من دستیار هوشمند شما در سامانه پروا هستم. چگونه می‌توانم به شما کمک کنم؟',
         createdAt: new Date(Date.now() - 3600000).toISOString()
       }
     ]
   }
 
-  const conversations = ref<Conversation[]>(sampleConversations)
-  const currentConversationId = ref<string | null>('c-1')
-  const messages = ref<Message[]>(sampleMessages['c-1'] || [])
-  const isStreaming = ref(false)
-  const isThinking = ref(false)
-  const currentStreamingText = ref('')
+  const conversations = ref<Conversation[]>([])
+  const currentConversationId = ref<string | null>(null)
+  const messages = ref<Message[]>([])
+  const isLoadingConversations = ref(false)
+  const isLoadingMessages = ref(false)
+  const conversationPage = ref(1)
+  const hasMoreConversations = ref(false)
+  const isTokenLimitExceeded = ref(false)
 
+  // ─── Per-conversation stream state map ────────────────────────────────────
+  // Using a Map so each conversation can have completely independent streaming state.
+  // We wrap it in a ref<Map> so Vue can track mutations when we replace entries.
+  const convStreamStates = ref<Map<string, ConvStreamState>>(new Map())
+
+  // ─── Per-conversation feature flags (web search / thinking) ───────────────
+  // Survives refresh via localStorage; a new conversation starts with both off.
+  const convFlags = ref<Record<string, { web: boolean; thinking?: boolean }>>({})
+  function persistConvFlags() {
+    try { localStorage.setItem('chat_conv_flags', JSON.stringify(convFlags.value)) } catch {}
+  }
+  function getConvFlag(convId: string) {
+    return convFlags.value[convId] ?? { web: false, thinking: false }
+  }
+  function setConvFlag(convId: string, patch: Partial<{ web: boolean; thinking?: boolean }>) {
+    convFlags.value[convId] = { ...getConvFlag(convId), ...patch }
+    persistConvFlags()
+  }
+  try {
+    const raw = localStorage.getItem('chat_conv_flags')
+    if (raw) convFlags.value = JSON.parse(raw)
+  } catch {}
+
+  // ─── Helper to get/init state for a convId ────────────────────────────────
+  function getState(convId: string | null): ConvStreamState | null {
+    if (!convId) return null
+    if (!convStreamStates.value.has(convId)) {
+      convStreamStates.value.set(convId, makeDefaultState())
+    }
+    return convStreamStates.value.get(convId)!
+  }
+
+  function ensureState(convId: string): ConvStreamState {
+    if (!convStreamStates.value.has(convId)) {
+      convStreamStates.value.set(convId, makeDefaultState())
+    }
+    return convStreamStates.value.get(convId)!
+  }
+
+  function ensureConversationVisibleInSidebar(convId: string, fallbackText: string) {
+    if (conversations.value.some((c) => c.id === convId)) return
+
+    const trimmed = (fallbackText || 'گفتگوی جدید').trim()
+    const title = trimmed.slice(0, 30) + (trimmed.length > 30 ? '...' : '') || 'گفتگوی جدید'
+    const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
+    conversations.value.unshift({
+      id: convId,
+      title,
+      modelId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+    sortConversations()
+  }
+
+  // ─── Backward-compatible computed aliases (used by ChatComposer, MessageList, etc.) ──
+  const isStreaming = computed(() => getState(currentConversationId.value)?.isStreaming ?? false)
+  const isThinking = computed(() => getState(currentConversationId.value)?.isThinking ?? false)
+  const isAnyStreaming = computed(() => {
+    if (isStreaming.value || isThinking.value) return true
+    for (const s of convStreamStates.value.values()) {
+      if (s.isStreaming || s.isThinking) return true
+    }
+    return false
+  })
+  const currentStreamingText = computed(() => getState(currentConversationId.value)?.currentStreamingText ?? '')
+  const currentReasoning = computed(() => getState(currentConversationId.value)?.currentReasoning ?? '')
+  const isActivelyThinking = computed(() => getState(currentConversationId.value)?.isActivelyThinking ?? false)
+  const thinkingDurationMs = computed(() => getState(currentConversationId.value)?.thinkingDurationMs ?? null)
+
+  function loadDismissedErrors(): Set<string> {
+    try {
+      const raw = sessionStorage.getItem('dismissed_stream_errors')
+      return raw ? new Set(JSON.parse(raw)) : new Set()
+    } catch {
+      return new Set()
+    }
+  }
+  const dismissedErrorKeys = ref<Set<string>>(loadDismissedErrors())
+
+  function saveDismissedErrors() {
+    try {
+      sessionStorage.setItem(
+        'dismissed_stream_errors',
+        JSON.stringify(Array.from(dismissedErrorKeys.value)),
+      )
+    } catch {}
+  }
+
+  const streamError = computed(() => {
+    const convId = currentConversationId.value || '__new__'
+    const err = getState(currentConversationId.value)?.streamError ?? null
+    if (!err) return null
+    if (dismissedErrorKeys.value.has(`${convId}:${err}`)) return null
+    return err
+  })
+  const lastUserPrompt = computed(() => getState(currentConversationId.value)?.lastUserPrompt ?? '')
+
+  // ─── Public helper: check if any specific conv is streaming (for sidebar) ─
+  function getConvIsStreaming(convId: string): boolean {
+    return convStreamStates.value.get(convId)?.isStreaming ?? false
+  }
+
+  // ─── Watchdog helpers (per conv) ──────────────────────────────────────────
+  function resetWatchdog(convId: string, timeoutMs = 35000) {
+    const state = ensureState(convId)
+    if (state.watchdogTimer) {
+      clearTimeout(state.watchdogTimer)
+      state.watchdogTimer = null
+    }
+    state.watchdogTimer = setTimeout(() => {
+      const s = convStreamStates.value.get(convId)
+      if (s && s.isStreaming) {
+        if (s.abortController) {
+          try { s.abortController.abort() } catch {}
+          s.abortController = null
+        }
+        s.isStreaming = false
+        s.isThinking = false
+        s.streamError = 'زمان انتظار برای دریافت پاسخ به پایان رسید'
+        // Force reactivity — replace the map entry
+        convStreamStates.value.set(convId, { ...s })
+      }
+    }, timeoutMs)
+  }
+
+  function clearWatchdog(convId: string) {
+    const s = convStreamStates.value.get(convId)
+    if (s?.watchdogTimer) {
+      clearTimeout(s.watchdogTimer)
+      s.watchdogTimer = null
+    }
+  }
+
+  // ─── Computed ─────────────────────────────────────────────────────────────
   const activeConversation = computed(() =>
     conversations.value.find((c) => c.id === currentConversationId.value)
   )
 
-  async function loadConversations() {
+  // ─── Load conversations ────────────────────────────────────────────────────
+  async function loadConversations(targetId?: string) {
+    isLoadingConversations.value = true
+    isLoadingMessages.value = true
+    conversationPage.value = 1
+    const savedActive = sessionStorage.getItem('active_streaming_conv')
+    if (savedActive && (!targetId || targetId === savedActive)) {
+      targetId = savedActive
+    }
+
     try {
-      const data = await chatService.listConversations()
-      if (Array.isArray(data) && data.length > 0) {
+      const data = await chatService.listConversations(1, 50)
+      if (Array.isArray(data)) {
         conversations.value = data
-        if (!currentConversationId.value) {
-          selectConversation(data[0].id)
+        sortConversations()
+        hasMoreConversations.value = data.length >= 50
+
+        if (data.length === 0) {
+          conversations.value = []
+          currentConversationId.value = null
+          messages.value = []
+          isLoadingMessages.value = false
+          return
         }
+
+        if (targetId && data.some((c) => c.id === targetId)) {
+          await selectConversation(targetId)
+          return
+        }
+
+        if (currentConversationId.value && data.some((c) => c.id === currentConversationId.value)) {
+          await selectConversation(currentConversationId.value)
+          return
+        }
+
+        // For all users, visiting the main chat page opens a blank, fresh chat
+        // instead of auto-opening the most recent conversation. The user can
+        // explicitly select any existing chat from the sidebar when desired.
+        currentConversationId.value = null
+        messages.value = []
+        isLoadingMessages.value = false
+        return
       }
-    } catch {
-      // Keep sample conversations
+    } catch (err) {
+      console.warn('Backend listConversations failed:', err)
+      isLoadingMessages.value = false
+    } finally {
+      isLoadingConversations.value = false
+    }
+    if (targetId) {
+      await selectConversation(targetId)
+    } else if (conversations.value.length === 0) {
+      currentConversationId.value = null
+      messages.value = []
+      isLoadingMessages.value = false
     }
   }
 
-  async function selectConversation(id: string) {
-    currentConversationId.value = id
-    isStreaming.value = false
-    isThinking.value = false
-    currentStreamingText.value = ''
-
+  async function loadMoreConversations() {
+    if (!hasMoreConversations.value || isLoadingConversations.value) return
+    isLoadingConversations.value = true
     try {
-      const data = await chatService.getMessages(id)
-      if (Array.isArray(data)) {
-        messages.value = data
-        return
+      const nextPage = conversationPage.value + 1
+      const data = await chatService.listConversations(nextPage, 50)
+      if (Array.isArray(data) && data.length > 0) {
+        const existingIds = new Set(conversations.value.map((c) => c.id))
+        const newItems = data.filter((c) => !existingIds.has(c.id))
+        conversations.value.push(...newItems)
+        sortConversations()
+        conversationPage.value = nextPage
+        hasMoreConversations.value = data.length >= 50
+      } else {
+        hasMoreConversations.value = false
       }
-    } catch {
-      // fallback
+    } catch (err) {
+      console.warn('loadMoreConversations failed:', err)
+    } finally {
+      isLoadingConversations.value = false
+    }
+  }
+
+  // ─── Select conversation ───────────────────────────────────────────────────
+  // KEY CHANGE: We no longer stop background streaming when switching conversations.
+  // Each conversation keeps its own streaming state in convStreamStates.
+  async function selectConversation(id: string) {
+    if (!id) return
+    isLoadingMessages.value = true
+    const savedActive = sessionStorage.getItem('active_streaming_conv')
+    const isSavedStream = savedActive === id
+
+    // If switching to a different conversation, immediately clear messages so old chat does not linger
+    if (currentConversationId.value && currentConversationId.value !== id) {
+      messages.value = []
     }
 
-    messages.value = sampleMessages[id] || []
+    // Simply switch the active conversation — do NOT abort background streams
+    currentConversationId.value = id
+
+    // Initialize state for this conv if not already present
+    const state = ensureState(id)
+
+    // If this conversation was actively generating before page refresh, preserve loading state
+    if (isSavedStream && !state.isStreaming) {
+      state.isStreaming = true
+      state.isThinking = true
+      convStreamStates.value.set(id, { ...state })
+      resetWatchdog(id, 35000)
+    }
+
+    // Clear error when switching to a conversation
+    state.streamError = null
+    convStreamStates.value.set(id, { ...state })
+
+    const conv = conversations.value.find((c) => c.id === id)
+    if (conv?.modelId) {
+      modelsStore.selectModel(conv.modelId)
+    }
+
+    const isTestEnv =
+      (typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test') ||
+      (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test')
+    const minDelayMs = isTestEnv ? 0 : 500
+    const delayPromise =
+      minDelayMs > 0 ? new Promise((resolve) => setTimeout(resolve, minDelayMs)) : Promise.resolve()
+
+    try {
+      try {
+        const [data] = await Promise.all([
+          chatService.getMessages(id),
+          delayPromise
+        ])
+        if (Array.isArray(data)) {
+          messages.value = data
+        } else {
+          messages.value = []
+        }
+      } catch (err) {
+        await delayPromise
+        console.warn('Backend getMessages failed:', err)
+        messages.value = []
+      }
+
+      // Check if the last message is a pending user turn awaiting reply
+      const lastMsg = messages.value[messages.value.length - 1]
+      const hasPendingUserTurn = lastMsg && lastMsg.role === 'user'
+
+      if (isSavedStream || hasPendingUserTurn) {
+        const s = ensureState(id)
+        s.isStreaming = true
+        s.isThinking = true
+        convStreamStates.value.set(id, { ...s })
+        sessionStorage.setItem('active_streaming_conv', id)
+        resetWatchdog(id, 35000)
+      }
+
+      // Check if there is an active background generation for this conv (e.g. after refresh)
+      if (!id.startsWith('c-') && typeof chatService.getActiveStream === 'function') {
+        try {
+          const streamStatus = await chatService.getActiveStream(id)
+          if (streamStatus && streamStatus.active) {
+            const s = ensureState(id)
+            s.isStreaming = true
+            const reasoning = streamStatus.reasoningText || streamStatus.accumulatedReasoning
+            if (reasoning) {
+              s.currentReasoning = reasoning
+            }
+            if (streamStatus.thinkingDurationMs) {
+              s.thinkingDurationMs = streamStatus.thinkingDurationMs
+            }
+            if (streamStatus.status === 'thinking' && !streamStatus.accumulatedText) {
+              s.isThinking = true
+              s.isActivelyThinking = true
+              s.currentStreamingText = ''
+            } else {
+              s.isThinking = false
+              s.isActivelyThinking = false
+              s.currentStreamingText = streamStatus.accumulatedText || ''
+            }
+            convStreamStates.value.set(id, { ...s })
+            if (streamStatus.title && conv) {
+              conv.title = streamStatus.title
+            }
+            reconnectToActiveStream(id)
+          } else {
+            // Stream is no longer active on backend
+            clearWatchdog(id)
+            const s = ensureState(id)
+            if (hasPendingUserTurn && !messages.value.some((m) => m.role === 'assistant' && new Date(m.createdAt) > new Date(lastMsg.createdAt))) {
+              s.isStreaming = false
+              s.isThinking = false
+              sessionStorage.removeItem('active_streaming_conv')
+              s.streamError = streamStatus?.status === 'error'
+                ? 'زمان انتظار برای دریافت پاسخ به پایان رسید'
+                : 'خطا در برقراری ارتباط با مدل هوش مصنوعی'
+            } else {
+              s.isStreaming = false
+              s.isThinking = false
+              sessionStorage.removeItem('active_streaming_conv')
+            }
+            convStreamStates.value.set(id, { ...s })
+          }
+        } catch (err) {
+          if (isSavedStream || hasPendingUserTurn) {
+            clearWatchdog(id)
+            const s = ensureState(id)
+            s.isStreaming = false
+            s.isThinking = false
+            s.streamError = 'خطا در برقراری ارتباط'
+            convStreamStates.value.set(id, { ...s })
+            sessionStorage.removeItem('active_streaming_conv')
+          }
+        }
+      }
+    } finally {
+      isLoadingMessages.value = false
+    }
+  }
+
+  // ─── Reconnect to active stream ────────────────────────────────────────────
+  async function reconnectToActiveStream(convId: string) {
+    const state = ensureState(convId)
+    if (state.abortController) {
+      state.abortController.abort()
+      state.abortController = null
+    }
+    const abortCtrl = new AbortController()
+    state.abortController = abortCtrl
+    convStreamStates.value.set(convId, { ...state })
+    resetWatchdog(convId, 35000)
+
+    await chatService.subscribeActiveStream(
+      convId,
+      (accumulated: string) => {
+        const s = ensureState(convId)
+        s.isThinking = false
+        s.isActivelyThinking = false
+        s.currentStreamingText = accumulated
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 25000)
+      },
+      (token: string) => {
+        const s = ensureState(convId)
+        s.isThinking = false
+        s.isActivelyThinking = false
+        s.currentStreamingText += token
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 25000)
+      },
+      (messageId: string) => {
+        clearWatchdog(convId)
+        const s = ensureState(convId)
+        s.abortController = null
+        convStreamStates.value.set(convId, { ...s })
+        finishStream(convId, messageId)
+      },
+      (err: any) => {
+        clearWatchdog(convId)
+        const s = ensureState(convId)
+        s.abortController = null
+        s.isStreaming = false
+        s.isThinking = false
+        s.isActivelyThinking = false
+        sessionStorage.removeItem('active_streaming_conv')
+        const rawMsg = typeof err === 'string' ? err : err?.message
+        const errorMessage = rawMsg || 'زمان انتظار برای دریافت پاسخ به پایان رسید '
+        s.streamError = errorMessage
+        convStreamStates.value.set(convId, { ...s })
+        uiStore.showToast(errorMessage, 'error')
+        if (s.currentStreamingText) {
+          finishStream(convId, `msg-${Date.now()}`, true)
+        }
+      },
+      abortCtrl.signal,
+      (newTitle: string) => {
+        const conv = conversations.value.find((c) => c.id === convId)
+        if (conv) {
+          conv.title = newTitle
+        }
+      },
+      undefined,
+      undefined,
+      undefined,
+      (thinkingChunk: string) => {
+        const s = ensureState(convId)
+        s.currentReasoning += thinkingChunk
+        s.isActivelyThinking = true
+        s.isThinking = true
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 35000)
+      },
+      (status: { state: 'thinking' | 'done'; durationMs?: number }) => {
+        const s = ensureState(convId)
+        if (status.state === 'thinking') {
+          s.isActivelyThinking = true
+          s.isThinking = true
+        } else if (status.state === 'done') {
+          s.isActivelyThinking = false
+          s.isThinking = false
+          if (status.durationMs !== undefined) {
+            s.thinkingDurationMs = status.durationMs
+          }
+        }
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 35000)
+      }
+    )
+  }
+
+  // ─── Switch model ──────────────────────────────────────────────────────────
+  async function switchConversationModel(modelId: string) {
+    modelsStore.selectModel(modelId)
+    const conv = activeConversation.value
+    if (conv) {
+      conv.modelId = modelId
+    }
+    if (currentConversationId.value && !currentConversationId.value.startsWith('c-')) {
+      try {
+        await chatService.setModel(currentConversationId.value, modelId)
+      } catch (err) {
+        console.warn('Backend setModel failed:', err)
+        throw err
+      }
+    }
+  }
+
+  // ─── Create conversation ───────────────────────────────────────────────────
+  /** Platform default for a fresh chat (active-first). Never throws. */
+  function platformDefaultModelId(): string | undefined {
+    const pool = modelsStore.activeModels.length > 0 ? modelsStore.activeModels : modelsStore.models
+    return (pool.find((m) => m.isDefault) ?? pool[0])?.id
   }
 
   async function createNewConversation(title = 'گفتگوی جدید'): Promise<string> {
-    const modelId = modelsStore.selectedModelId
+    // Prevent starting a new conversation while a model is responding / streaming
+    if (isAnyStreaming.value) {
+      return ''
+    }
+
+    // New chats always start on the current platform default and the input
+    // follows it. The dedicated endpoint is tried first (cheap + exact);
+    // the list-based resolution is the fallback. Explicit per-conversation
+    // picks still win via switchConversationModel.
+    let modelId: string | undefined
+    try {
+      const fresh = await modelsService.getDefaultModel()
+      if (fresh?.id) {
+        if (!modelsStore.models.some((m) => m.id === fresh.id)) {
+          await modelsStore.fetchModels().catch(() => {})
+        }
+        markDefaultModel(modelsStore.models, fresh.id)
+        modelsStore.selectModel(fresh.id)
+        modelId = fresh.id
+      }
+    } catch {
+      // fall through to list-based resolution below
+    }
+    if (!modelId) {
+      await modelsStore.fetchModels().catch(() => {})
+      const active = modelsStore.activeModels
+      const def = active.find((m) => m.isDefault) ?? modelsStore.defaultModel
+      modelId = def?.id ?? modelsStore.selectedModel?.id ?? modelsStore.selectedModelId
+      if (def?.id) modelsStore.selectModel(def.id)
+    }
     try {
       const created = await chatService.createConversation(modelId, title)
-      conversations.value.unshift(created)
-      currentConversationId.value = created.id
-      messages.value = []
-      return created.id
-    } catch {
-      const newConv: Conversation = {
-        id: `c-${Date.now()}`,
-        title,
-        modelId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+      if (created && created.id) {
+        // Don't add to conversations list yet — the chat only joins the sidebar
+        // when the assistant responds to the first message (see sendMessage).
+        currentConversationId.value = created.id
+        if (created.modelId) {
+          modelsStore.selectModel(created.modelId)
+        }
+        messages.value = []
+        return created.id
       }
-      conversations.value.unshift(newConv)
-      currentConversationId.value = newConv.id
-      messages.value = []
-      return newConv.id
+    } catch (err) {
+      console.warn('Backend createConversation failed, falling back to local ID:', err)
     }
+    const newConv: Conversation = {
+      id: `c-${Date.now()}`,
+      title,
+      modelId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+    // Same as above — keep the placeholder off the sidebar until a message is sent.
+    currentConversationId.value = newConv.id
+    messages.value = []
+    return newConv.id
   }
 
-  function deleteConversation(id: string) {
+  // ─── Delete conversation ───────────────────────────────────────────────────
+  async function deleteConversation(id: string) {
+    // Abort streaming for the deleted conversation
+    const s = convStreamStates.value.get(id)
+    if (s) {
+      if (s.watchdogTimer) clearTimeout(s.watchdogTimer)
+      if (s.abortController) { try { s.abortController.abort() } catch {} }
+      convStreamStates.value.delete(id)
+    }
+    try {
+      await chatService.deleteConversation(id)
+    } catch (err: any) {
+      console.warn('Backend deleteConversation failed:', err)
+    }
     conversations.value = conversations.value.filter((c) => c.id !== id)
     delete sampleMessages[id]
+    messageQueue.value.delete(id)
+    pendingMessageQueue.value.delete(id)
+    persistQueue()
     if (currentConversationId.value === id) {
       if (conversations.value.length > 0) {
-        selectConversation(conversations.value[0].id)
+        await selectConversation(conversations.value[0].id)
       } else {
-        createNewConversation()
+        currentConversationId.value = null
+        messages.value = []
+        // Fresh composer with no conversation shows the platform default,
+        // not a leftover pick from the deleted chat.
+        const defId = platformDefaultModelId()
+        if (defId) modelsStore.selectModel(defId)
       }
     }
   }
 
-  async function sendMessage(content: string) {
-    if (!content.trim() || isStreaming.value) return
+  // ─── Pin / Unpin conversation ──────────────────────────────────────────────
+  function sortConversations() {
+    conversations.value.sort((a, b) => {
+      const aPinned = a.isPinned ? 1 : 0
+      const bPinned = b.isPinned ? 1 : 0
+      if (aPinned !== bPinned) {
+        return bPinned - aPinned
+      }
+      return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+    })
+  }
 
-    if (!currentConversationId.value) {
-      await createNewConversation()
+  async function togglePinConversation(id: string, explicitState?: boolean): Promise<boolean> {
+    const conv = conversations.value.find((c) => c.id === id)
+    if (!conv) return false
+    const targetState = typeof explicitState === 'boolean' ? explicitState : !conv.isPinned
+    conv.isPinned = targetState
+
+    sortConversations()
+
+    try {
+      await chatService.togglePinConversation(id, targetState)
+      return targetState
+    } catch (err: any) {
+      console.warn('Backend togglePinConversation failed:', err)
+      conv.isPinned = !targetState
+      sortConversations()
+      throw err
     }
+  }
 
-    const convId = currentConversationId.value!
+  // ─── Update title ──────────────────────────────────────────────────────────
+  async function updateConversationTitle(id: string, newTitle: string) {
+    const trimmed = newTitle.trim()
+    if (!trimmed) return
+    const conv = conversations.value.find((c) => c.id === id)
+    if (conv) {
+      conv.title = trimmed
+    }
+    try {
+      await chatService.updateConversation(id, trimmed)
+    } catch (err: any) {
+      console.warn('Backend updateConversation failed:', err)
+    }
+  }
 
-    // Add user message
-    const userMessage: Message = {
-      id: `msg-${Date.now()}`,
-      conversationId: convId,
-      role: 'user',
+  // ─── Message Queue Persistence & State (per-conversation) ──────────────
+  const QUEUE_STORAGE_KEY = 'chat_queued_messages'
+
+  function loadPersistedQueue(): Map<string, QueuedMessage[]> {
+    try {
+      const raw = localStorage.getItem(QUEUE_STORAGE_KEY)
+      if (!raw) return new Map()
+      const parsed = JSON.parse(raw)
+      const map = new Map<string, QueuedMessage[]>()
+      if (parsed && typeof parsed === 'object') {
+        for (const [k, v] of Object.entries(parsed)) {
+          if (Array.isArray(v)) {
+            map.set(k, v)
+          }
+        }
+      }
+      return map
+    } catch {
+      return new Map()
+    }
+  }
+
+  function persistQueue() {
+    try {
+      const obj: Record<string, QueuedMessage[]> = {}
+      for (const [k, v] of messageQueue.value.entries()) {
+        if (v && v.length > 0) {
+          obj[k] = v
+        }
+      }
+      localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(obj))
+    } catch {}
+  }
+
+  const pendingMessageQueue = ref<Map<string, QueuedMessageJob[]>>(new Map())
+  const messageQueue = ref<Map<string, QueuedMessage[]>>(loadPersistedQueue())
+
+  const currentQueuedMessages = computed<QueuedMessage[]>(() => {
+    const convId = currentConversationId.value || '__new__'
+    return messageQueue.value.get(convId) || []
+  })
+
+  function getQueuedMessages(convId?: string): QueuedMessage[] {
+    const targetConvId = convId || currentConversationId.value || '__new__'
+    return messageQueue.value.get(targetConvId) || []
+  }
+
+  function addToQueue(
+    content: string,
+    files?: FileAttachmentItem[],
+    options?: { useWebSearch?: boolean; useThinking?: boolean },
+    convId?: string
+  ): QueuedMessage {
+    const targetConvId = convId || currentConversationId.value || '__new__'
+    if (!messageQueue.value.has(targetConvId)) {
+      messageQueue.value.set(targetConvId, [])
+    }
+    const item: QueuedMessage = {
+      id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      conversationId: targetConvId,
       content: content.trim(),
-      createdAt: new Date().toISOString()
+      files: files && files.length > 0 ? [...files] : undefined,
+      fileIds: files && files.length > 0 ? files.map((f) => f.id) : undefined,
+      options: options ? { ...options } : undefined,
+      createdAt: new Date().toISOString(),
     }
-    messages.value.push(userMessage)
+    messageQueue.value.get(targetConvId)!.push(item)
+    persistQueue()
+    return item
+  }
 
-    // Update conversation title if it's the first user message
-    const conv = conversations.value.find((c) => c.id === convId)
-    if (conv && (conv.title === 'گفتگوی جدید' || conv.title === 'New Chat')) {
-      conv.title = content.slice(0, 30) + (content.length > 30 ? '...' : '')
+  function removeFromQueue(queueId: string, convId?: string) {
+    const targetConvId = convId || currentConversationId.value || '__new__'
+    const list = messageQueue.value.get(targetConvId)
+    if (!list) return
+    const filtered = list.filter((item) => item.id !== queueId)
+    if (filtered.length === 0) {
+      messageQueue.value.delete(targetConvId)
+    } else {
+      messageQueue.value.set(targetConvId, filtered)
+    }
+    persistQueue()
+  }
+
+  function clearQueue(convId?: string) {
+    const targetConvId = convId || currentConversationId.value || '__new__'
+    messageQueue.value.delete(targetConvId)
+    persistQueue()
+  }
+
+  async function processNextInQueue(convId: string): Promise<boolean> {
+    if (isTokenLimitExceeded.value || authStore.quota?.blocked) {
+      return false
     }
 
-    // Prepare assistant response
-    isThinking.value = true
-    isStreaming.value = true
-    currentStreamingText.value = ''
+    const state = convStreamStates.value.get(convId)
+    if (state?.isStreaming || state?.isThinking) {
+      return false
+    }
 
-    let streamedAny = false
+    const list = messageQueue.value.get(convId)
+    if (!list || list.length === 0) return false
+
+    const nextItem = list.shift()!
+    if (list.length === 0) {
+      messageQueue.value.delete(convId)
+    }
+    persistQueue()
+
+    await new Promise((resolve) => setTimeout(resolve, 40))
+
+    await sendMessage(nextItem.content, nextItem.files, {
+      ...nextItem.options,
+      targetConvId: convId,
+    })
+    return true
+  }
+
+  function checkAndProcessQueue(convId: string) {
+    const state = convStreamStates.value.get(convId)
+    // Never auto-dequeue if streaming or if stream encountered an error (preserve queued messages)
+    if (state?.isStreaming || state?.isThinking || state?.streamError) return
+
+    // 1. Pending file jobs if any
+    const fileQueue = pendingMessageQueue.value.get(convId)
+    if (fileQueue && fileQueue.length > 0) {
+      const nextJob = fileQueue.shift()!
+      const targetMsg = messages.value.find((m) => m.id === nextJob.id) || nextJob.userMessage
+      if (targetMsg) targetMsg.status = 'sent'
+      executeMessageStream(convId, nextJob.content, targetMsg, nextJob.fileIds)
+      return
+    }
+
+    // 2. User composer message queue
+    void processNextInQueue(convId)
+  }
+
+  // ─── Execute streaming response for a message ──────────────────────────────
+  async function executeMessageStream(
+    convId: string,
+    content: string,
+    userMessage: Message,
+    fileIds?: string[],
+    opts?: { useWebSearch?: boolean; useThinking?: boolean }
+  ) {
+    // Explicit opts win (composer passes the toggled value); every other path
+    // (queue, files, resume/retry) inherits the stored per-conversation flag.
+    const useWebSearch = opts?.useWebSearch ?? getConvFlag(convId).web
+    const useThinking = opts?.useThinking ?? getConvFlag(convId).thinking
+
+    // Prepare streaming state
+    {
+      const s = ensureState(convId)
+      s.isThinking = Boolean(useThinking)
+      s.isStreaming = true
+      s.currentStreamingText = ''
+      s.currentReasoning = ''
+      s.isActivelyThinking = false
+      s.thinkingDurationMs = null
+      convStreamStates.value.set(convId, { ...s })
+    }
+    sessionStorage.setItem('active_streaming_conv', convId)
+
+    // Abort any existing controller for this conv
+    {
+      const s = convStreamStates.value.get(convId)
+      if (s?.abortController) {
+        s.abortController.abort()
+        s.abortController = null
+      }
+    }
+    const abortCtrl = new AbortController()
+    {
+      const s = ensureState(convId)
+      s.abortController = abortCtrl
+      convStreamStates.value.set(convId, { ...s })
+    }
+    resetWatchdog(convId, 35000)
+    const activeConvKey = convId || '__new__'
+    for (const key of dismissedErrorKeys.value) {
+      if (key.startsWith(`${activeConvKey}:`)) {
+        dismissedErrorKeys.value.delete(key)
+      }
+    }
+    saveDismissedErrors()
 
     await chatService.sendMessageStream(
       convId,
       content,
       (token: string) => {
-        isThinking.value = false
-        streamedAny = true
-        currentStreamingText.value += token
+        const s = ensureState(convId)
+        s.isThinking = false
+        s.isActivelyThinking = false
+        s.isSearching = false
+        userMessage.status = 'sent'
+        s.streamError = null
+        // Append streamed tokens directly as they arrive from SSE.
+        // The backend already paces chunks by words (25ms), keeping the frontend
+        // 100% in sync with the backend stream and preventing character queue lag
+        // or abrupt dumps at the end of long responses.
+        if (token) {
+          s.currentStreamingText += token
+        }
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 25000)
+
+        // Once the model starts producing either reasoning or final text, the chat
+        // becomes real and should stay visible in the sidebar.
+        if (!conversations.value.find((c) => c.id === convId)) {
+          ensureConversationVisibleInSidebar(convId, content)
+        }
       },
       (messageId: string) => {
-        finishStream(messageId)
+        clearWatchdog(convId)
+        const s = ensureState(convId)
+        s.abortController = null
+        convStreamStates.value.set(convId, { ...s })
+        userMessage.status = 'sent'
+        finishStream(convId, messageId)
+        checkAndProcessQueue(convId)
       },
-      async (_err: any) => {
-        if (!streamedAny) {
-          // Graceful simulated streaming for offline UI preview
-          await simulateResponse(convId, content)
-        } else {
-          finishStream(`msg-${Date.now()}`)
+      async (err: any) => {
+        clearWatchdog(convId)
+        const s = ensureState(convId)
+        s.abortController = null
+        s.isThinking = false
+        s.isActivelyThinking = false
+        s.isSearching = false
+        s.isStreaming = false
+        sessionStorage.removeItem('active_streaming_conv')
+
+        const rawMsg = typeof err === 'string' ? err : err?.message || ''
+        const isLimit =
+          Boolean(rawMsg && (rawMsg.includes('اعتبار') || rawMsg.includes('سقف مجاز مصرف توکن') || rawMsg.includes('سقف مجاز') || rawMsg.includes('توکن'))) ||
+          err?.statusCode === 400
+
+        if (isLimit) {
+          isTokenLimitExceeded.value = true
+          uiStore.showToast('توکن مصرفی شما به پایان رسید', 'error')
         }
+
+        const errorMessage =
+          rawMsg &&
+          !rawMsg.includes('Failed to fetch') &&
+          !rawMsg.includes('NetworkError') &&
+          !rawMsg.includes('Load failed')
+            ? rawMsg
+            : 'خطا در برقراری ارتباط'
+
+        const hasContent = Boolean(s.currentStreamingText.trim())
+        const hasReasoning = Boolean(s.currentReasoning.trim())
+
+        if (hasContent || hasReasoning) {
+          userMessage.status = 'sent'
+          convStreamStates.value.set(convId, { ...s })
+          finishStream(convId, `msg-${Date.now()}`, true)
+          const s2 = ensureState(convId)
+          s2.streamError = errorMessage
+          convStreamStates.value.set(convId, { ...s2 })
+        } else {
+          userMessage.status = 'error'
+          userMessage.errorText = errorMessage
+          s.streamError = errorMessage
+          s.currentStreamingText = ''
+          s.currentReasoning = ''
+          convStreamStates.value.set(convId, { ...s })
+        }
+      },
+      abortCtrl.signal,
+      (newTitle: string) => {
+        const c = conversations.value.find((item) => item.id === convId)
+        if (c) {
+          c.title = newTitle
+        }
+      },
+      (syncText: string) => {
+        const s = ensureState(convId)
+        s.isThinking = false
+        s.isActivelyThinking = false
+        s.isSearching = false
+        userMessage.status = 'sent'
+        s.streamError = null
+        s.currentStreamingText = syncText
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 25000)
+      },
+      fileIds,
+      (searchState: string) => {
+        const s = ensureState(convId)
+        s.isSearching = searchState === 'searching'
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 25000)
+      },
+      (sources: WebSource[]) => {
+        const s = ensureState(convId)
+        s.pendingSources = sources
+        userMessage.status = 'sent'
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 25000)
+      },
+      (_message: string) => {
+        const s = ensureState(convId)
+        s.isSearching = false
+        s.searchFailed = true
+        userMessage.status = 'sent'
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 25000)
+      },
+      { useWebSearch, useThinking },
+      (thinkingChunk: string) => {
+        const s = ensureState(convId)
+        if (!conversations.value.some((c) => c.id === convId) && thinkingChunk.trim()) {
+          ensureConversationVisibleInSidebar(convId, content)
+        }
+        s.currentReasoning += thinkingChunk
+        s.isActivelyThinking = true
+        s.isThinking = true
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 35000)
+      },
+      (status: { state: 'thinking' | 'done'; durationMs?: number }) => {
+        const s = ensureState(convId)
+        if (status.state === 'thinking') {
+          if (!conversations.value.some((c) => c.id === convId)) {
+            ensureConversationVisibleInSidebar(convId, content)
+          }
+          s.isActivelyThinking = true
+          s.isThinking = true
+        } else if (status.state === 'done') {
+          s.isActivelyThinking = false
+          s.isThinking = false
+          if (status.durationMs !== undefined) {
+            s.thinkingDurationMs = status.durationMs
+          }
+        }
+        convStreamStates.value.set(convId, { ...s })
+        resetWatchdog(convId, 35000)
       }
     )
   }
 
-  function finishStream(messageId: string) {
-    if (currentStreamingText.value) {
-      messages.value.push({
-        id: messageId,
-        conversationId: currentConversationId.value!,
-        role: 'assistant',
-        content: currentStreamingText.value,
-        createdAt: new Date().toISOString()
+  // ─── Poll files until ready then dispatch ──────────────────────────────────
+  function waitForFilesReadyAndDispatch(
+    convId: string,
+    userMessage: Message,
+    content: string,
+    fileList: FileAttachmentItem[]
+  ) {
+    let attempts = 0
+    const maxAttempts = 60
+    const timer = setInterval(async () => {
+      attempts++
+      let allReady = true
+      let anyError = false
+
+      for (const file of fileList) {
+        if (file.status === 'ready') continue
+        try {
+          const res = await filesService.getFileStatus(file.id)
+          file.status = res.status
+          file.errorMessage = res.errorMessage
+          if (res.status === 'error') anyError = true
+          if (res.status !== 'ready') allReady = false
+        } catch {
+          allReady = false
+        }
+      }
+
+      if (anyError) {
+        clearInterval(timer)
+        userMessage.status = 'error'
+        uiStore.showToast('خطا در پردازش فایل‌های پیوست', 'error')
+        return
+      }
+
+      if (allReady) {
+        clearInterval(timer)
+        const currentState = convStreamStates.value.get(convId)
+        if (currentState?.isStreaming) {
+          userMessage.status = 'queued'
+          if (!pendingMessageQueue.value.has(convId)) {
+            pendingMessageQueue.value.set(convId, [])
+          }
+          pendingMessageQueue.value.get(convId)!.push({
+            id: userMessage.id,
+            convId,
+            content,
+            fileIds: fileList.map((f) => f.id),
+            attachments: fileList,
+            userMessage,
+          })
+        } else {
+          userMessage.status = 'sent'
+          executeMessageStream(convId, content, userMessage, fileList.map((f) => f.id))
+        }
+      } else if (attempts >= maxAttempts) {
+        clearInterval(timer)
+        userMessage.status = 'error'
+        uiStore.showToast('زمان پردازش فایل‌ها به پایان رسید', 'error')
+      }
+    }, 2000)
+  }
+
+  // ─── Send message ──────────────────────────────────────────────────────────
+  async function sendMessage(
+    content: string,
+    files?: FileAttachmentItem[],
+    opts?: { useWebSearch?: boolean; useThinking?: boolean; targetConvId?: string }
+  ) {
+    if (isTokenLimitExceeded.value) {
+      await authStore.refreshQuota()
+      if (authStore.quota.blocked) {
+        uiStore.showToast('توکن مصرفی شما به پایان رسید', 'error')
+        return
+      }
+      isTokenLimitExceeded.value = false
+    }
+
+    if (!content.trim() && (!files || files.length === 0)) return
+
+    let convId = opts?.targetConvId || currentConversationId.value
+    if (!convId) {
+      // Local placeholder id only — the conversation joins the sidebar when
+      // the assistant responds (see executeMessageStream's first-token hook),
+      // so a pending chat never shows up in the list.
+      const tempId = `c-${Date.now()}`
+      currentConversationId.value = tempId
+      convId = tempId
+    }
+
+    const currentActiveState = convStreamStates.value.get(convId)
+    if (currentActiveState?.isStreaming || currentActiveState?.isThinking) {
+      addToQueue(content, files, opts, convId)
+      uiStore.showToast('پیام به صف ارسال اضافه شد', 'info')
+      return
+    }
+
+    const fileList = files && files.length > 0 ? [...files] : undefined
+    const fileIds = fileList ? fileList.map((f) => f.id) : undefined
+
+    // Track prompt immediately for retry capability
+    const state = ensureState(convId)
+    state.lastUserPrompt = content
+    convStreamStates.value.set(convId, { ...state })
+
+    // Add user message immediately
+    const userMessage: Message = {
+      id: `msg-${Date.now()}`,
+      conversationId: convId,
+      role: 'user',
+      content: content.trim(),
+      createdAt: new Date().toISOString(),
+      status: 'sent',
+      attachments: fileList,
+      fileIds,
+    }
+    if (convId === currentConversationId.value) {
+      messages.value.push(userMessage)
+    }
+
+    // Optimistically reveal the chat in the sidebar as soon as the user has
+    // actually sent a message. This keeps the empty/new chat hidden until the
+    // first user message exists, but then it stays visible while the model is
+    // still generating the reply.
+    if (!conversations.value.some((c) => c.id === convId)) {
+      ensureConversationVisibleInSidebar(convId, content)
+    }
+
+    // Clear any previous transient stream error for this conversation
+    {
+      const s = ensureState(convId)
+      s.streamError = null
+      convStreamStates.value.set(convId, { ...s })
+    }
+
+    // Pre-flight health check
+    const isHealthy = await checkBackendHealth()
+    if (!isHealthy) {
+      userMessage.status = 'error'
+      const s = ensureState(convId)
+      s.streamError = 'خطا در برقراری ارتباط'
+      convStreamStates.value.set(convId, { ...s })
+      uiStore.showToast('خطا در برقراری ارتباط', 'error')
+      return
+    }
+
+    // Update conversation title if it's the first user message
+    const conv = conversations.value.find((c) => c.id === convId)
+    if (conv && (conv.title === 'گفتگوی جدید' || conv.title === 'New Chat')) {
+      const fallbackTitle = fileList && fileList.length > 0 ? fileList[0].originalName : 'گفتگوی جدید'
+      const titleCandidate = content.trim() || fallbackTitle
+      conv.title = titleCandidate.slice(0, 30) + (titleCandidate.length > 30 ? '...' : '')
+    }
+
+    // If conversation is a local placeholder, persist it to backend
+    let createError: string | null = null
+    if (convId.startsWith('c-')) {
+      try {
+        const modelId = modelsStore.selectedModel?.id || modelsStore.selectedModelId
+        const created = await chatService.createConversation(modelId, conv?.title || content.slice(0, 30))
+        if (created && created.id) {
+          if (conv) conv.id = created.id
+          currentConversationId.value = created.id
+          userMessage.conversationId = created.id
+          // Move stream state to new ID
+          const oldState = convStreamStates.value.get(convId)
+          if (oldState) {
+            convStreamStates.value.delete(convId)
+            convStreamStates.value.set(created.id, oldState)
+          }
+          const oldQueue = pendingMessageQueue.value.get(convId)
+          if (oldQueue) {
+            pendingMessageQueue.value.delete(convId)
+            pendingMessageQueue.value.set(created.id, oldQueue)
+          }
+          const oldMsgQueue = messageQueue.value.get(convId)
+          if (oldMsgQueue) {
+            messageQueue.value.delete(convId)
+            messageQueue.value.set(created.id, oldMsgQueue)
+            persistQueue()
+          }
+          // Move pre-send feature flags ('__new__' or placeholder convId → real id)
+          const pendingFlags = {
+            ...(convFlags.value[convId] || {}),
+            ...(convFlags.value['__new__'] || {}),
+          }
+          if (Object.keys(pendingFlags).length > 0) {
+            convFlags.value[created.id] = { ...getConvFlag(created.id), ...pendingFlags }
+            delete convFlags.value['__new__']
+            if (convId !== created.id) {
+              delete convFlags.value[convId]
+            }
+            persistConvFlags()
+          }
+          convId = created.id
+        }
+      } catch (err: any) {
+        console.warn('Could not persist conversation to backend before streaming:', err)
+        // پیام واقعی سرور (مثلاً «به این مدل دسترسی ندارید») را نگه می‌داریم تا به کاربر نشان دهیم
+        createError = err?.message || null
+      }
+    }
+
+    // The conversation could not be persisted — it only exists as a local
+    // placeholder. Sending to it would 404 on the backend, so fail fast with
+    // visible feedback instead of a doomed stream request.
+    if (convId.startsWith('c-')) {
+      userMessage.status = 'error'
+      const s = ensureState(convId)
+      s.isStreaming = false
+      s.isThinking = false
+      s.streamError = createError || 'خطا در ایجاد گفتگو روی سرور — دوباره تلاش کنید'
+      convStreamStates.value.set(convId, { ...s })
+      uiStore.showToast(createError || 'خطا در ایجاد گفتگو روی سرور — دوباره تلاش کنید', 'error')
+      return
+    }
+
+    // 1. Check if attached files are still processing
+    const hasProcessing = fileList && fileList.some((f) => f.status === 'processing')
+    if (hasProcessing) {
+      userMessage.status = 'processing_files'
+      waitForFilesReadyAndDispatch(convId, userMessage, content, fileList)
+      return
+    }
+
+    // 2. Check if currently streaming or thinking
+    const currentState = convStreamStates.value.get(convId)
+    if (currentState?.isStreaming || currentState?.isThinking) {
+      uiStore.showToast('در حال دریافت پاسخ، امکان ارسال پیام جدید وجود ندارد', 'warning')
+      return
+    }
+
+    // 3. Dispatch stream immediately
+    await executeMessageStream(convId, content, userMessage, fileIds, opts)
+  }
+
+  // ─── Retry failed file in message ──────────────────────────────────────────
+  async function retryFailedMessageFile(messageId: string, fileId: string) {
+    const msg = messages.value.find((m) => m.id === messageId)
+    if (!msg || !msg.attachments) return
+
+    const targetFile = msg.attachments.find((f) => f.id === fileId)
+    if (!targetFile) return
+
+    targetFile.status = 'processing'
+    targetFile.errorMessage = undefined
+    msg.status = 'processing_files'
+
+    try {
+      await filesService.retryFile(fileId)
+      waitForFilesReadyAndDispatch(msg.conversationId, msg, msg.content, msg.attachments)
+    } catch (err: any) {
+      targetFile.status = 'error'
+      msg.status = 'error'
+      uiStore.showToast(err?.message || 'خطا در تلاش مجدد فایل', 'error')
+    }
+  }
+
+  // ─── Remove failed file and send without it ────────────────────────────────
+  async function removeMessageFileAndSend(messageId: string, fileId: string) {
+    const msg = messages.value.find((m) => m.id === messageId)
+    if (!msg) return
+
+    if (msg.attachments) {
+      msg.attachments = msg.attachments.filter((f) => f.id !== fileId)
+      msg.fileIds = msg.attachments.map((f) => f.id)
+    }
+
+    // Delete file from backend
+    filesService.deleteFile(fileId).catch(() => {})
+
+    // If remaining files are still processing, keep waiting
+    const hasRemainingProcessing = msg.attachments && msg.attachments.some((f) => f.status === 'processing')
+    if (hasRemainingProcessing && msg.attachments) {
+      msg.status = 'processing_files'
+      waitForFilesReadyAndDispatch(msg.conversationId, msg, msg.content, msg.attachments)
+      return
+    }
+
+    // Otherwise dispatch stream
+    const convId = msg.conversationId
+    const currentState = convStreamStates.value.get(convId)
+    if (currentState?.isStreaming) {
+      msg.status = 'queued'
+      if (!pendingMessageQueue.value.has(convId)) {
+        pendingMessageQueue.value.set(convId, [])
+      }
+      pendingMessageQueue.value.get(convId)!.push({
+        id: msg.id,
+        convId,
+        content: msg.content,
+        fileIds: msg.fileIds,
+        attachments: msg.attachments,
+        userMessage: msg,
       })
-    }
-    currentStreamingText.value = ''
-    isStreaming.value = false
-    isThinking.value = false
-  }
-
-  async function simulateResponse(_convId: string, userPrompt: string) {
-    await new Promise((resolve) => setTimeout(resolve, 600))
-    isThinking.value = false
-
-    const responseText = `درخواست شما دریافت شد: "${userPrompt}"\n\nاین یک پاسخ نمونه هوشمند از پلتفرم **NeuralChat** است. رابط کاربری به‌صورت زنده طراحی شده و با استانداردهای مدرن وب، پشتیبانی از RTL، و جریان داده‌های توکن‌به‌توکن (Streaming) تطابق دارد.`
-
-    const chunks = responseText.split(/(?<=[ \n،.])/g)
-    for (const chunk of chunks) {
-      currentStreamingText.value += chunk
-      await new Promise((resolve) => setTimeout(resolve, 40))
-    }
-
-    finishStream(`msg-${Date.now()}`)
-  }
-
-  function stopStreaming() {
-    if (isStreaming.value && currentStreamingText.value) {
-      finishStream(`msg-${Date.now()}`)
     } else {
-      isStreaming.value = false
-      isThinking.value = false
+      msg.status = 'sent'
+      await executeMessageStream(convId, msg.content, msg, msg.fileIds)
+    }
+  }
+
+  // ─── Soft Delete Message ───────────────────────────────────────────────────
+  async function deleteMessage(messageId: string) {
+    const convId = currentConversationId.value
+    messages.value = messages.value.filter((m) => m.id !== messageId)
+    uiStore.showToast('حذف شد', 'success')
+    if (convId && !convId.startsWith('c-')) {
+      try {
+        await chatService.deleteMessage(convId, messageId)
+      } catch (err) {
+        console.warn('Backend deleteMessage failed:', err)
+      }
+    }
+  }
+
+  // ─── Finish stream ─────────────────────────────────────────────────────────
+  function finishStream(convId: string, messageId: string, isInterrupted = false, overrideContent?: string) {
+    clearWatchdog(convId)
+    sessionStorage.removeItem('active_streaming_conv')
+    const s = ensureState(convId)
+    s.abortController = null
+    // Flush any pending streaming chars so the saved text isn't truncated.
+    if (s.charBuffer.length > 0) {
+      s.currentStreamingText += s.charBuffer.join('')
+      s.charBuffer = []
+      if (s.releaseTimer) {
+        clearTimeout(s.releaseTimer)
+        s.releaseTimer = null
+      }
+    }
+    const textToSave = overrideContent !== undefined ? overrideContent : s.currentStreamingText
+    if (textToSave || s.currentReasoning) {
+      // Only push to messages if this is the current conv (otherwise it would be stale)
+      if (convId === currentConversationId.value) {
+        messages.value.push({
+          id: messageId,
+          conversationId: convId,
+          role: 'assistant',
+          content: textToSave || (isInterrupted ? 'به دلیل بروز خطا در ارتباط با مدل هوش مصنوعی، ادامه پاسخ قطع شد.' : ''),
+          createdAt: new Date().toISOString(),
+          isInterrupted,
+          // فقط پیام کامل (غیرمتوقف) باید منابع داشته باشد - پیام متوقف‌شده ناقص است
+          sources: isInterrupted ? null : s.pendingSources,
+          searchFailed: isInterrupted ? undefined : (s.searchFailed || undefined),
+          reasoning_content: s.currentReasoning || undefined,
+          thinkingDurationMs: s.thinkingDurationMs ?? undefined,
+        })
+      }
+    }
+    // Live sidebar reorder (mirrors backend isPinned DESC, updatedAt DESC):
+    const targetConv = conversations.value.find((c) => c.id === convId)
+    if (targetConv) {
+      targetConv.updatedAt = new Date().toISOString()
+      sortConversations()
+    }
+    s.currentStreamingText = ''
+    s.currentReasoning = ''
+    s.isActivelyThinking = false
+    s.thinkingDurationMs = null
+    s.isStreaming = false
+    s.isThinking = false
+    s.pendingSources = null
+    s.isSearching = false
+    s.searchFailed = false
+    convStreamStates.value.set(convId, { ...s })
+    void authStore.refreshQuota()
+    if (!s.streamError) {
+      setTimeout(() => {
+        checkAndProcessQueue(convId)
+      }, 50)
+    }
+  }
+
+  // ─── Retry last message ────────────────────────────────────────────────────
+  async function retryLastMessage() {
+    const convId = currentConversationId.value
+    if (!convId) return
+
+    const s = convStreamStates.value.get(convId)
+    const lastUserMsg = [...messages.value].reverse().find((m) => m.role === 'user')
+    const promptToRetry =
+      s?.lastUserPrompt?.trim()
+        ? s.lastUserPrompt
+        : (lastUserMsg?.content || '')
+    const filesToRetry = lastUserMsg?.attachments ? [...lastUserMsg.attachments] : undefined
+
+    if (!promptToRetry.trim() && (!filesToRetry || filesToRetry.length === 0)) return
+
+    // Clear transient error & abort any hanging controller / watchdog
+    clearWatchdog(convId)
+    if (s?.abortController) {
+      try { s.abortController.abort() } catch {}
+    }
+    const fresh = ensureState(convId)
+    fresh.streamError = null
+    fresh.abortController = null
+    fresh.isStreaming = false
+    fresh.isThinking = false
+    fresh.lastUserPrompt = promptToRetry
+    convStreamStates.value.set(convId, { ...fresh })
+    sessionStorage.removeItem('active_streaming_conv')
+
+    // Remove trailing assistant message if it was interrupted, empty, or an error
+    while (messages.value.length > 0 && messages.value[messages.value.length - 1].role === 'assistant') {
+      const last = messages.value[messages.value.length - 1]
+      if (last.isInterrupted || last.id.startsWith('msg-err-') || last.status === 'error' || !last.content) {
+        messages.value.pop()
+      } else {
+        break
+      }
+    }
+
+    // Remove trailing user message so sendMessage can re-add it cleanly with its attachments preserved
+    if (messages.value.length > 0 && messages.value[messages.value.length - 1].role === 'user') {
+      const last = messages.value[messages.value.length - 1]
+      if (last.id === lastUserMsg?.id || last.content.trim() === promptToRetry.trim()) {
+        messages.value.pop()
+      }
+    }
+
+    await sendMessage(promptToRetry, filesToRetry)
+  }
+
+  // ─── Resume interrupted message ────────────────────────────────────────────
+  async function resumeInterruptedMessage(messageId?: string) {
+    const convId = currentConversationId.value
+    if (!convId) return
+    const target = messageId
+      ? messages.value.find((m) => m.id === messageId)
+      : [...messages.value].reverse().find((m) => m.role === 'assistant' && m.isInterrupted)
+
+    if (!target) return
+
+    const s = ensureState(convId)
+    s.isStreaming = true
+    s.isThinking = false
+    s.currentStreamingText = target.content
+    convStreamStates.value.set(convId, { ...s })
+
+    // Remove old target temporarily while resuming
+    messages.value = messages.value.filter((m) => m.id !== target.id)
+    sessionStorage.setItem('active_streaming_conv', convId)
+
+    const abortCtrl = new AbortController()
+    {
+      const s2 = ensureState(convId)
+      s2.abortController = abortCtrl
+      convStreamStates.value.set(convId, { ...s2 })
+    }
+
+    await chatService.resumeMessage(
+      convId,
+      target.id,
+      (token: string) => {
+        const s2 = ensureState(convId)
+        s2.currentStreamingText += token
+        convStreamStates.value.set(convId, { ...s2 })
+      },
+      (savedId: string) => {
+        finishStream(convId, savedId, false)
+      },
+      (_err: any) => {
+        finishStream(convId, target.id, true)
+      },
+      abortCtrl.signal
+    )
+  }
+
+  // ─── Continue last message ─────────────────────────────────────────────────
+  async function continueLastMessage() {
+    const last = messages.value[messages.value.length - 1]
+    if (last && last.role === 'assistant' && last.isInterrupted) {
+      await resumeInterruptedMessage(last.id)
+    } else {
+      const prompt = 'ادامه بده'
+      await sendMessage(prompt)
+    }
+  }
+
+  // ─── Stop streaming ────────────────────────────────────────────────────────
+  function stopStreaming() {
+    const convId = currentConversationId.value
+    if (!convId) return
+
+    clearWatchdog(convId)
+    const s = convStreamStates.value.get(convId)
+    if (s?.abortController) {
+      s.abortController.abort()
+      s.abortController = null
+    }
+
+    if (convId && !convId.startsWith('c-') && typeof chatService.stopActiveStream === 'function') {
+      chatService.stopActiveStream(convId).catch(() => {})
+    }
+    sessionStorage.removeItem('active_streaming_conv')
+
+    // A user-stopped answer claims no sources: drop anything pending so the
+    // stopped message (live and, via the backend fix, in history too) shows
+    // no sources card.
+    const st = ensureState(convId)
+    st.pendingSources = null
+    st.isSearching = false
+    convStreamStates.value.set(convId, { ...st })
+
+    const stoppedText = s?.currentStreamingText?.trim() || ''
+    const content = stoppedText || 'تولید پاسخ توسط کاربر متوقف شد.'
+    finishStream(convId, `msg-${Date.now()}`, true, content)
+  }
+
+  function dismissStreamError() {
+    const convId = currentConversationId.value || '__new__'
+    const s = convStreamStates.value.get(convId)
+    if (s?.streamError) {
+      dismissedErrorKeys.value.add(`${convId}:${s.streamError}`)
+      s.streamError = null
+      convStreamStates.value.set(convId, { ...s })
+    }
+    if (isTokenLimitExceeded.value) {
+      dismissedErrorKeys.value.add(`${convId}:token_limit`)
+      isTokenLimitExceeded.value = false
+    }
+    saveDismissedErrors()
+  }
+
+  function clearStreamError() {
+    dismissStreamError()
+  }
+
+  async function setMessageFeedback(messageId: string, feedback: 'like' | 'dislike' | null) {
+    const convId = currentConversationId.value
+    if (!convId) return
+    const msg = messages.value.find((m) => m.id === messageId)
+    if (msg) {
+      msg.feedback = feedback
+    }
+    try {
+      await chatService.setMessageFeedback(convId, messageId, feedback)
+    } catch (err: any) {
+      console.error('Failed to submit message feedback', err)
     }
   }
 
@@ -206,14 +1581,58 @@ export const useChatStore = defineStore('chat', () => {
     currentConversationId,
     activeConversation,
     messages,
+    isLoadingConversations,
+    isLoadingMessages,
+    conversationPage,
+    hasMoreConversations,
+    isTokenLimitExceeded,
+    // Computed aliases (backward-compatible)
     isStreaming,
     isThinking,
+    isAnyStreaming,
     currentStreamingText,
+    currentReasoning,
+    isActivelyThinking,
+    thinkingDurationMs,
+    lastUserPrompt,
+    streamError,
+    // Per-conv streaming state (for sidebar indicators)
+    convStreamStates,
+    getConvIsStreaming,
+    // Per-conversation feature flags (web search / thinking)
+    convFlags,
+    getConvFlag,
+    setConvFlag,
+    // Actions
     loadConversations,
+    loadMoreConversations,
     selectConversation,
+    sortConversations,
+    togglePinConversation,
+    reconnectToActiveStream,
     createNewConversation,
     deleteConversation,
+    deleteMessage,
+    setMessageFeedback,
+    updateConversationTitle,
+    switchConversationModel,
     sendMessage,
-    stopStreaming
+    retryFailedMessageFile,
+    removeMessageFileAndSend,
+    retryLastMessage,
+    continueLastMessage,
+    resumeInterruptedMessage,
+    stopStreaming,
+    finishStream,
+    clearStreamError,
+    dismissStreamError,
+    pendingMessageQueue,
+    messageQueue,
+    currentQueuedMessages,
+    addToQueue,
+    removeFromQueue,
+    clearQueue,
+    processNextInQueue,
+    getQueuedMessages
   }
 })

@@ -1,8 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useChatStore } from '../src/stores/chat'
 import { useModelsStore } from '../src/stores/models'
 import { useUiStore } from '../src/stores/ui'
+import { chatService } from '../src/services/chat.service'
+import { modelsService } from '../src/services/models.service'
 
 describe('Pinia Stores', () => {
   beforeEach(() => {
@@ -14,9 +16,17 @@ describe('Pinia Stores', () => {
     const initialCount = chatStore.conversations.length
 
     const newId = await chatStore.createNewConversation('تست آزمایشی')
-    expect(chatStore.conversations.length).toBe(initialCount + 1)
+    // New conversations stay off the sidebar until the assistant responds,
+    // so an empty chat should not appear in the list yet.
+    expect(chatStore.conversations.length).toBe(initialCount)
     expect(chatStore.currentConversationId).toBe(newId)
     expect(chatStore.messages.length).toBe(0)
+
+    // Sending a message optimistically reveals the conversation in the sidebar
+    // so the user sees it in the list while generation takes place.
+    await chatStore.sendMessage('سلام')
+    expect(chatStore.conversations.length).toBe(initialCount + 1)
+    expect(chatStore.messages.length).toBe(1)
   })
 
   it('modelsStore: can select active model and make default', async () => {
@@ -31,14 +41,101 @@ describe('Pinia Stores', () => {
     expect(modelsStore.defaultModel.id).toBe(targetModel.id)
   })
 
-  it('uiStore: toggles direction between RTL and LTR', () => {
+  it('modelsStore: does not update the default optimistically before the API resolves', async () => {
+    const modelsStore = useModelsStore()
+    const originalDefaultId = modelsStore.defaultModel.id
+    const targetModel = modelsStore.models.find((m) => m.id !== originalDefaultId)!
+
+    let resolveRequest!: (value?: unknown) => void
+    const deferred = new Promise<void>((resolve) => {
+      resolveRequest = resolve
+    })
+
+    vi.spyOn(modelsService, 'setDefaultModel').mockImplementation(async () => {
+      await deferred
+      return { id: targetModel.id, name: targetModel.name } as any
+    })
+
+    const run = modelsStore.makeDefault(targetModel.id)
+
+    expect(modelsStore.defaultModel.id).toBe(originalDefaultId)
+
+    resolveRequest()
+    await run
+    expect(modelsStore.defaultModel.id).toBe(targetModel.id)
+  })
+
+  it('uiStore: maintains strictly Persian RTL direction and ignores direction toggle', () => {
     const uiStore = useUiStore()
-    const startDir = uiStore.direction
+    expect(uiStore.direction).toBe('rtl')
 
     uiStore.toggleDirection()
-    expect(uiStore.direction).not.toBe(startDir)
+    expect(uiStore.direction).toBe('rtl')
+  })
 
-    uiStore.toggleDirection()
-    expect(uiStore.direction).toBe(startDir)
+  it('uiStore: showToast caps maximum visible toasts to 2 and prevents duplicate spam', () => {
+    const uiStore = useUiStore()
+    uiStore.toasts = []
+
+    uiStore.showToast('پیام ۱', 'info')
+    uiStore.showToast('پیام ۲', 'warning')
+    expect(uiStore.toasts.length).toBe(2)
+
+    // Adding 3rd toast should shift out the oldest, keeping max 2
+    uiStore.showToast('پیام ۳', 'error')
+    expect(uiStore.toasts.length).toBe(2)
+    expect(uiStore.toasts.map((t) => t.message)).toEqual(['پیام ۲', 'پیام ۳'])
+
+    // Adding exact duplicate should not create additional toast
+    uiStore.showToast('پیام ۳', 'error')
+    expect(uiStore.toasts.length).toBe(2)
+  })
+
+  it('chatStore: loads paginated conversations and appends next page on loadMoreConversations', async () => {
+    const chatStore = useChatStore()
+    const page1Items = Array.from({ length: 50 }, (_, i) => ({
+      id: `conv-${i + 1}`,
+      title: `گفتگو ${i + 1}`,
+      modelId: 'gpt-4o',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }))
+    const page2Items = Array.from({ length: 10 }, (_, i) => ({
+      id: `conv-${i + 51}`,
+      title: `گفتگو ${i + 51}`,
+      modelId: 'gpt-4o',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }))
+
+    const listSpy = vi.spyOn(chatService, 'listConversations').mockImplementation(async (page?: number) => {
+      if (page === 2) return page2Items
+      return page1Items
+    })
+
+    await chatStore.loadConversations()
+    expect(listSpy).toHaveBeenCalledWith(1, 50)
+    expect(chatStore.conversations.length).toBe(50)
+    expect(chatStore.hasMoreConversations).toBe(true)
+
+    // Load next page
+    await chatStore.loadMoreConversations()
+    expect(listSpy).toHaveBeenCalledWith(2, 50)
+    expect(chatStore.conversations.length).toBe(60)
+    expect(chatStore.hasMoreConversations).toBe(false)
+
+    listSpy.mockRestore()
+  })
+
+  it('chatStore: manages isTokenLimitExceeded flag and clears it via clearStreamError', () => {
+    const chatStore = useChatStore()
+    expect(chatStore.isTokenLimitExceeded).toBe(false)
+
+    chatStore.isTokenLimitExceeded = true
+    expect(chatStore.isTokenLimitExceeded).toBe(true)
+
+    chatStore.clearStreamError()
+    expect(chatStore.isTokenLimitExceeded).toBe(false)
   })
 })
+

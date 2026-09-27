@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "PARVA Multi-Model AI Chat Platform",
+    "quality_profile": "showcase",
+    "output": "architecture-current.html",
+    "repository": {
+      "url": "https://igit.partcorp.ir/m.vaezi/codeless_final_project.git",
+      "link_mode": "local-only",
+      "revision": "d66476a4c60309a450a4d6a9c5a67d97e7974085"
+    },
+    "views": [
+      {
+        "id": "chat-stream",
+        "label": "Chat streaming path",
+        "focus": ["user", "frontend", "api", "chat", "ai", "providers", "postgres"],
+        "note": "Follow a message from the Vue application through NestJS, the provider adapter, and durable history."
+      },
+      {
+        "id": "files-and-async",
+        "label": "Files and async work",
+        "focus": ["frontend", "api", "files", "objectstore", "queue"],
+        "note": "See attachment processing, object storage, and the Redis-backed queue path."
+      },
+      {
+        "id": "control-and-observability",
+        "label": "Control and observability",
+        "focus": ["auth", "control", "api", "observability", "postgres"],
+        "note": "Inspect authentication, entitlement and payment controls, administration, audit, and telemetry."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "User",
+      "sublabel": "Browser",
+      "pos": [40, 300],
+      "size": [120, 60]
+    },
+    {
+      "id": "frontend",
+      "type": "frontend",
+      "label": "Vue 3 SPA",
+      "sublabel": "Vite + Pinia + Router",
+      "tag": "REST + SSE",
+      "pos": [220, 300],
+      "size": [160, 64],
+      "sources": [{ "path": "frontend/src/main.ts" }, { "path": "frontend/src/stores/chat.ts" }]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "NestJS API",
+      "sublabel": "REST + SSE",
+      "tag": "JWT + guards",
+      "pos": [440, 300],
+      "size": [160, 64],
+      "sources": [{ "path": "backend/src/main.ts" }, { "path": "backend/src/app.module.ts" }]
+    },
+    {
+      "id": "auth",
+      "type": "security",
+      "label": "Auth & Access",
+      "sublabel": "JWT · roles · entitlements",
+      "pos": [440, 130],
+      "size": [160, 60],
+      "sources": [{ "path": "backend/src/shared/jwt-auth.guard.ts" }, { "path": "backend/src/modules/subscriptions/entitlement.service.ts" }]
+    },
+    {
+      "id": "chat",
+      "type": "backend",
+      "label": "Chat Orchestration",
+      "sublabel": "history + streams",
+      "pos": [660, 300],
+      "size": [170, 64],
+      "sources": [{ "path": "backend/src/modules/chat/chat.service.ts" }, { "path": "backend/src/modules/chat/active-stream.service.ts" }]
+    },
+    {
+      "id": "ai",
+      "type": "backend",
+      "label": "AI Adapter Layer",
+      "sublabel": "provider-aware streaming",
+      "tag": "OpenAI-compatible",
+      "pos": [890, 300],
+      "size": [170, 64],
+      "sources": [{ "path": "backend/src/modules/ai/openai-compat.forwarder.ts" }, { "path": "backend/src/modules/ai/adapters/openai-compat.adapter.ts" }]
+    },
+    {
+      "id": "providers",
+      "type": "external",
+      "label": "AI Providers",
+      "sublabel": "Multi-provider AI APIs",
+      "pos": [1120, 300],
+      "size": [190, 64]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "TypeORM · migrations",
+      "pos": [890, 480],
+      "size": [170, 64],
+      "sources": [{ "path": "backend/src/data-source.ts" }]
+    },
+    {
+      "id": "files",
+      "type": "backend",
+      "label": "Files & Processing",
+      "sublabel": "upload · extraction · scanning",
+      "pos": [660, 480],
+      "size": [170, 64],
+      "sources": [{ "path": "backend/src/modules/files/files.service.ts" }, { "path": "backend/src/modules/files/file-processor.service.ts" }]
+    },
+    {
+      "id": "objectstore",
+      "type": "cloud",
+      "label": "Object Storage",
+      "sublabel": "MinIO",
+      "pos": [440, 480],
+      "size": [160, 64],
+      "sources": [{ "path": "backend/src/modules/storage/storage.service.ts" }]
+    },
+    {
+      "id": "queue",
+      "type": "messagebus",
+      "label": "Async Queue",
+      "sublabel": "Redis + BullMQ fallback",
+      "pos": [660, 590],
+      "size": [170, 64],
+      "sources": [{ "path": "backend/src/modules/files/queue-manager.service.ts" }]
+    },
+    {
+      "id": "control",
+      "type": "backend",
+      "label": "Admin & Billing",
+      "sublabel": "models · plans · payments · audit",
+      "pos": [220, 590],
+      "size": [190, 64],
+      "sources": [{ "path": "backend/src/modules/admin/admin.module.ts" }, { "path": "backend/src/modules/payments/payments.service.ts" }]
+    },
+    {
+      "id": "observability",
+      "type": "cloud",
+      "label": "Observability",
+      "sublabel": "file logs · traces · SigNoz",
+      "pos": [1120, 590],
+      "size": [170, 64],
+      "sources": [{ "path": "backend/src/shared/telemetry.ts" }, { "path": "backend/src/shared/logger/app-logger.service.ts" }]
+    }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Frontend", "wraps": ["frontend"] },
+    { "kind": "region", "label": "Backend", "wraps": ["api", "auth", "chat", "ai", "files", "control"] },
+    { "kind": "region", "label": "Data and platform services", "wraps": ["postgres", "objectstore", "queue", "observability"] }
+  ],
+  "connections": [
+    { "id": "user-frontend", "from": "user", "to": "frontend", "label": "interact", "variant": "emphasis" },
+    { "id": "frontend-api", "from": "frontend", "to": "api", "label": "REST / SSE", "variant": "emphasis" },
+    { "id": "auth-api", "from": "auth", "to": "api", "label": "protect routes", "variant": "security", "fromSide": "right", "toSide": "top" },
+    { "id": "api-chat", "from": "api", "to": "chat" },
+    { "id": "chat-ai", "from": "chat", "to": "ai" },
+    { "id": "ai-providers", "from": "ai", "to": "providers", "label": "provider API / SSE", "variant": "emphasis", "labelDy": 56 },
+    { "id": "chat-postgres", "from": "chat", "to": "postgres", "label": "messages + history", "fromSide": "bottom", "toSide": "top", "via": [[745, 400], [975, 400]] },
+    { "id": "api-files", "from": "api", "to": "files", "label": "attachments", "fromSide": "bottom", "toSide": "top" },
+    { "id": "files-objectstore", "from": "files", "to": "objectstore", "label": "objects", "fromSide": "left", "toSide": "right" },
+    { "id": "files-queue", "from": "files", "to": "queue", "variant": "dashed", "fromSide": "bottom", "toSide": "top" },
+    { "id": "control-postgres", "from": "control", "to": "postgres", "label": "plans + audit", "fromSide": "right", "toSide": "left", "via": [[460, 622], [460, 700], [850, 700], [850, 512]], "labelAt": [650, 700] },
+    { "id": "api-observability", "from": "api", "to": "observability", "label": "logs + traces", "variant": "dashed", "fromSide": "top", "toSide": "right", "via": [[520, 220], [1360, 220], [1360, 622]], "labelAt": [1360, 420] }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Product path", "items": ["Vue chat UI keeps per-conversation state", "NestJS streams provider output over SSE", "Conversation history is persisted in PostgreSQL"] },
+    { "dot": "emerald", "title": "Platform controls", "items": ["Provider-aware thinking, vision, documents, and web search", "JWT, role, model-access, quota, subscription, and payment controls", "Attachment processing uses object storage and an async queue"] },
+    { "dot": "rose", "title": "Operations", "items": ["Structured audit records are separated from operational logs", "Trace and span IDs connect requests to external provider calls", "SigNoz telemetry and daily file logs support diagnosis"] }
+  ]
+}

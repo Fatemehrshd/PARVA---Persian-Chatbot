@@ -89,6 +89,20 @@ This starts:
 - **MinIO S3 API**: `localhost:9000`
 - **MinIO Web Console**: `http://localhost:9001` (user: `minioadmin`, password: `minioadmin`)
 
+### Observability (SigNoz)
+Run the official SigNoz Docker stack separately from the app containers:
+```bash
+git clone -b main https://github.com/SigNoz/signoz.git
+cd signoz/deploy
+docker compose -f docker/clickhouse-setup/docker-compose.yaml up -d
+```
+Then open:
+- **SigNoz UI**: `http://localhost:3301`
+- **OTLP traces**: `http://localhost:4318/v1/traces`
+- **OTLP logs**: `http://localhost:4318/v1/logs`
+
+The backend already points to these addresses via `SIGNOZ_OTLP_URL` and `SIGNOZ_OTLP_LOGS_URL` in [backend/.env](../backend/.env).
+
 ### Avatars (MinIO)
 Avatar upload requires a reachable MinIO (or S3-compatible) server:
 ```env

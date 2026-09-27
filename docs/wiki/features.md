@@ -1,5 +1,7 @@
 # Features
 
+> For a concise, English-language project overview and GitHub onboarding, see the [repository README](../../README.md).
+
 ## حل مشکل عدم نمایش خروجی پس از تفکر هوش مصنوعی و مدیریت خطاهای استریم (AI Thinking Output Display & Mid-Stream Error Handling)
 - **رفع مشکل ناپدید شدن یا عدم نمایش پاسخ پس از اتمام تفکر مدل (Thinking Output Display Fix)**:
   - شناسایی و رفع باگ لغو ناخواسته حباب پیام در صورت وقوع اختلال در دریافت اولین توکن محتوایی پس از بلاک تفکر (`currentReasoning`).
